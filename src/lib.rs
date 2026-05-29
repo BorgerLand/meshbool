@@ -526,6 +526,72 @@ impl MeshBool {
 		return Self::from(meshbool_impl);
 	}
 
+	///Increase the density of the mesh by splitting every edge into n pieces. For
+	///instance, with n = 2, each triangle will be split into 4 triangles. Quads
+	///will ignore their interior triangle bisector. These will all be coplanar (and
+	///will not be immediately collapsed) unless the Mesh/Manifold has
+	///halfedgeTangents specified (e.g. from the Smooth() constructor), in which
+	///case the new vertices will be moved to the interpolated surface according to
+	///their barycentric coordinates.
+	///
+	///@param n The number of pieces to split every edge into. Must be > 1.
+	pub fn refine(&self, n: i32) -> Self {
+		let mut meshbool_impl = self.meshbool_impl.clone();
+		if n > 1 {
+			meshbool_impl.refine(|_, _, _| n - 1, false);
+		}
+		Self::from(meshbool_impl)
+	}
+
+	///Increase the density of the mesh by splitting each edge into pieces of
+	///roughly the input length. Interior verts are added to keep the rest of the
+	///triangulation edges also of roughly the same length. If halfedgeTangents are
+	///present (e.g. from the Smooth() constructor), the new vertices will be moved
+	///to the interpolated surface according to their barycentric coordinates. Quads
+	///will ignore their interior triangle bisector.
+	///
+	///@param length The length that edges will be broken down to.
+	pub fn refine_to_length(&self, mut length: f64) -> Self {
+		length = length.abs();
+		let mut meshbool_impl = self.meshbool_impl.clone();
+		meshbool_impl.refine(|edge, _, _| (edge.norm() / length) as i32, false);
+		Self::from(meshbool_impl)
+	}
+
+	///Increase the density of the mesh by splitting each edge into pieces such that
+	///any point on the resulting triangles is roughly within tolerance of the
+	///smoothly curved surface defined by the tangent vectors. This means tightly
+	///curving regions will be divided more finely than smoother regions. If
+	///halfedgeTangents are not present, the result will simply be a copy of the
+	///original. Quads will ignore their interior triangle bisector.
+	///
+	///@param tolerance The desired maximum distance between the faceted mesh
+	///produced and the exact smoothly curving surface. All vertices are exactly on
+	///the surface, within rounding error.
+	pub fn refine_to_tolerance(&self, mut tolerance: f64) -> Self {
+		tolerance = tolerance.abs();
+		let mut meshbool_impl = self.meshbool_impl.clone();
+		// if !pImpl.halfedge_tangent.empty() {
+		if false {
+			meshbool_impl.refine(
+				|edge, tangent_start, tangent_end| {
+					let edge_norm: Vector3<f64> = edge.normalize();
+					// Weight heuristic
+					let t_start: Vector3<f64> = tangent_start.xyz();
+					let t_end: Vector3<f64> = tangent_end.xyz();
+					// Perpendicular to edge
+					let start: Vector3<f64> = t_start - edge_norm * edge_norm.dot(&t_start);
+					let end: Vector3<f64> = t_end - edge_norm * edge_norm.dot(&t_end);
+					// Circular arc result plus heuristic term for non-circular curves
+					let d: f64 = 0.5 * (start.norm() + end.norm()) + (start - end).norm();
+					(3.0 * d / (4.0 * tolerance)).sqrt() as i32
+				},
+				true,
+			);
+		}
+		Self::from(meshbool_impl)
+	}
+
 	///	The central operation of this library: the Boolean combines two manifolds
 	///	into another by calculating their intersections and removing the unused
 	///	portions.

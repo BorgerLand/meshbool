@@ -1,7 +1,23 @@
-use nalgebra::{Vector3, Vector4};
+use nalgebra::{
+	Matrix3, Matrix3x2, Matrix3x4, Matrix4, Matrix4x2, Matrix4x3, UnitQuaternion, Vector3, Vector4,
+};
 
+// use crate::common::lerp;
 use crate::meshboolimpl::MeshBoolImpl;
-use crate::shared::{TriRef, next_halfedge, safe_normalize};
+use crate::shared::{Barycentric, TriRef, next_halfedge, safe_normalize};
+use crate::utils::{K_PRECISION, mat3, next3_i32, prev3_i32};
+
+///Returns a normalized vector orthogonal to ref, in the plane of ref and in,
+///unless in and ref are colinear, in which case it falls back to the plane of
+///ref and altIn.
+#[allow(unused)]
+fn orthogonal_to(in_v: Vector3<f64>, alt_in: Vector3<f64>, ref_v: Vector3<f64>) -> Vector3<f64> {
+	let mut out: Vector3<f64> = in_v - in_v.dot(&ref_v) * ref_v;
+	if out.dot(&out) < K_PRECISION * in_v.dot(&in_v) {
+		out = alt_in - alt_in.dot(&ref_v) * ref_v;
+	}
+	return safe_normalize(out);
+}
 
 ///Get the angle between two unit-vectors.
 fn angle_between(a: Vector3<f64>, b: Vector3<f64>) -> f64 {
@@ -32,6 +48,354 @@ fn circular_tangent(tangent: Vector3<f64>, edge_vec: Vector3<f64>) -> Vector4<f6
 	let bz3: Vector4<f64> = Vector4::new(0.0, 0.0, 0.0, 1.0).lerp(&bz2, 2.0 / 3.0);
 	// Convert from homogeneous form to geometric form
 	return (bz3.xyz() / bz3.w).push(bz3.w);
+}
+
+#[allow(unused)]
+struct InterpTri<'a> {
+	vert_pos: &'a mut [Vector3<f64>],
+	vert_bary: &'a [Barycentric],
+	meshbool_impl: &'a MeshBoolImpl,
+}
+
+#[allow(unused)]
+impl<'a> InterpTri<'a> {
+	pub fn homogeneous(mut v: Vector4<f64>) -> Vector4<f64> {
+		v.x *= v.w;
+		v.y *= v.w;
+		v.z *= v.w;
+		return v;
+	}
+
+	pub fn homogeneous_vec3(v: Vector3<f64>) -> Vector4<f64> {
+		v.push(1.0)
+	}
+
+	pub fn h_normalize(v: Vector4<f64>) -> Vector3<f64> {
+		if v.w == 0.0 { v.xyz() } else { v.xyz() / v.w }
+	}
+
+	pub fn scale(v: Vector4<f64>, scale: f64) -> Vector4<f64> {
+		(scale * v.xyz()).push(v.w)
+	}
+
+	pub fn bezier(point: Vector3<f64>, tangent: Vector4<f64>) -> Vector4<f64> {
+		return Self::homogeneous(point.push(0.0) + tangent);
+	}
+
+	pub fn cubic_bezier2linear(
+		p0: Vector4<f64>,
+		p1: Vector4<f64>,
+		p2: Vector4<f64>,
+		p3: Vector4<f64>,
+		x: f64,
+	) -> Matrix4x2<f64> {
+		let mut out = Matrix4x2::<f64>::default();
+		let p12: Vector4<f64> = p1.lerp(&p2, x);
+		out.column_mut(0).copy_from(&p0.lerp(&p1, x).lerp(&p12, x));
+		out.column_mut(1).copy_from(&p12.lerp(&p2.lerp(&p3, x), x));
+		return out;
+	}
+
+	pub fn bezier_point(points: Matrix4x2<f64>, x: f64) -> Vector3<f64> {
+		return Self::h_normalize(points.column(0).lerp(&points.column(1), x));
+	}
+
+	pub fn bezier_tangent(points: Matrix4x2<f64>) -> Vector3<f64> {
+		return safe_normalize(
+			Self::h_normalize(points.column(1).into()) - Self::h_normalize(points.column(0).into()),
+		);
+	}
+
+	pub fn rotate_from_to(
+		_v: Vector3<f64>,
+		_start: UnitQuaternion<f64>,
+		_end: UnitQuaternion<f64>,
+	) -> Vector3<f64> {
+		todo!("Finish port");
+		// return la::qrot(end, la::qrot(la::qconj(start), v));
+	}
+
+	pub fn slerp(
+		x: &UnitQuaternion<f64>,
+		y: &UnitQuaternion<f64>,
+		a: f64,
+		long_way: bool,
+	) -> UnitQuaternion<f64> {
+		let mut z = y.clone();
+		let mut cos_theta: f64 = x.dot(&y);
+
+		// Take the long way around the sphere only when requested
+		if (cos_theta < 0.0) != long_way {
+			z = y.inverse();
+			cos_theta = -cos_theta;
+		}
+
+		if cos_theta > 1.0 - core::f64::EPSILON {
+			// for numerical stability
+			UnitQuaternion::from_quaternion(x.lerp(&z, a))
+		} else {
+			// let angle: f64 = cos_theta.acos();
+			todo!("Finish port 2");
+			// (((1.0 - a) * angle).sin() * x + (a * angle).sin() * z) / angle.sin()
+		}
+	}
+
+	pub fn bezier2bezier(
+		corners: &Matrix3x2<f64>,
+		tangents_x: &Matrix4x2<f64>,
+		tangents_y: &Matrix4x2<f64>,
+		x: f64,
+		anchor: &Vector3<f64>,
+	) -> Matrix4x2<f64> {
+		let bez = Self::cubic_bezier2linear(
+			Self::homogeneous_vec3(corners.column(0).into()),
+			Self::bezier(corners.column(0).into(), tangents_x.column(0).into()),
+			Self::bezier(corners.column(1).into(), tangents_x.column(1).into()),
+			Self::homogeneous_vec3(corners.column(1).into()),
+			x,
+		);
+		let _end = Self::bezier_point(bez, x);
+		let _tangent = Self::bezier_tangent(bez);
+
+		let n_tangents_x: Matrix3x2<f64> = Matrix3x2::from_columns(&[
+			safe_normalize(tangents_x.column(0).xyz()),
+			-safe_normalize(tangents_x.column(1).xyz()),
+		]);
+		let bi_tangents = Matrix3x2::<f64>::from_columns(&[
+			orthogonal_to(
+				tangents_y.column(0).xyz(),
+				anchor - corners.column(0).clone_owned(),
+				n_tangents_x.column(0).clone_owned(),
+			),
+			orthogonal_to(
+				tangents_y.column(1).xyz(),
+				anchor - corners.column(1),
+				n_tangents_x.column(1).clone_owned(),
+			),
+		]);
+
+		let q0: UnitQuaternion<f64> = UnitQuaternion::from_matrix(&Matrix3::from_columns(&[
+			n_tangents_x.column(0).clone_owned(),
+			bi_tangents.column(0).clone_owned(),
+			n_tangents_x.column(0).cross(&bi_tangents.column(0)),
+		]));
+		let q1: UnitQuaternion<f64> = UnitQuaternion::from_matrix(&Matrix3::from_columns(&[
+			n_tangents_x.column(1).clone_owned(),
+			bi_tangents.column(1).clone_owned(),
+			n_tangents_x.column(1).cross(&bi_tangents.column(1)),
+		]));
+		let edge: Vector3<f64> = corners.column(1) - corners.column(0);
+		let long_way: bool =
+			n_tangents_x.column(0).dot(&edge) + n_tangents_x.column(1).dot(&edge) < 0.0;
+		let _q_tmp: UnitQuaternion<f64> = Self::slerp(&q0, &q1, x, long_way);
+		todo!("Finish port 3");
+		// let q: UnitQuaternion<f64> = la::rotation_quat(la::qxdir(q_tmp), tangent) * q_tmp;
+
+		// let delta: Vector3<f64> = Self::rotate_from_to(tangents_y.column(0).xyz(), q0, q)
+		// 	.lerp(&Self::rotate_from_to(tangents_y.column(1).xyz(), q1, q), x);
+		// let delta_w: f64 = lerp(tangents_y.column(0).w, tangents_y.column(1).w, x);
+		//
+		// return Matrix4x2::from_columns(&[Self::homogeneous_vec3(end), delta.push(delta_w)]);
+	}
+
+	pub fn bezier2d(
+		corners: &Matrix3x4<f64>,
+		tangents_x: &Matrix4<f64>,
+		tangents_y: &Matrix4<f64>,
+		x: f64,
+		y: f64,
+		centroid: &Vector3<f64>,
+	) -> Vector3<f64> {
+		let bez0: Matrix4x2<f64> = Self::bezier2bezier(
+			&Matrix3x2::from_columns(&[
+				corners.column(0).clone_owned(),
+				corners.column(1).clone_owned(),
+			]),
+			&Matrix4x2::from_columns(&[
+				tangents_x.column(0).clone_owned(),
+				tangents_x.column(1).clone_owned(),
+			]),
+			&Matrix4x2::from_columns(&[
+				tangents_y.column(0).clone_owned(),
+				tangents_y.column(1).clone_owned(),
+			]),
+			x,
+			centroid,
+		);
+		let bez1: Matrix4x2<f64> = Self::bezier2bezier(
+			&Matrix3x2::from_columns(&[
+				corners.column(2).clone_owned(),
+				corners.column(3).clone_owned(),
+			]),
+			&Matrix4x2::from_columns(&[
+				tangents_x.column(2).clone_owned(),
+				tangents_x.column(3).clone_owned(),
+			]),
+			&Matrix4x2::from_columns(&[
+				tangents_y.column(2).clone_owned(),
+				tangents_y.column(3).clone_owned(),
+			]),
+			1.0 - x,
+			centroid,
+		);
+
+		let bez: Matrix4x2<f64> = Self::cubic_bezier2linear(
+			bez0.column(0).clone_owned(),
+			Self::bezier(bez0.column(0).xyz(), bez0.column(1).clone_owned()),
+			Self::bezier(bez1.column(0).xyz(), bez1.column(1).clone_owned()),
+			bez1.column(0).clone_owned(),
+			y,
+		);
+		return Self::bezier_point(bez, y);
+	}
+
+	pub fn _call(&mut self, vert: i32) {
+		let pos = &mut self.vert_pos[vert as usize];
+		let tri: i32 = self.vert_bary[vert as usize].tri;
+		let uvw: Vector4<f64> = self.vert_bary[vert as usize].uvw;
+
+		let halfedges: Vector4<i32> = self.meshbool_impl.get_halfedges(tri);
+		let corners = Matrix3x4::<f64>::from_columns(&[
+			self.meshbool_impl.vert_pos
+				[self.meshbool_impl.halfedge[halfedges[0] as usize].start_vert as usize]
+				.coords,
+			self.meshbool_impl.vert_pos
+				[self.meshbool_impl.halfedge[halfedges[1] as usize].start_vert as usize]
+				.coords,
+			self.meshbool_impl.vert_pos
+				[self.meshbool_impl.halfedge[halfedges[2] as usize].start_vert as usize]
+				.coords,
+			if halfedges[3] < 0 {
+				Vector3::repeat(0.0_f64).into()
+			} else {
+				self.meshbool_impl.vert_pos
+					[self.meshbool_impl.halfedge[halfedges[3] as usize].start_vert as usize]
+					.coords
+			},
+		]);
+
+		for i in [0, 1, 2, 3] {
+			if uvw[i] == 1.0 {
+				*pos = corners.column(i).clone_owned();
+				return;
+			}
+		}
+
+		let mut pos_h = Vector4::repeat(0.0_f64);
+
+		if halfedges[3] < 0 {
+			// tri
+			let tangent_r: Matrix4x3<f64> = Default::default();
+			// let tangent_r: Matrix4x3<f64> = (
+			// 	self.meshbool_impl.halfedge_tangent[halfedges[0] as usize],
+			// 	self.meshbool_impl.halfedge_tangent[halfedges[1] as usize],
+			// 	self.meshbool_impl.halfedge_tangent[halfedges[2] as usize],
+			// );
+			let tangent_l: Matrix4x3<f64> = Default::default();
+			// let tangent_l: Matrix4x3<f64> = (
+			// 	self.meshbool_impl.halfedge_tangent
+			// 		[self.meshbool_impl.halfedge[halfedges[2] as usize].paired_halfedge],
+			// 	self.meshbool_impl.halfedge_tangent
+			// 		[self.meshbool_impl.halfedge[halfedges[0] as usize].paired_halfedge],
+			// 	self.meshbool_impl.halfedge_tangent
+			// 		[self.meshbool_impl.halfedge[halfedges[1] as usize].paired_halfedge],
+			// );
+			let centroid: Vector3<f64> = mat3(&corners) * Vector3::repeat(1.0_f64 / 3.0);
+
+			for i in [0, 1, 2] {
+				let j: i32 = next3_i32(i);
+				let k: i32 = prev3_i32(i);
+				let x: f64 = uvw[k as usize] / (1.0 - uvw[i as usize]);
+
+				let bez: Matrix4x2<f64> = Self::bezier2bezier(
+					&Matrix3x2::from_columns(&[
+						corners.column(j as usize).clone_owned(),
+						corners.column(k as usize).clone_owned(),
+					]),
+					&Matrix4x2::from_columns(&[
+						tangent_r.column(j as usize).clone_owned(),
+						tangent_l.column(k as usize).clone_owned(),
+					]),
+					&Matrix4x2::from_columns(&[
+						tangent_l.column(j as usize).clone_owned(),
+						tangent_r.column(k as usize).clone_owned(),
+					]),
+					x,
+					&centroid,
+				);
+
+				let bez1: Matrix4x2<f64> = Self::cubic_bezier2linear(
+					bez.column(0).clone_owned(),
+					Self::bezier(
+						bez.column(0).clone_owned().xyz(),
+						bez.column(1).clone_owned(),
+					),
+					Self::bezier(
+						corners.column(i as usize).clone_owned(),
+						tangent_r
+							.column(i as usize)
+							.clone_owned()
+							.lerp(&tangent_l.column(i as usize), x),
+					),
+					Self::homogeneous_vec3(corners.column(i as usize).clone_owned()),
+					uvw[i as usize],
+				);
+				let p: Vector3<f64> = Self::bezier_point(bez1, uvw[i as usize]);
+				pos_h += Self::homogeneous(p.push(uvw[j as usize] * uvw[k as usize]));
+			}
+		} else {
+			// quad
+			let tangents_x: Matrix4<f64> = Default::default();
+			// let tangents_x: Matrix4<f64> = (
+			// 	self.meshbool_impl.halfedge_tangent[halfedges[0] as usize],
+			// 	self.meshbool_impl.halfedge_tangent
+			// 		[self.meshbool_impl.halfedge[halfedges[0] as usize].paired_halfedge as usize],
+			// 	self.meshbool_impl.halfedge_tangent[halfedges[2] as usize],
+			// 	self.meshbool_impl.halfedge_tangent
+			// 		[self.meshbool_impl.halfedge[halfedges[2] as usize].paired_halfedge as usize],
+			// );
+			let tangents_y: Matrix4<f64> = Default::default();
+			// let tangents_y: Matrix4<f64> = (
+			// 	self.meshbool_impl.halfedge_tangent
+			// 		[self.meshbool_impl.halfedge[halfedges[3] as usize].paired_halfedge as usize],
+			// 	self.meshbool_impl.halfedge_tangent[halfedges[1] as usize],
+			// 	self.meshbool_impl.halfedge_tangent
+			// 		[self.meshbool_impl.halfedge[halfedges[1] as usize].paired_halfedge as usize],
+			// 	self.meshbool_impl.halfedge_tangent[halfedges[3] as usize],
+			// );
+			let centroid: Vector3<f64> = corners * Vector4::repeat(0.25_f64);
+			let x: f64 = uvw[1] + uvw[2];
+			let y: f64 = uvw[2] + uvw[3];
+			let p_x: Vector3<f64> =
+				Self::bezier2d(&corners, &tangents_x, &tangents_y, x, y, &centroid);
+			let p_y: Vector3<f64> = Self::bezier2d(
+				&Matrix3x4::from_columns(&[
+					corners.column(1).clone_owned(),
+					corners.column(2).clone_owned(),
+					corners.column(3).clone_owned(),
+					corners.column(0).clone_owned(),
+				]),
+				&Matrix4::from_columns(&[
+					tangents_y.column(1).clone_owned(),
+					tangents_y.column(2).clone_owned(),
+					tangents_y.column(3).clone_owned(),
+					tangents_y.column(0).clone_owned(),
+				]),
+				&Matrix4::from_columns(&[
+					tangents_x.column(1).clone_owned(),
+					tangents_x.column(2).clone_owned(),
+					tangents_x.column(3).clone_owned(),
+					tangents_x.column(0).clone_owned(),
+				]),
+				y,
+				1.0 - x,
+				&centroid,
+			);
+			pos_h += Self::homogeneous(p_x.push(x * (1.0 - x)));
+			pos_h += Self::homogeneous(p_y.push(y * (1.0 - y)));
+		}
+		*pos = Self::h_normalize(pos_h);
+	}
 }
 
 impl MeshBoolImpl {
@@ -401,5 +765,36 @@ impl MeshBoolImpl {
 				});
 			}
 		}
+	}
+
+	pub fn refine(
+		&mut self,
+		edge_divisions: impl Fn(Vector3<f64>, Vector4<f64>, Vector4<f64>) -> i32 + Send + Sync,
+		keep_interior: bool,
+	) {
+		if self.is_empty() {
+			return;
+		}
+		let old = self.clone();
+		let vert_bary: Vec<Barycentric> = self.subdivide(edge_divisions, keep_interior);
+		if vert_bary.len() == 0 {
+			return;
+		}
+
+		// if old.halfedge_tangent.len() == old.halfedge.len() {
+		if 0 == old.halfedge.len() {
+			//  (0..self.num_vert()).for_each(|i|
+			//              InterpTri({self.vert_pos, vertBary, &old}));
+			panic!("Should not be possible");
+		}
+
+		// self.halfedge_tangent.clear();
+		self.finish();
+		// if old.halfedge_tangent.len() == old.halfedge.len() {
+		if 0 == old.halfedge.len() {
+			self.mark_coplanar();
+			panic!("Should not be possible");
+		}
+		self.mesh_relation.original_id = -1;
 	}
 }

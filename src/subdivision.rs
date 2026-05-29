@@ -507,7 +507,7 @@ impl MeshBoolImpl {
 	///that triangle and halfedges[3] = -1, or if the triangle is part of a quad, it
 	///returns those four indices. If the triangle is part of a quad and is not the
 	///lower of the two triangle indices, it returns all -1s.
-	fn get_halfedges(&self, tri: i32) -> Vector4<i32> {
+	pub fn get_halfedges(&self, tri: i32) -> Vector4<i32> {
 		let mut halfedges = Vector4::repeat(-1i32);
 		for i in 0..3 {
 			halfedges[i as usize] = 3 * tri + i as i32;
