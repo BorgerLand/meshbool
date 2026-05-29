@@ -278,6 +278,7 @@ impl MeshBoolImpl {
 							normal[i as usize];
 					}
 				});
+				continue;
 			}
 
 			// vertex has multiple normals
@@ -350,9 +351,6 @@ impl MeshBoolImpl {
 				},
 			);
 
-			for normal in normals.iter_mut() {
-				*normal = safe_normalize(normal.clone());
-			}
 			for i in 0..normals.len() {
 				let mut n = normals[i];
 				// Same frame-storage rule as the single-normal path above.

@@ -246,7 +246,7 @@ impl MeshBool {
 
 		meshbool_impl.simplify_topology(0);
 		meshbool_impl.sort_geometry();
-		meshbool_impl.tolerance = tolerance;
+		meshbool_impl.tolerance = old_tolerance;
 		Self::from(meshbool_impl)
 	}
 	///The genus is a topological property of the manifold, representing the number
@@ -284,13 +284,6 @@ impl MeshBool {
 	pub fn as_original(&self) -> Self {
 		if self.meshbool_impl.status != MeshBoolError::NoError {
 			return Self::propagate_status(self.meshbool_impl.status);
-		}
-
-		let old_impl = &self.meshbool_impl;
-		if old_impl.status != MeshBoolError::NoError {
-			let mut new_impl = MeshBoolImpl::default();
-			new_impl.status = old_impl.status;
-			return Self::from(new_impl);
 		}
 
 		let mut new_impl = self.meshbool_impl.clone();
@@ -343,12 +336,19 @@ impl MeshBool {
 		Self::from(self.meshbool_impl.transform(&transform))
 	}
 
-	///Applies an Euler angle rotation to the manifold, first about the X axis, then
-	///Y, then Z, in degrees. We use degrees so that we can minimize rounding error,
-	///and eliminate it completely for any multiples of 90 degrees. Additionally,
-	///more efficient code paths are used to update the manifold when the transforms
-	///only rotate by multiples of 90 degrees. This operation can be chained.
-	///Transforms are combined and applied lazily.
+	///Applies an Euler angle rotation to the manifold, This operation can be
+	///chained. Transforms are combined and applied lazily.
+	///
+	///We use degrees so that we can minimize rounding error, and eliminate it
+	///completely for any multiples of 90 degrees. Additionally, more efficient code
+	///paths are used to update the manifold when the transforms only rotate by
+	///multiples of 90 degrees.
+	///
+	///From the reference frame of the model being rotated, rotations are applied in
+	///*z-y'-x"* order. That is yaw first, then pitch and finally roll.
+	///
+	///From the global reference frame, a model will be rotated in *x-y-z* order.
+	///That is about the global X axis, then global Y axis, and finally global Z.
 	///
 	///@param xDegrees First rotation, degrees about the global X-axis.
 	///@param yDegrees Second rotation, degrees about the global Y-axis.

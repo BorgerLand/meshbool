@@ -114,6 +114,9 @@ impl MeshBoolImpl {
 	///Returns true if this manifold is in fact an oriented 2-manifold and all of
 	///the data structures are consistent.
 	pub fn is_2_manifold(&self) -> bool {
+		if self.halfedge.len() == 0 {
+			return true;
+		}
 		if !self.is_manifold() {
 			return false;
 		}
@@ -195,7 +198,7 @@ impl MeshBoolImpl {
 		}
 
 		let volume = |tri: usize| {
-			let v = self.vert_pos[self.halfedge.start(3 * tri as i32) as usize].coords;
+			let v = self.vert_pos[self.halfedge.start((3 * tri) as i32) as usize].coords;
 			let cross_p = (self.vert_pos[self.halfedge.start((3 * tri + 1) as i32) as usize] - v)
 				.coords
 				.cross(

@@ -2,7 +2,7 @@ use crate::common::{AABB, AABBOverlap};
 use crate::utils::atomic_add_i32;
 use crate::vec::vec_uninit;
 use nalgebra::{Matrix3x4, Point3, Vector3};
-use std::any::Any;
+use std::any::TypeId;
 use std::fmt::Debug;
 use std::mem;
 
@@ -54,6 +54,7 @@ impl<'a> CreateRadixTree<'a> {
 			-1
 		} else {
 			if self.leaf_morton[i as usize] == self.leaf_morton[j as usize] {
+				// use index to disambiguate
 				32 + self.prefix_length_unsigned(i as u32, j as u32)
 			} else {
 				self.prefix_length_unsigned(
@@ -182,7 +183,8 @@ where
 		let query = (self.f)(query_idx);
 
 		// early exit for empty boxes
-		if let Some(query) = (&query as &dyn Any).downcast_ref::<AABB>() {
+		if TypeId::of::<AABBOverlapT>() == TypeId::of::<AABB>() {
+			let query: &AABB = unsafe { std::mem::transmute(&query) };
 			if query.min.x == f64::INFINITY {
 				return;
 			}
