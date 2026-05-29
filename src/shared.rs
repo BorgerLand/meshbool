@@ -182,6 +182,12 @@ pub struct Halfedge {
 	pub prop_vert: i32,
 }
 
+impl Halfedge {
+	pub fn is_forward(&self) -> bool {
+		self.start_vert < self.end_vert
+	}
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Halfedges {
 	start: Vec<i32>,
@@ -275,12 +281,6 @@ impl Halfedges {
 			data[idx] = self.get(idx as i32);
 		}
 		data
-	}
-}
-
-impl Halfedge {
-	pub fn is_forward(&self) -> bool {
-		self.start_vert < self.end_vert
 	}
 }
 
