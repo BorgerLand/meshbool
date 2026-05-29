@@ -1,6 +1,8 @@
 use crate::MeshBool;
 use crate::common::{Polygons, Quality, SimplePolygon, cosd, sind};
+use crate::disjoint_sets::DisjointSets;
 use crate::meshboolimpl::{MeshBoolImpl, Shape};
+use crate::parallel::{copy_if, gather};
 use crate::polygon::{PolyVert, PolygonsIdx, SimplePolygonIdx, triangulate_idx};
 use nalgebra::{Matrix2, Matrix3x4, Point2, Point3, Vector2, Vector3};
 
@@ -245,5 +247,63 @@ impl MeshBool {
 		meshbool_impl.initialize_original(false);
 		meshbool_impl.mark_coplanar();
 		Self::from(meshbool_impl)
+	}
+
+	//
+	// This operation returns a vector of Manifolds that are topologically
+	// disconnected. If everything is connected, the vector is length one,
+	// containing a copy of the original. It is the inverse operation of Compose().
+	//
+	pub fn decompose(&self) -> Vec<Self> {
+		let uf = DisjointSets::new(self.num_vert() as u32);
+		// Graph graph;
+		let p_impl = &self.meshbool_impl;
+		for halfedge in p_impl.halfedge.iter() {
+			if halfedge.is_forward() {
+				uf.unite(halfedge.start_vert as u32, halfedge.end_vert as u32);
+			}
+		}
+		let mut component_indices: Vec<i32> = vec![];
+		let num_components = uf.connected_components(&mut component_indices);
+
+		if num_components == 1 {
+			return vec![self.clone()];
+		}
+		let vert_label: Vec<i32> = component_indices;
+
+		let num_vert = self.num_vert();
+		let mut meshes: Vec<Self> = vec![];
+		for i in 0..num_components {
+			let mut meshbool_impl = MeshBoolImpl::default();
+			// inherit original object's precision
+			meshbool_impl.epsilon = p_impl.epsilon;
+			meshbool_impl.tolerance = p_impl.tolerance;
+
+			let mut vert_new2old: Vec<i32> = vec![0; num_vert];
+			let n_vert = copy_if(0..num_vert as i32, &mut vert_new2old, |v| {
+				vert_label[v as usize] == i as i32
+			});
+			meshbool_impl.vert_pos.resize(n_vert, Default::default());
+			vert_new2old.resize(n_vert, Default::default());
+			gather(&vert_new2old, &p_impl.vert_pos, &mut meshbool_impl.vert_pos);
+
+			let mut face_new2old: Vec<i32> = vec![0; self.num_tri()];
+			let halfedge = &p_impl.halfedge;
+			let n_face = copy_if(0..self.num_tri() as i32, &mut face_new2old, |face| {
+				vert_label[halfedge[3 * face as usize].start_vert as usize] == i as i32
+			});
+
+			if n_face == 0 {
+				continue;
+			}
+			face_new2old.resize(n_face, Default::default());
+
+			meshbool_impl.gather_faces_with_old(p_impl, &face_new2old);
+			meshbool_impl.reindex_verts(&vert_new2old, p_impl.num_vert());
+			meshbool_impl.finish();
+
+			meshes.push(Self::from(meshbool_impl));
+		}
+		return meshes;
 	}
 }
