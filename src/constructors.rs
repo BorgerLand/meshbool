@@ -3,6 +3,7 @@ use crate::common::{Polygons, Quality, SimplePolygon, cosd, sind};
 use crate::meshboolimpl::{MeshBoolImpl, Shape};
 use crate::polygon::{PolyVert, PolygonsIdx, SimplePolygonIdx, triangulate_idx};
 use nalgebra::{Matrix2, Matrix3x4, Point2, Point3, Vector2, Vector3};
+use std::f64::consts::FRAC_PI_2;
 
 impl MeshBool {
 	///Constructs a tetrahedron centered at the origin with one vertex at (1,1,1)
@@ -57,10 +58,22 @@ impl MeshBool {
 		circular_segments: u32,
 		center: bool,
 	) -> Self {
-		if height <= 0.0 || radius_low <= 0.0 {
+		if height <= 0.0 || radius_low < 0.0 {
 			return Self::invalid();
 		}
-
+		if radius_low == 0.0 {
+			if radius_high <= 0.0 {
+				return Self::invalid();
+			}
+			// Cone with apex at bottom: create the centered apex-at-top version and
+			// mirror it
+			let mut cone = MeshBool::cylinder(height, radius_high, 0.0, circular_segments, true);
+			cone = cone.mirror(Vector3::new(0.0, 0.0, 1.0));
+			if !center {
+				cone = cone.translate(Vector3::new(0.0, 0.0, height / 2.0));
+			}
+			return cone.as_original();
+		}
 		let scale = if radius_high >= 0.0 {
 			radius_high / radius_low
 		} else {
@@ -112,18 +125,24 @@ impl MeshBool {
 		};
 		let mut meshbool_impl = MeshBoolImpl::from_shape(Shape::Octahedron, Matrix3x4::identity());
 		meshbool_impl.subdivide(|_, _, _| n - 1, false);
-		meshbool_impl.vert_pos.iter_mut().for_each(|v| {
-			*v = Vector3::from(core::f64::consts::FRAC_PI_2 * (Vector3::repeat(1.0) - v.coords))
-				.into();
-			v.iter_mut().for_each(|i| *i = i.cos());
-			*v = (radius * Vector3::from(v.coords.normalize())).into();
+		for v in meshbool_impl.vert_pos.iter_mut() {
+			let v_vec = Vector3::new(
+				libm::cos(FRAC_PI_2 * (1.0 - v.x)),
+				libm::cos(FRAC_PI_2 * (1.0 - v.y)),
+				libm::cos(FRAC_PI_2 * (1.0 - v.z)),
+			);
+
+			*v = (radius * v_vec.normalize()).into();
 			if v.x.is_nan() {
-				*v = Vector3::repeat(0.0).into();
+				*v = Point3::default();
 			}
-		});
-		meshbool_impl.finish();
+		}
 		// Ignore preceding octahedron.
-		meshbool_impl.initialize_original(false);
+		meshbool_impl.initialize_original();
+		meshbool_impl.calculate_bbox();
+		meshbool_impl.set_epsilon(-1.0, false);
+		meshbool_impl.sort_geometry();
+		meshbool_impl.set_normals_and_coplanar();
 		return Self::from(meshbool_impl);
 	}
 
@@ -241,9 +260,11 @@ impl MeshBool {
 		};
 
 		meshbool_impl.create_halfedges(tri_verts, Vec::new());
-		meshbool_impl.finish();
-		meshbool_impl.initialize_original(false);
-		meshbool_impl.mark_coplanar();
+		meshbool_impl.initialize_original();
+		meshbool_impl.calculate_bbox();
+		meshbool_impl.set_epsilon(-1.0, false);
+		meshbool_impl.sort_geometry();
+		meshbool_impl.set_normals_and_coplanar();
 		Self::from(meshbool_impl)
 	}
 }

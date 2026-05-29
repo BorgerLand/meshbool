@@ -1,6 +1,11 @@
+use crate::mesh::MeshGLP;
 use core::f64;
 use nalgebra::{Matrix3x4, Point2, Point3, Vector2, Vector3};
 use std::cmp::Ordering;
+use std::ops::Div;
+
+pub type MeshGL32 = MeshGLP<f32, u32>;
+pub type MeshGL64 = MeshGLP<f64, u64>;
 
 pub type SimplePolygon = Vec<Point2<f64>>;
 pub type Polygons = Vec<SimplePolygon>;
@@ -197,7 +202,7 @@ impl Quality {
 }
 
 //disgusting cursed reimplementation of c++ implicit number type coercion
-pub trait LossyFrom<T: Copy> {
+pub trait LossyFrom<T: Copy>: Div<Output = Self> + Sized {
 	fn lossy_from(other: T) -> Self;
 }
 
@@ -259,87 +264,6 @@ impl PartialEq for OrderedF64 {
 	}
 }
 
-///Returns arc cosine of 𝑥.
-///
-///@return value in range [0,M_PI]
-///@return NAN if 𝑥 ∈ {NAN,+INFINITY,-INFINITY}
-///@return NAN if 𝑥 ∉ [-1,1]
-pub fn sun_acos(x: f64) -> f64 {
-	/*
-	 * Origin of acos function: FreeBSD /usr/src/lib/msun/src/e_acos.c
-	 * Changed the use of union to memcpy to avoid undefined behavior.
-	 * ====================================================
-	 * Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
-	 *
-	 * Developed at SunSoft, a Sun Microsystems, Inc. business.
-	 * Permission to use, copy, modify, and distribute this
-	 * software is freely granted, provided that this notice
-	 * is preserved.
-	 * ====================================================
-	 */
-	const PIO2_HI: f64 = 1.57079632679489655800e+00; /* 0x3FF921FB, 0x54442D18 */
-	const PIO2_LO: f64 = 6.12323399573676603587e-17; /* 0x3C91A626, 0x33145C07 */
-	const P_S0: f64 = 1.66666666666666657415e-01; /* 0x3FC55555, 0x55555555 */
-	const P_S1: f64 = -3.25565818622400915405e-01; /* 0xBFD4D612, 0x03EB6F7D */
-	const P_S2: f64 = 2.01212532134862925881e-01; /* 0x3FC9C155, 0x0E884455 */
-	const P_S3: f64 = -4.00555345006794114027e-02; /* 0xBFA48228, 0xB5688F3B */
-	const P_S4: f64 = 7.91534994289814532176e-04; /* 0x3F49EFE0, 0x7501B288 */
-	const P_S5: f64 = 3.47933107596021167570e-05; /* 0x3F023DE1, 0x0DFDF709 */
-	const Q_S1: f64 = -2.40339491173441421878e+00; /* 0xC0033A27, 0x1C8A2D4B */
-	const Q_S2: f64 = 2.02094576023350569471e+00; /* 0x40002AE5, 0x9C598AC8 */
-	const Q_S3: f64 = -6.88283971605453293030e-01; /* 0xBFE6066C, 0x1B8D0159 */
-	const Q_S4: f64 = 7.70381505559019352791e-02; /* 0x3FB3B8C5, 0xB12E9282 */
-	let r = |z| {
-		let p = z * (P_S0 + z * (P_S1 + z * (P_S2 + z * (P_S3 + z * (P_S4 + z * P_S5)))));
-		let q = 1.0 + z * (Q_S1 + z * (Q_S2 + z * (Q_S3 + z * Q_S4)));
-		p / q
-	};
-	//double z, w, s, c, df;
-	//uint64_t xx;
-	//uint32_t hx, lx, ix;
-	let mut xx = x.to_bits();
-	let hx = (xx >> 32) as u32;
-	let ix = hx & 0x7fffffff;
-	/* |x| >= 1 or nan */
-	if ix >= 0x3ff00000 {
-		let lx = xx as u32;
-		if ((ix - 0x3ff00000) | lx) == 0 {
-			/* acos(1)=0, acos(-1)=pi */
-			if (hx >> 31) != 0 {
-				return 2.0 * PIO2_HI + 2.0_f64.powi(-120);
-			}
-			return 0.0;
-		}
-		return f64::NAN;
-	}
-	/* |x| < 0.5 */
-	if ix < 0x3fe00000 {
-		if ix <= 0x3c600000
-		/* |x| < 2**-57 */
-		{
-			return PIO2_HI + 2.0_f64.powi(-120);
-		}
-
-		return PIO2_HI - (x - (PIO2_LO - x * r(x * x)));
-	}
-	/* x < -0.5 */
-	if (hx >> 31) != 0 {
-		let z = (1.0 + x) * 0.5;
-		let s = z.sqrt();
-		let w = r(z) * s - PIO2_LO;
-		return 2.0 * (PIO2_HI - (s + w));
-	}
-	/* x > 0.5 */
-	let z = (1.0 - x) * 0.5;
-	let s = z.sqrt();
-	xx = s.to_bits();
-	xx &= 0xffffffff00000000;
-	let df = f64::from_bits(xx);
-	let c = (z - df * df) / (s + df);
-	let w = r(z) * s + c;
-	2.0 * (df + w)
-}
-
 pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
 	a * (1.0 - t) + b * t
 }
@@ -350,18 +274,19 @@ pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
 #[inline]
 pub fn sind(mut x: f64) -> f64 {
 	if !x.is_finite() {
-		return x.sin();
+		return f64::NAN;
 	}
 	if x < 0.0 {
 		return -sind(-x);
 	}
 	let quo: i32;
-	(x, quo) = remquo(x.abs(), 90.0);
+	(x, quo) = libm::remquo(x.abs(), 90.0);
+	let xr = x.to_radians();
 	match quo % 4 {
-		0 => x.to_radians().sin(),
-		1 => x.to_radians().cos(),
-		2 => -x.to_radians().sin(),
-		3 => -x.to_radians().cos(),
+		0 => libm::sin(xr),
+		1 => libm::cos(xr),
+		2 => -libm::sin(xr),
+		3 => -libm::cos(xr),
 		_ => 0.0,
 	}
 }
@@ -372,11 +297,4 @@ pub fn sind(mut x: f64) -> f64 {
 #[inline]
 pub fn cosd(x: f64) -> f64 {
 	sind(x + 90.0)
-}
-
-#[inline]
-fn remquo(x: f64, y: f64) -> (f64, i32) {
-	let r = x.rem_euclid(y); // IEEE remainder
-	let q = ((x - r) / y).round() as i32;
-	(r, q)
 }

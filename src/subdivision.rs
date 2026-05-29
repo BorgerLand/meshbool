@@ -1,16 +1,14 @@
-use std::collections::HashMap;
-use std::sync::Mutex;
-
 use crate::MeshBoolImpl;
 use crate::common::lerp;
 use crate::meshboolimpl::BaryIndices;
 use crate::parallel::exclusive_scan_iter;
-use crate::shared::{Barycentric, TmpEdge, TriRef, create_tmp_edges, next_halfedge};
+use crate::shared::{Barycentric, TmpEdge, create_tmp_edges, next_halfedge};
 use crate::utils::next3_i32;
-use crate::vec::vec_resize_nofill;
+use crate::vec::{vec_resize_nofill, vec_uninit};
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3, Vector4};
-
+use std::collections::HashMap;
 use std::sync::LazyLock;
+use std::sync::Mutex;
 
 static PARTITION_CACHE: LazyLock<Mutex<HashMap<Vector4<i32>, Partition>>> =
 	LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -126,12 +124,12 @@ impl Partition {
 			}
 		}
 
-		let offset = interior_offset - new_verts.len() as i32;
-		let old: usize = new_verts.len();
+		let old = new_verts.len();
 		unsafe { vec_resize_nofill(&mut new_verts, self.vert_bary.len()) };
-		for (i, v) in new_verts[old..].iter_mut().enumerate() {
-			*v = old as i32 + offset + i as i32;
-		}
+		new_verts[old..]
+			.iter_mut()
+			.enumerate()
+			.for_each(|(i, v)| *v = interior_offset + i as i32);
 
 		let num_tri = self.tri_vert.len() as i32;
 		let mut new_tri_vert: Vec<Vector3<i32>> = vec![Default::default(); num_tri as usize];
@@ -231,9 +229,10 @@ impl Partition {
 				// obtuse -> spit into two acute
 				// portion of n[0] under n[2]
 				let ns: i32 = (n[0] - 2)
-					.min(f64::round((f - (n[1] * n[1]) as f64) / (2 * n[0]) as f64) as i32);
+					.min(libm::round((f - (n[1] * n[1]) as f64) / (2 * n[0]) as f64) as i32);
 				// height from n[0]: nh <= n[2]
-				let nh: i32 = 1.0f64.max(((n[2] * n[2] - ns * ns) as f64).sqrt().round()) as i32;
+				let nh: i32 =
+					1.0f64.max(libm::round(((n[2] * n[2] - ns * ns) as f64).sqrt())) as i32;
 
 				let h_offset: i32 = partition.vert_bary.len() as i32;
 				let middle_bary: Vector4<f64> =
@@ -431,12 +430,11 @@ impl Partition {
 			let corner_offset3 = edge_added[3] - 1 - (edge_added[3] * i) / partitions;
 			let next_offset1 = get_edge_vert(1, corner_offset1 + 1);
 			let next_offset3 = get_edge_vert(3, corner_offset3 + 1);
-			let added = lerp(
+			let added = libm::round(lerp(
 				edge_added[0] as f64,
 				edge_added[2] as f64,
 				i as f64 / partitions as f64,
-			)
-			.round() as i32;
+			)) as i32;
 
 			new_corner_verts[1] = get_edge_vert(1, corner_offset1);
 			new_corner_verts[2] = get_edge_vert(3, corner_offset3);
@@ -515,7 +513,7 @@ impl MeshBoolImpl {
 		let neighbor = self.get_neighbor(tri);
 		if neighbor >= 0 {
 			// quad
-			let pair = self.halfedge[(3 * tri + neighbor) as usize].paired_halfedge;
+			let pair = self.halfedge.pair(3 * tri + neighbor);
 			if pair / 3 < tri {
 				return Vector4::repeat(-1i32); // only process lower tri index
 			}
@@ -546,7 +544,7 @@ impl MeshBoolImpl {
 			return BaryIndices::new(tri, idx, next3_i32(idx));
 		} else {
 			// quad
-			let pair = self.halfedge[(3 * tri + neighbor) as usize].paired_halfedge;
+			let pair = self.halfedge.pair(3 * tri + neighbor);
 			if pair / 3 < tri {
 				tri = pair / 3;
 				idx = if next3_i32(neighbor) == idx { 0 } else { 1 };
@@ -563,16 +561,18 @@ impl MeshBoolImpl {
 	///version if desired.
 	fn fill_retained_verts(&mut self, vert_bary: &mut [Barycentric]) {
 		let num_tri = self.halfedge.len() / 3;
-		for tri in 0..num_tri {
+		for tri in 0..num_tri as i32 {
 			for i in 0..3 {
-				let indices: BaryIndices = self.get_indices((3 * tri + i) as i32);
+				let indices: BaryIndices = self.get_indices(3 * tri + i);
 				if indices.start4 < 0 {
 					continue; // skip quad interiors
 				}
 				let mut uvw = Vector4::repeat(0.0f64);
 				uvw[indices.start4 as usize] = 1.0;
-				vert_bary[self.halfedge[3 * tri + i].start_vert as usize] =
-					Barycentric::new(indices.tri, uvw);
+				vert_bary[self.halfedge.start(3 * tri + i) as usize] = Barycentric {
+					tri: indices.tri,
+					uvw,
+				};
 			}
 		}
 	}
@@ -593,9 +593,9 @@ impl MeshBoolImpl {
 		let num_tri = self.num_tri();
 		let mut half2edge: Vec<i32> = vec![0; 2 * num_edge];
 		for edge in 0..num_edge {
-			let idx = edges[edge].halfedge_idx as usize;
-			half2edge[idx] = edge as i32;
-			half2edge[self.halfedge[idx].paired_halfedge as usize] = edge as i32;
+			let idx = edges[edge].halfedge_idx;
+			half2edge[idx as usize] = edge as i32;
+			half2edge[self.halfedge.pair(idx) as usize] = edge as i32;
 		}
 
 		let face_halfedges: Vec<Vector4<i32>>;
@@ -613,7 +613,7 @@ impl MeshBoolImpl {
 				if self.is_marked_inside_quad(h_idx) {
 					0
 				} else {
-					let vec: Vector3<f64> =
+					let vec =
 						self.vert_pos[edge.first as usize] - self.vert_pos[edge.second as usize];
 					// let tangent0: Vector4<f64> = if self.halfedge_tangent.empty() {
 					// 	Vector4::repeat(0.0)
@@ -638,35 +638,36 @@ impl MeshBoolImpl {
 			// with RefineToTolerance, so we avoid this case by adding some extra
 			// divisions to the short sides so that the triangulation has some thickness
 			// and creates more interior facets.
-			let mut tmp: Vec<i32>;
-			tmp = (0..num_edge)
+			let tmp = (0..num_edge)
 				.into_iter()
 				.map(|i| {
 					let edge: TmpEdge = edges[i].clone();
-					let h_idx = edge.halfedge_idx as usize;
+					let h_idx = edge.halfedge_idx;
 					if self.is_marked_inside_quad(h_idx as i32) {
 						edge_added[i]
 					} else {
 						let this_added = edge_added[i];
-						let added = |mut h_idx: usize| {
+						let added = |mut h_idx: i32| {
 							let mut longest = 0;
 							let mut total = 0;
 							for _ in 0..3 {
-								let added = edge_added[half2edge[h_idx] as usize];
+								let added = edge_added[half2edge[h_idx as usize] as usize];
 								longest = longest.max(added);
 								total += added;
-								h_idx = next_halfedge(h_idx as i32) as usize;
-								if self.is_marked_inside_quad(h_idx as i32) {
+								h_idx = next_halfedge(h_idx);
+								if self.is_marked_inside_quad(h_idx) {
 									// No extra on quads
 									longest = 0;
 									total = 1;
 									break;
 								}
 							}
-							let min_extra: i32 = (longest as f64 * 0.2 + 1.0) as i32;
-							let extra: i32 =
+							let min_extra = (longest as f64 * 0.2 + 1.0) as i32;
+							let extra =
 								(2.0 * longest as f64 + min_extra as f64 - total as f64) as i32;
-
+							if longest == 0 {
+								return 0;
+							}
 							if extra > 0 {
 								(extra * (longest - this_added)) / longest
 							} else {
@@ -674,12 +675,11 @@ impl MeshBoolImpl {
 							}
 						};
 
-						edge_added[i]
-							+ added(h_idx).max(added(self.halfedge[h_idx].paired_halfedge as usize))
+						edge_added[i] + added(h_idx).max(added(self.halfedge.pair(h_idx)))
 					}
 				})
 				.collect();
-			core::mem::swap(&mut edge_added, &mut tmp);
+			edge_added = tmp;
 		}
 
 		let mut edge_offset: Vec<i32> = vec![0; num_edge];
@@ -753,9 +753,10 @@ impl MeshBoolImpl {
 			(interior_offset.last().unwrap() + sub_tris.last().unwrap().num_interior()) as usize,
 			Default::default(),
 		);
-		let mut tri_ref: Vec<TriRef> = vec![Default::default(); tri_verts.len()];
+		let mut tri_ref = unsafe { vec_uninit(tri_verts.len()) };
+		let mut face_normal = unsafe { vec_uninit(tri_verts.len()) };
 		for tri in 0..num_tri {
-			let halfedges: Vector4<i32> = face_halfedges[tri];
+			let halfedges = face_halfedges[tri];
 			if halfedges[0] < 0 {
 				continue;
 			}
@@ -767,10 +768,9 @@ impl MeshBoolImpl {
 					tri3[i] = -1;
 					continue;
 				}
-				let halfedge = &self.halfedge[halfedges[i] as usize];
-				tri3[i] = halfedge.start_vert;
+				tri3[i] = self.halfedge.start(halfedges[i]);
 				edge_offsets[i] = edge_offset[half2edge[halfedges[i] as usize] as usize];
-				edge_fwd[i] = halfedge.is_forward();
+				edge_fwd[i] = self.halfedge.is_forward(halfedges[i]);
 			}
 
 			let new_tris: Vec<Vector3<i32>> =
@@ -780,14 +780,15 @@ impl MeshBoolImpl {
 				.copy_from_slice(&new_tris);
 			let start = tri_offset[tri] as usize;
 			tri_ref[start..start + new_tris.len()].fill(self.mesh_relation.tri_ref[tri]);
+			face_normal[start..start + new_tris.len()].fill(self.face_normal[tri]);
 
-			let idx: Vector4<i32> = sub_tris[tri].idx;
-			let v_idx: Vector4<i32> = if halfedges[3] >= 0 || idx[1] == next3_i32(idx[0]) {
+			let idx = sub_tris[tri].idx;
+			let v_idx = if halfedges[3] >= 0 || idx[1] == next3_i32(idx[0]) {
 				idx
 			} else {
 				Vector4::new(idx[2], idx[0], idx[1], idx[3])
 			};
-			let mut r_idx: Vector4<i32> = Default::default();
+			let mut r_idx = Vector4::default();
 			for i in 0..4 {
 				r_idx[v_idx[i] as usize] = i as i32;
 			}
@@ -797,53 +798,46 @@ impl MeshBoolImpl {
 				.iter()
 				.zip(vert_bary[interior_offset[tri] as usize..].iter_mut())
 				.for_each(|(bary_in, bary_out)| {
-					*bary_out = Barycentric::new(
-						tri as i32,
-						Vector4::new(
+					*bary_out = Barycentric {
+						tri: tri as i32,
+						uvw: Vector4::new(
 							bary_in[r_idx[0] as usize],
 							bary_in[r_idx[1] as usize],
 							bary_in[r_idx[2] as usize],
 							bary_in[r_idx[3] as usize],
 						),
-					);
+					};
 				});
 		}
 		self.mesh_relation.tri_ref = tri_ref;
+		self.face_normal = face_normal;
 
-		let new_vert_pos: Vec<Vector3<f64>>;
-		new_vert_pos = (0..vert_bary.len())
+		self.vert_pos = (0..vert_bary.len())
 			.into_iter()
 			.map(|vert| {
 				let bary: Barycentric = vert_bary[vert].clone();
 				let halfedges: Vector4<i32> = face_halfedges[bary.tri as usize];
-				if halfedges[3] < 0 {
-					let mut tri_pos: Matrix3<f64> = Default::default();
+				Point3::from(if halfedges[3] < 0 {
+					let mut tri_pos = Matrix3::default();
 					for i in 0..3 {
 						tri_pos.set_column(
 							i,
-							&self.vert_pos
-								[self.halfedge[halfedges[i] as usize].start_vert as usize]
-								.coords,
+							&self.vert_pos[self.halfedge.start(halfedges[i]) as usize].coords,
 						);
 					}
 					tri_pos * bary.uvw.xyz()
 				} else {
-					let mut quad_pos: Matrix3x4<f64> = Default::default();
+					let mut quad_pos = Matrix3x4::default();
 					for i in 0..4 {
 						quad_pos.set_column(
 							i,
-							&self.vert_pos
-								[self.halfedge[halfedges[i] as usize].start_vert as usize]
-								.coords,
+							&self.vert_pos[self.halfedge.start(halfedges[i]) as usize].coords,
 						);
 					}
 					quad_pos * bary.uvw
-				}
+				})
 			})
 			.collect();
-		self.vert_pos = new_vert_pos.into_iter().map(|v| Point3::from(v)).collect();
-
-		self.face_normal.clear();
 
 		if self.num_prop > 0 {
 			let num_prop_vert: i32 = self.num_prop_vert() as i32;
@@ -852,7 +846,7 @@ impl MeshBoolImpl {
 			// duplicate the prop verts along all new edges even though this is
 			// unnecessary for edges that share the same prop verts. The duplicates will
 			// be removed by CompactProps.
-			let mut prop: Vec<f64> = vec![
+			let mut prop = vec![
 				0.0;
 				(self.num_prop * (num_prop_vert + added_verts + total_edge_added as i32))
 					as usize
@@ -870,19 +864,17 @@ impl MeshBoolImpl {
 
 				for p in 0..num_prop {
 					if halfedges[3] < 0 {
-						let mut tri_prop: Vector3<f64> = Default::default();
+						let mut tri_prop = Vector3::default();
 						for i in 0..3 {
-							tri_prop[i] = self.properties[(self.halfedge[3 * bary.tri as usize + i]
-								.prop_vert * num_prop + p)
-								as usize];
+							tri_prop[i as usize] = self.properties
+								[(self.halfedge.prop(3 * bary.tri + i) * num_prop + p) as usize];
 						}
 						prop[(vert * num_prop + p) as usize] = tri_prop.dot(&bary.uvw.xyz());
 					} else {
-						let mut quad_prop: Vector4<f64> = Default::default();
+						let mut quad_prop = Vector4::default();
 						for i in 0..4 {
-							quad_prop[i] = self.properties[(self.halfedge[halfedges[i] as usize]
-								.prop_vert * num_prop + p)
-								as usize];
+							quad_prop[i] = self.properties
+								[(self.halfedge.prop(halfedges[i]) * num_prop + p) as usize];
 						}
 						prop[(vert * num_prop + p) as usize] = quad_prop.dot(&bary.uvw);
 					}
@@ -897,10 +889,9 @@ impl MeshBoolImpl {
 				let num_prop: i32 = self.num_prop() as i32;
 
 				let frac: f64 = 1.0 / (n + 1) as f64;
-				let halfedge_idx: i32 =
-					self.halfedge[edges[i].halfedge_idx as usize].paired_halfedge;
-				let prop0: i32 = self.halfedge[halfedge_idx as usize].prop_vert;
-				let prop1: i32 = self.halfedge[next_halfedge(halfedge_idx) as usize].prop_vert;
+				let halfedge_idx: i32 = self.halfedge.pair(edges[i].halfedge_idx);
+				let prop0: i32 = self.halfedge.prop(halfedge_idx);
+				let prop1: i32 = self.halfedge.prop(next_halfedge(halfedge_idx));
 				for i in 0..n {
 					for p in 0..num_prop {
 						prop[((offset + i) * num_prop + p) as usize] = lerp(
@@ -927,14 +918,14 @@ impl MeshBoolImpl {
 						tri3[i] = -1;
 						continue;
 					}
-					let halfedge = &self.halfedge[halfedges[i] as usize];
-					tri3[i] = halfedge.prop_vert;
+					tri3[i] = self.halfedge.prop(halfedges[i]);
 					edge_offsets[i] = edge_offset[half2edge[halfedges[i] as usize] as usize];
-					if !halfedge.is_forward() {
-						if self.halfedge[halfedge.paired_halfedge as usize].prop_vert
-							!= self.halfedge[next_halfedge(halfedges[i]) as usize].prop_vert
-							|| self.halfedge[next_halfedge(halfedge.paired_halfedge) as usize]
-								.prop_vert != halfedge.prop_vert
+					if !self.halfedge.is_forward(halfedges[i]) {
+						let pair = self.halfedge.pair(halfedges[i]);
+						if self.halfedge.prop(pair)
+							!= self.halfedge.prop(next_halfedge(halfedges[i]))
+							|| self.halfedge.prop(next_halfedge(pair))
+								!= self.halfedge.prop(halfedges[i])
 						{
 							// if the edge doesn't match, point to the backward edge
 							// propverts.

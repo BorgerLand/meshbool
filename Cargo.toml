@@ -6,4 +6,5 @@ edition = "2024"
 [features]
 
 [dependencies]
-nalgebra = { version = "0.34", default-features = false, features = ["std"] }
+libm = "0.2"
+nalgebra = { version = "0.34", default-features = false, features = ["std", "libm-force"] }

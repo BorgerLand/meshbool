@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 
 ///calls vec.resize() and potentially vec.shrink_to_fit()
-pub fn vec_resize<T>(vec: &mut Vec<T>, new_size: usize)
+pub fn vec_resize<T>(vec: &mut Vec<T>, new_size: usize, val: T)
 where
-	T: Clone + Default,
+	T: Clone,
 {
 	let shrink = vec.len() > 2 * new_size && vec.len() > 16;
-	vec.resize(new_size, T::default());
+	vec.resize(new_size, val.clone());
 	if shrink {
 		vec.shrink_to_fit();
 	}

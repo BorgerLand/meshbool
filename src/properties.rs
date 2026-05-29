@@ -1,14 +1,9 @@
-use nalgebra::{Matrix2x3, Point3, Vector2, Vector3};
-
-use crate::AABB;
 use crate::collider::Recorder;
 use crate::meshboolimpl::MeshBoolImpl;
-use crate::shared::{Halfedge, get_axis_aligned_projection, next_halfedge};
+use crate::shared::{Halfedges, get_axis_aligned_projection, next_halfedge};
 use crate::utils::{atomic_add_f64, ccw};
-
-struct CheckHalfedges<'a> {
-	halfedges: &'a [Halfedge],
-}
+use crate::{AABB, MeshBoolError};
+use nalgebra::{Point2, Point3, Vector3};
 
 #[derive(Eq, PartialEq)]
 pub enum Property {
@@ -21,7 +16,7 @@ struct CurvatureAngles<'a> {
 	gaussian_curvature: &'a mut [f64],
 	area: &'a mut [f64],
 	degree: &'a mut [f64],
-	halfedge: &'a [Halfedge],
+	halfedge: &'a Halfedges,
 	vert_pos: &'a [Point3<f64>],
 	tri_normal: &'a [Vector3<f64>],
 }
@@ -30,19 +25,21 @@ impl<'a> CurvatureAngles<'a> {
 	pub fn call(&mut self, tri: usize) {
 		let mut edge: [Vector3<f64>; 3] = Default::default();
 		let mut edge_length = Vector3::repeat(0.0_f64);
-		for i in [0, 1, 2] {
-			let start_vert: i32 = self.halfedge[3 * tri + i].start_vert;
-			let end_vert: i32 = self.halfedge[3 * tri + i].end_vert;
+		for i in 0..3 {
+			let edge_idx = (3 * tri + i) as i32;
+			let start_vert = self.halfedge.start(edge_idx);
+			let end_vert = self.halfedge.end(edge_idx);
 			edge[i] = self.vert_pos[end_vert as usize] - self.vert_pos[start_vert as usize];
 			edge_length[i] = edge[i].norm();
 			edge[i] /= edge_length[i];
-			let neighbor_tri: i32 = self.halfedge[3 * tri + i].paired_halfedge / 3;
-			let dihedral: f64 = 0.25
+			let neighbor_tri = self.halfedge.pair(edge_idx) / 3;
+			let dihedral = 0.25
 				* edge_length[i]
-				* self.tri_normal[tri]
-					.cross(&self.tri_normal[neighbor_tri as usize])
-					.dot(&edge[i])
-					.asin();
+				* libm::asin(
+					self.tri_normal[tri]
+						.cross(&self.tri_normal[neighbor_tri as usize])
+						.dot(&edge[i]),
+				);
 			unsafe {
 				atomic_add_f64(&mut self.mean_curvature[start_vert as usize], dihedral);
 				atomic_add_f64(&mut self.mean_curvature[end_vert as usize], dihedral);
@@ -51,13 +48,13 @@ impl<'a> CurvatureAngles<'a> {
 		}
 
 		let mut phi = Vector3::<f64>::default();
-		phi[0] = (-edge[2].dot(&edge[0])).acos();
-		phi[1] = (-edge[0].dot(&edge[1])).acos();
+		phi[0] = libm::acos(-edge[2].dot(&edge[0]));
+		phi[1] = libm::acos(-edge[0].dot(&edge[1]));
 		phi[2] = core::f64::consts::PI - phi[0] - phi[1];
 		let area3: f64 = edge_length[0] * edge_length[1] * edge[0].cross(&edge[1]).norm() / 6.0;
 
 		for i in [0, 1, 2] {
-			let vert: i32 = self.halfedge[3 * tri + i].start_vert;
+			let vert: i32 = self.halfedge.start((3 * tri + i) as i32);
 			unsafe {
 				atomic_add_f64(&mut self.gaussian_curvature[vert as usize], -phi[i]);
 				atomic_add_f64(&mut self.area[vert as usize], area3);
@@ -66,63 +63,39 @@ impl<'a> CurvatureAngles<'a> {
 	}
 }
 
+struct CheckHalfedges<'a> {
+	halfedges: &'a Halfedges,
+}
+
 impl<'a> CheckHalfedges<'a> {
-	fn call(&self, edge: usize) -> bool {
-		let halfedge = self.halfedges[edge];
-		if halfedge.start_vert == -1 && halfedge.end_vert == -1 && halfedge.paired_halfedge == -1 {
+	fn call(&self, edge: i32) -> bool {
+		let start = self.halfedges.start(edge);
+		let end = self.halfedges.end(edge);
+		let pair = self.halfedges.pair(edge);
+		if start == -1 && end == -1 && pair == -1 {
 			return true;
 		}
-
-		if self.halfedges[next_halfedge(edge as i32) as usize].start_vert == -1
-			|| self.halfedges[next_halfedge(next_halfedge(edge as i32)) as usize].start_vert == -1
+		if self.halfedges.start(next_halfedge(edge)) == -1
+			|| self.halfedges.start(next_halfedge(next_halfedge(edge))) == -1
 		{
 			return false;
 		}
-
-		if halfedge.paired_halfedge == -1 {
+		if pair == -1 {
 			return false;
 		}
 
-		let paired = self.halfedges[halfedge.paired_halfedge as usize];
 		let mut good = true;
-		good &= paired.paired_halfedge == edge as i32;
-		good &= halfedge.start_vert != halfedge.end_vert;
-		good &= halfedge.start_vert == paired.end_vert;
-		good &= halfedge.end_vert == paired.start_vert;
+		good &= self.halfedges.pair(pair) == edge;
+		good &= start != end;
+		good &= start == self.halfedges.end(pair);
+		good &= end == self.halfedges.start(pair);
 		good
 	}
 }
 
-struct CheckCCW<'a> {
-	halfedges: &'a [Halfedge],
-	vert_pos: &'a [Point3<f64>],
-	tri_normal: &'a [Vector3<f64>],
-	tol: f64,
-}
-
-impl<'a> CheckCCW<'a> {
-	fn call(&self, face: usize) -> bool {
-		if self.halfedges[3 * face].paired_halfedge < 0 {
-			return true;
-		}
-
-		let projection: Matrix2x3<f64> = get_axis_aligned_projection(self.tri_normal[face].clone());
-		let mut v: [Vector2<f64>; 3] = Default::default();
-		for i in [0, 1, 2] {
-			v[i] =
-				projection * self.vert_pos[self.halfedges[3 * face + i].start_vert as usize].coords;
-		}
-
-		let ccw: i32 = ccw(v[0].into(), v[1].into(), v[2].into(), self.tol.abs());
-		if self.tol > 0.0 { ccw >= 0 } else { ccw == 0 }
-	}
-}
-
 impl MeshBoolImpl {
-	/**
-		* Returns true if this manifold is in fact an oriented even manifold and all of
-		* the data structures are consistent.
-		*/
+	///Returns true if this manifold is in fact an oriented even manifold and all of
+	///the data structures are consistent.
 	pub fn is_manifold(&self) -> bool {
 		if self.halfedge.len() == 0 {
 			return true;
@@ -134,7 +107,7 @@ impl MeshBoolImpl {
 			CheckHalfedges {
 				halfedges: &self.halfedge,
 			}
-			.call(edge)
+			.call(edge as i32)
 		})
 	}
 
@@ -145,7 +118,7 @@ impl MeshBoolImpl {
 			return false;
 		}
 
-		let mut halfedge = self.halfedge.clone();
+		let mut halfedge = self.halfedge.to_data();
 		halfedge.sort_by_key(|edge| (edge.start_vert, edge.end_vert));
 
 		(0..(2 * self.num_edge() - 1)).all(|edge| {
@@ -164,27 +137,56 @@ impl MeshBoolImpl {
 		if self.halfedge.len() == 0 || self.face_normal.len() != self.num_tri() {
 			return true;
 		}
-		let c_ccw = CheckCCW {
-			halfedges: &self.halfedge,
-			vert_pos: &self.vert_pos,
-			tri_normal: &self.face_normal,
-			tol: 2.0 * self.epsilon,
-		};
-		return (0..self.num_tri()).all(|i| c_ccw.call(i));
+		return (0..self.num_tri()).all(|face| {
+			if self.halfedge.pair((3 * face) as i32) < 0 {
+				return true;
+			}
+
+			let projection = get_axis_aligned_projection(self.face_normal[face]);
+			let mut v = [Point2::default(); 3];
+			let mut max = -f64::INFINITY;
+			let mut min = f64::INFINITY;
+			for i in 0..3 {
+				let p = self.vert_pos[self.halfedge.start((3 * face + i) as i32) as usize];
+				v[i] = projection * p;
+				let d = p.coords.dot(&self.face_normal[face]);
+				if !d.is_finite() {
+					return true;
+				}
+				max = max.max(d);
+				min = min.min(d);
+			}
+			if max - min > 2.0 * self.tolerance {
+				return false;
+			}
+
+			let ccw = ccw(v[0], v[1], v[2], self.epsilon * 2.0);
+			return ccw >= 0;
+		});
 	}
 
-	///Returns the number of triangles that are colinear within epsilon_.
+	///Returns the number of triangles that are colinear within tolerance_.
 	pub fn num_degenerate_tris(&self) -> usize {
 		if self.halfedge.len() == 0 || self.face_normal.len() != self.num_tri() {
 			return 1;
 		}
-		let c_ccw = CheckCCW {
-			halfedges: &self.halfedge,
-			vert_pos: &self.vert_pos,
-			tri_normal: &self.face_normal,
-			tol: -1.0 * self.epsilon / 2.0,
-		};
-		return (0..self.num_tri()).filter(|i| c_ccw.call(*i)).count();
+		return (0..self.num_tri())
+			.filter(|&face| {
+				if self.halfedge.pair((3 * face) as i32) < 0 {
+					return true;
+				}
+
+				let projection = get_axis_aligned_projection(self.face_normal[face]);
+				let mut v = [Point2::default(); 3];
+				for i in 0..3 {
+					v[i] = projection
+						* self.vert_pos[self.halfedge.start((3 * face + i) as i32) as usize];
+				}
+
+				let ccw = ccw(v[0], v[1], v[2], self.tolerance / 2.0);
+				ccw == 0
+			})
+			.count();
 	}
 
 	pub fn get_property(&self, prop: Property) -> f64 {
@@ -193,20 +195,23 @@ impl MeshBoolImpl {
 		}
 
 		let volume = |tri: usize| {
-			let v: Vector3<f64> = self.vert_pos[self.halfedge[3 * tri].start_vert as usize].coords;
-			let cross_p: Vector3<f64> = (self.vert_pos
-				[self.halfedge[3 * tri + 1].start_vert as usize]
-				- v)
+			let v = self.vert_pos[self.halfedge.start(3 * tri as i32) as usize].coords;
+			let cross_p = (self.vert_pos[self.halfedge.start((3 * tri + 1) as i32) as usize] - v)
 				.coords
-				.cross(&(self.vert_pos[self.halfedge[3 * tri + 2].start_vert as usize] - v).coords);
+				.cross(
+					&(self.vert_pos[self.halfedge.start((3 * tri + 2) as i32) as usize] - v).coords,
+				);
 			cross_p.dot(&v) / 6.0
 		};
 
 		let area = |tri: usize| {
-			let v: Vector3<f64> = self.vert_pos[self.halfedge[3 * tri].start_vert as usize].coords;
-			(self.vert_pos[self.halfedge[3 * tri + 1].start_vert as usize] - v)
+			let v: Vector3<f64> =
+				self.vert_pos[self.halfedge.start((3 * tri) as i32) as usize].coords;
+			(self.vert_pos[self.halfedge.start((3 * tri + 1) as i32) as usize] - v)
 				.coords
-				.cross(&(self.vert_pos[self.halfedge[3 * tri + 2].start_vert as usize] - v).coords)
+				.cross(
+					&(self.vert_pos[self.halfedge.start((3 * tri + 2) as i32) as usize] - v).coords,
+				)
 				.norm() / 2.0
 		};
 
@@ -264,10 +269,10 @@ impl MeshBoolImpl {
 
 		let mut counters: Vec<u8> = vec![0; self.num_prop_vert()];
 		(0..self.num_tri()).for_each(|tri| {
-			for i in [0, 1, 2] {
-				let edge = &self.halfedge[3 * tri + i];
-				let vert: i32 = edge.start_vert;
-				let prop_vert: i32 = edge.prop_vert;
+			for i in 0..3 {
+				let edge = (3 * tri + i) as i32;
+				let vert = self.halfedge.start(edge);
+				let prop_vert = self.halfedge.prop(edge);
 
 				let old = unsafe {
 					use core::sync::atomic::{AtomicU8, Ordering};
@@ -325,6 +330,11 @@ impl MeshBoolImpl {
 				a.sup(&b)
 			},
 		);
+
+		if !self.bbox.is_finite() {
+			// Decimated out of existence - early out.
+			self.make_empty(MeshBoolError::NoError);
+		}
 	}
 
 	///Determines if all verts are finite. Checking just the bounding box dimensions
@@ -353,11 +363,7 @@ impl MeshBoolImpl {
 
 		let mut recorder = MinDistanceRecorder::new(&self, other);
 		self.collider
-			.collisions_from_slice::<false, _, MinDistanceRecorder>(
-				&face_box_other,
-				&mut recorder,
-				false,
-			);
+			.collisions_from_slice::<false, _>(&mut recorder, &face_box_other, false);
 		let min_distance_squared = recorder.get().min(search_length * search_length);
 		return min_distance_squared.sqrt();
 	}
@@ -369,6 +375,20 @@ struct MinDistanceRecorder<'a> {
 	result: f64,
 }
 
+impl<'a> MinDistanceRecorder<'a> {
+	fn new(this: &'a MeshBoolImpl, other: &'a MeshBoolImpl) -> Self {
+		Self {
+			this,
+			other,
+			result: f64::INFINITY,
+		}
+	}
+
+	fn get(&self) -> f64 {
+		return self.result;
+	}
+}
+
 impl Recorder for MinDistanceRecorder<'_> {
 	fn record(&mut self, tri_other: i32, tri: i32) {
 		let min_distance = &mut self.result;
@@ -376,28 +396,13 @@ impl Recorder for MinDistanceRecorder<'_> {
 		let mut p: [Vector3<f64>; 3] = Default::default();
 		let mut q: [Vector3<f64>; 3] = Default::default();
 
-		for j in [0, 1, 2] {
-			p[j] = self.this.vert_pos[self.this.halfedge[3 * tri as usize + j].start_vert as usize]
-				.coords;
-			q[j] = self.other.vert_pos
-				[self.other.halfedge[3 * tri_other as usize + j].start_vert as usize]
-				.coords;
+		for j in 0..3 {
+			p[j as usize] =
+				self.this.vert_pos[self.this.halfedge.start(3 * tri + j) as usize].coords;
+			q[j as usize] =
+				self.other.vert_pos[self.other.halfedge.start(3 * tri_other + j) as usize].coords;
 		}
 		*min_distance =
 			min_distance.min(crate::tri_dis::distance_triangle_triangle_squared(&p, &q));
-	}
-}
-
-impl<'a> MinDistanceRecorder<'a> {
-	fn get(&self) -> f64 {
-		return self.result;
-	}
-
-	fn new(this: &'a MeshBoolImpl, other: &'a MeshBoolImpl) -> Self {
-		Self {
-			this,
-			other,
-			result: core::f64::INFINITY,
-		}
 	}
 }
