@@ -11,41 +11,26 @@ pub struct DisjointSets {
 }
 
 impl DisjointSets {
-	pub fn new(size: u32) -> Self {
+	pub fn new(size: u64) -> Self {
+		assert!(size <= u32::MAX as u64);
 		Self {
-			m_data: (0..size).map(|i| AtomicU64::new(i as u64)).collect(),
+			m_data: (0..size).map(|i| AtomicU64::new(i)).collect(),
 		}
 	}
 
-	pub fn find(&self, mut id: u32) -> u32 {
-		while id != self.parent(id) {
-			let value = self.m_data[id as usize].load(Ordering::SeqCst);
-			let new_parent = self.parent(value as u32);
-			let new_value = (value & 0xFFFFFFFF00000000) | (new_parent as u64);
-			if value != new_value {
-				/* Try to update parent (may fail, that's ok) */
-				#[allow(unused_must_use)]
-				self.m_data[id as usize].compare_exchange_weak(
-					value,
-					new_value,
-					Ordering::SeqCst,
-					Ordering::SeqCst,
-				);
-			}
-
-			id = new_parent;
-		}
-
-		id
+	pub fn find(&self, id: u64) -> u64 {
+		self.find_impl(DisjointSets::to_index(id)) as u64
 	}
 
-	pub fn unite(&self, mut id1: u32, mut id2: u32) -> u32 {
+	pub fn unite(&self, id1_in: u64, id2_in: u64) -> u64 {
+		let mut id1 = DisjointSets::to_index(id1_in);
+		let mut id2 = DisjointSets::to_index(id2_in);
 		loop {
-			id1 = self.find(id1);
-			id2 = self.find(id2);
+			id1 = self.find_impl(id1);
+			id2 = self.find_impl(id2);
 
 			if id1 == id2 {
-				return id1;
+				return id1 as u64;
 			}
 
 			let mut r1 = self.rank(id1);
@@ -81,7 +66,7 @@ impl DisjointSets {
 			break;
 		}
 
-		id2
+		id2 as u64
 	}
 
 	fn rank(&self, id: u32) -> u32 {
@@ -99,7 +84,7 @@ impl DisjointSets {
 		for i in 0..self.m_data.len() {
 			// we optimize for connected component of size 1
 			// no need to put them into the hashmap
-			let i_parent = self.find(i as u32);
+			let i_parent = self.find_impl(DisjointSets::to_index(i as u64));
 			if self.rank(i_parent) == 0 {
 				components[i] = to_label.len() as i32 + lonely_nodes;
 				lonely_nodes += 1;
@@ -114,5 +99,32 @@ impl DisjointSets {
 			}
 		}
 		return to_label.len() + lonely_nodes as usize;
+	}
+
+	fn to_index(id: u64) -> u32 {
+		assert!(id <= u32::MAX as u64);
+		id as u32
+	}
+
+	fn find_impl(&self, mut id: u32) -> u32 {
+		while id != self.parent(id) {
+			let value = self.m_data[id as usize].load(Ordering::SeqCst);
+			let new_parent = self.parent(value as u32);
+			let new_value = (value & 0xFFFFFFFF00000000) | (new_parent as u64);
+			if value != new_value {
+				/* Try to update parent (may fail, that's ok) */
+				#[allow(unused_must_use)]
+				self.m_data[id as usize].compare_exchange_weak(
+					value,
+					new_value,
+					Ordering::SeqCst,
+					Ordering::SeqCst,
+				);
+			}
+
+			id = new_parent;
+		}
+
+		id
 	}
 }

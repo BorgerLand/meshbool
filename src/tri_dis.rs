@@ -86,7 +86,7 @@ fn edge_edge_dist(
 ///@param  p  First  triangle.
 ///@param  q  Second triangle.
 #[inline]
-pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>], q: &[Vector3<f64>]) -> f64 {
+pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f64>; 3]) -> f64 {
 	let s_v: [Vector3<f64>; 3] = [p[1] - p[0], p[2] - p[1], p[0] - p[2]];
 
 	let t_v: [Vector3<f64>; 3] = [q[1] - q[0], q[2] - q[1], q[0] - q[2]];

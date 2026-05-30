@@ -46,8 +46,8 @@ pub const fn prev3_i32(i: i32) -> i32 {
 
 pub fn permute<IO, Map>(in_out: &mut Vec<IO>, new2old: &[Map])
 where
-	IO: Copy + Send + Sync,
-	Map: Copy + LossyInto<usize> + Send + Sync,
+	IO: Copy,
+	Map: Copy + LossyInto<usize>,
 {
 	let mut tmp = unsafe { vec_uninit(new2old.len()) };
 	mem::swap(&mut tmp, in_out);

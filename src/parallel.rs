@@ -1,5 +1,4 @@
 use crate::{common::LossyInto, vec::vec_uninit};
-use rayon::prelude::*;
 use std::ops::{Add, AddAssign};
 
 ///Compute the inclusive prefix sum for the range `[first, last)`
@@ -67,7 +66,7 @@ where
 ///must be equal or non-overlapping.
 pub fn exclusive_scan_in_place<IO>(io: &mut [IO], init: IO)
 where
-	IO: Copy + AddAssign + Send + Sync,
+	IO: Copy + AddAssign,
 {
 	let mut acc = init;
 	for i in 0..io.len() {
@@ -140,16 +139,12 @@ where
 ///The map range, input range and the output range must not overlap.
 pub fn gather<IO, Map>(map: &[Map], input: &[IO], output: &mut [IO])
 where
-	IO: Copy + Send + Sync,
-	Map: Copy + LossyInto<usize> + Send + Sync,
+	IO: Copy,
+	Map: Copy + LossyInto<usize>,
 {
-	output
-		.par_iter_mut()
-		.zip(map.par_iter())
-		.for_each(|(o, m)| {
-			let i: usize = (*m).lossy_into();
-			*o = input[i];
-		});
+	for i in 0..map.len() {
+		output[i] = input[map[i].lossy_into()];
+	}
 }
 
 ///`gather` copies elements from a source array into a destination range

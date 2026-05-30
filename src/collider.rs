@@ -2,7 +2,7 @@ use crate::common::{AABB, AABBOverlap};
 use crate::utils::atomic_add_i32;
 use crate::vec::vec_uninit;
 use nalgebra::{Matrix3x4, Point3, Vector3};
-use rayon::prelude::*;
+use std::any::TypeId;
 use std::fmt::Debug;
 use std::mem;
 
@@ -54,6 +54,7 @@ impl<'a> CreateRadixTree<'a> {
 			-1
 		} else {
 			if self.leaf_morton[i as usize] == self.leaf_morton[j as usize] {
+				// use index to disambiguate
 				32 + self.prefix_length_unsigned(i as u32, j as u32)
 			} else {
 				self.prefix_length_unsigned(
@@ -160,13 +161,14 @@ impl<'a, const SELF_COLLISION: bool, F, AABBOverlapT, RecorderT>
 	FindCollision<'a, SELF_COLLISION, F, AABBOverlapT, RecorderT>
 where
 	F: Fn(i32) -> AABBOverlapT,
-	AABBOverlapT: Debug,
+	AABBOverlapT: Debug + 'static,
 	RecorderT: Recorder,
 	AABB: AABBOverlap<AABBOverlapT>,
 {
 	#[inline]
-	fn record_collision(&mut self, node: i32, query_idx: i32) -> bool {
-		let overlaps = self.node_bbox[node as usize].does_overlap(&(self.f)(query_idx));
+	fn record_collision(&mut self, query: &AABBOverlapT, node: i32, query_idx: i32) -> bool {
+		let bbox = self.node_bbox[node as usize];
+		let overlaps = bbox.does_overlap(query);
 		if overlaps && is_leaf(node) {
 			let leaf_idx = node2leaf(node);
 			if !SELF_COLLISION || leaf_idx != query_idx {
@@ -178,6 +180,16 @@ where
 	}
 
 	fn call(&mut self, query_idx: i32) {
+		let query = (self.f)(query_idx);
+
+		// early exit for empty boxes
+		if TypeId::of::<AABBOverlapT>() == TypeId::of::<AABB>() {
+			let query: &AABB = unsafe { std::mem::transmute(&query) };
+			if query.min.x == f64::INFINITY {
+				return;
+			}
+		}
+
 		// stack cannot overflow because radix tree has max depth 30 (Morton code) +
 		// 32 (index).
 		let mut stack = [0; 64];
@@ -189,8 +201,8 @@ where
 			let child1 = self.internal_children[internal as usize].0;
 			let child2 = self.internal_children[internal as usize].1;
 
-			let traverse1 = self.record_collision(child1, query_idx);
-			let traverse2 = self.record_collision(child2, query_idx);
+			let traverse1 = self.record_collision(&query, child1, query_idx);
+			let traverse2 = self.record_collision(&query, child2, query_idx);
 
 			if !traverse1 && !traverse2 {
 				if top < 0 {
@@ -279,6 +291,9 @@ impl Collider {
 			leaf_bb.len() == leaf_morton.len(),
 			"vectors must be the same length"
 		);
+		if leaf_bb.len() == 0 {
+			return Self::default();
+		}
 		let num_nodes = 2 * leaf_bb.len() - 1;
 
 		// assign and allocate members
@@ -301,28 +316,11 @@ impl Collider {
 		collider
 	}
 
-	pub fn transform(&mut self, transform: Matrix3x4<f64>) -> bool {
-		let mut axis_aligned = true;
-		for row in 0..3 {
-			let mut count = 0;
-			for col in 0..3 {
-				if transform[(row, col)] == 0.0 {
-					count += 1;
-				}
-			}
-
-			if count != 2 {
-				axis_aligned = false;
-			}
+	pub fn get_bounding_box(&self) -> AABB {
+		if self.node_bbox.is_empty() {
+			return AABB::default();
 		}
-
-		if axis_aligned {
-			for aabb in &mut self.node_bbox {
-				*aabb = aabb.transform(transform)
-			}
-		}
-
-		axis_aligned
+		self.node_bbox[internal2node(0) as usize]
 	}
 
 	pub fn update_boxes(&mut self, leaf_bb: &[AABB]) {
@@ -332,11 +330,9 @@ impl Collider {
 		);
 
 		// copy in leaf node Boxes
-		self.node_bbox
-			.par_iter_mut()
-			.step_by(2)
-			.enumerate()
-			.for_each(|(i, b)| *b = leaf_bb[i]);
+		for i in 0..leaf_bb.len() {
+			self.node_bbox[i * 2] = leaf_bb[i];
+		}
 
 		// create global counters
 		let mut counter = vec![0; self.num_internal()];
@@ -352,50 +348,25 @@ impl Collider {
 		}
 	}
 
-	///This function iterates over queriesIn and calls recorder.record(queryIdx,
-	///leafIdx, local) for each collision it found.
-	///If selfCollisionl is true, it will skip the case where queryIdx == leafIdx.
-	///The recorder should provide a local() method that returns a Recorder::Local
-	///type, representing thread local storage. By default, recorder.record can
-	///run in parallel and the thread local storage can be combined at the end.
-	///If parallel is false, the function will run in sequential mode.
-	///
-	///If thread local storage is not needed, use SimpleRecorder.
-	pub fn collisions_from_slice<const SELF_COLLISION: bool, AABBOverlapT, RecorderT>(
-		&self,
-		queries_in: &[AABBOverlapT],
-		recorder: &mut impl Recorder,
-		_parallel: bool,
-	) where
-		AABBOverlapT: Debug + Clone,
-		RecorderT: Recorder,
-		AABB: AABBOverlap<AABBOverlapT>,
-	{
-		if self.internal_children.is_empty() {
-			return;
-		}
-		let f = |i: i32| -> AABBOverlapT { queries_in[i as usize].clone() };
-		// TODO: if parallel
-		for query_idx in 0..queries_in.len() {
-			FindCollision::<SELF_COLLISION, _, _, _> {
-				f: &f,
-				node_bbox: &self.node_bbox,
-				internal_children: &self.internal_children,
-				recorder,
-			}
-			.call(query_idx as i32);
+	pub fn transform(&mut self, transform: Matrix3x4<f64>) {
+		debug_assert!(
+			Collider::is_axis_aligned(&transform),
+			"transform must be axis-aligned"
+		);
+
+		for aabb in &mut self.node_bbox {
+			*aabb = aabb.transform(transform)
 		}
 	}
 
-	pub fn collisions_from_fn<const SELF_COLLISION: bool, F, AABBOverlapT, RecorderT>(
+	pub fn collisions_from_fn<const SELF_COLLISION: bool, AABBOverlapT>(
 		&self,
-		f: F,
-		n: usize,
 		recorder: &mut impl Recorder,
+		f: impl Fn(i32) -> AABBOverlapT,
+		n: usize,
+		_parallel: bool,
 	) where
-		F: Fn(i32) -> AABBOverlapT,
-		AABBOverlapT: Debug,
-		RecorderT: Recorder,
+		AABBOverlapT: Debug + 'static,
 		AABB: AABBOverlap<AABBOverlapT>,
 	{
 		if self.internal_children.is_empty() {
@@ -412,6 +383,28 @@ impl Collider {
 		}
 	}
 
+	///This function iterates over queriesIn and calls recorder.record(queryIdx,
+	///leafIdx, local) for each collision it found.
+	///If selfCollisionl is true, it will skip the case where queryIdx == leafIdx.
+	///The recorder should provide a local() method that returns a Recorder::Local
+	///type, representing thread local storage. By default, recorder.record can
+	///run in parallel and the thread local storage can be combined at the end.
+	///If parallel is false, the function will run in sequential mode.
+	///
+	///If thread local storage is not needed, use SimpleRecorder.
+	pub fn collisions_from_slice<const SELF_COLLISION: bool, AABBOverlapT>(
+		&self,
+		recorder: &mut impl Recorder,
+		queries_in: &[AABBOverlapT],
+		parallel: bool,
+	) where
+		AABBOverlapT: Debug + Clone + 'static,
+		AABB: AABBOverlap<AABBOverlapT>,
+	{
+		let f = |i: i32| -> AABBOverlapT { queries_in[i as usize].clone() };
+		self.collisions_from_fn::<SELF_COLLISION, _>(recorder, f, queries_in.len(), parallel);
+	}
+
 	pub fn morton_code(position: Point3<f64>, bbox: AABB) -> u32 {
 		let mut xyz = (position - bbox.min).component_div(&(bbox.max - bbox.min));
 		xyz = Vector3::from_element(1023.0).inf(&Vector3::from_element(0.0).sup(&(1024.0 * xyz)));
@@ -421,6 +414,23 @@ impl Collider {
 		x.wrapping_mul(4)
 			.wrapping_add(y.wrapping_mul(2))
 			.wrapping_add(z)
+	}
+
+	fn is_axis_aligned(transform: &Matrix3x4<f64>) -> bool {
+		for row in 0..3 {
+			let mut count = 0;
+			for col in 0..3 {
+				if transform[(row, col)] == 0.0 {
+					count += 1;
+				}
+			}
+
+			if count != 2 {
+				return false;
+			}
+		}
+
+		true
 	}
 
 	fn num_internal(&self) -> usize {

@@ -1,5 +1,5 @@
 use crate::meshboolimpl::MeshBoolImpl;
-use crate::shared::{Halfedge, get_axis_aligned_projection, next_halfedge};
+use crate::shared::{get_axis_aligned_projection, next_halfedge};
 use crate::utils::ccw;
 use nalgebra::{Point2, Point3, Vector3, distance};
 use std::collections::HashMap;
@@ -22,158 +22,39 @@ fn is_01_longest(v0: Point2<f64>, v1: Point2<f64>, v2: Point2<f64>) -> bool {
 	l[0] > l[1] && l[0] > l[2]
 }
 
-struct ShortEdge<'a> {
-	meshbool_impl: &'a mut MeshBoolImpl,
-	epsilon: f64,
-	first_new_vert: i32,
-}
-
-impl<'a> Pred for ShortEdge<'a> {
-	fn call(&self, edge: usize) -> bool {
-		let half = &self.meshbool_impl.halfedge[edge];
-		if half.paired_halfedge < 0
-			|| (half.start_vert < self.first_new_vert && half.end_vert < self.first_new_vert)
-		{
-			return false;
-		}
-
-		// Flag short edges
-		let delta = self.meshbool_impl.vert_pos[half.end_vert as usize]
-			- self.meshbool_impl.vert_pos[half.start_vert as usize];
-		delta.magnitude_squared() < self.epsilon.powi(2)
-	}
-
-	fn get_impl(&mut self) -> &mut MeshBoolImpl {
-		self.meshbool_impl
-	}
-}
-
-struct FlagEdge<'a> {
-	meshbool_impl: &'a mut MeshBoolImpl,
-	first_new_vert: i32,
-}
-
-impl<'a> Pred for FlagEdge<'a> {
-	fn call(&self, edge: usize) -> bool {
-		let half = &self.meshbool_impl.halfedge[edge];
-		if half.paired_halfedge < 0 || half.start_vert < self.first_new_vert {
-			return false;
-		}
-		// Flag redundant edges - those where the startVert is surrounded by only
-		// two original triangles.
-		let ref0 = self.meshbool_impl.mesh_relation.tri_ref[edge / 3];
-		let mut current = next_halfedge(half.paired_halfedge) as usize;
-		let mut ref1 = self.meshbool_impl.mesh_relation.tri_ref[current / 3];
-		let mut ref1_updated = !ref0.same_face(&ref1);
-		while current != edge {
-			current = next_halfedge(self.meshbool_impl.halfedge[current].paired_halfedge) as usize;
-			let tri = current / 3;
-			let tri_ref = self.meshbool_impl.mesh_relation.tri_ref[tri];
-			if !tri_ref.same_face(&ref0) && !tri_ref.same_face(&ref1) {
-				if !ref1_updated {
-					ref1 = tri_ref;
-					ref1_updated = true;
-				} else {
-					return false;
-				}
-			}
-		}
-
-		true
-	}
-
-	fn get_impl(&mut self) -> &mut MeshBoolImpl {
-		self.meshbool_impl
-	}
-}
-
-struct SwappableEdge<'a> {
-	meshbool_impl: &'a mut MeshBoolImpl,
-	tolerance: f64,
-	first_new_vert: i32,
-}
-
-impl<'a> Pred for SwappableEdge<'a> {
-	fn call(&self, edge: usize) -> bool {
-		let mut edge = edge as i32;
-		let half = &self.meshbool_impl.halfedge[edge as usize];
-		if half.paired_halfedge < 0 {
-			return false;
-		}
-		if half.start_vert < self.first_new_vert
-			&& half.end_vert < self.first_new_vert
-			&& self.meshbool_impl.halfedge[next_halfedge(edge) as usize].end_vert
-				< self.first_new_vert
-			&& self.meshbool_impl.halfedge[next_halfedge(half.paired_halfedge) as usize].end_vert
-				< self.first_new_vert
-		{
-			return false;
-		}
-
-		let mut tri = edge / 3;
-		let mut tri_edge = tri_of(edge);
-		let mut projection =
-			get_axis_aligned_projection(self.meshbool_impl.face_normal[tri as usize]);
-		let mut v = [Point2::<f64>::default(); 3];
-		for i in 0..3 {
-			v[i] = projection
-				* self.meshbool_impl.vert_pos
-					[self.meshbool_impl.halfedge[tri_edge[i] as usize].start_vert as usize];
-		}
-		if ccw(v[0], v[1], v[2], self.tolerance) > 0 || !is_01_longest(v[0], v[1], v[2]) {
-			return false;
-		}
-
-		// Switch to neighbor's projection.
-		edge = half.paired_halfedge;
-		tri = edge / 3;
-		tri_edge = tri_of(edge);
-		projection = get_axis_aligned_projection(self.meshbool_impl.face_normal[tri as usize]);
-		for i in 0..3 {
-			v[i] = projection
-				* self.meshbool_impl.vert_pos
-					[self.meshbool_impl.halfedge[tri_edge[i] as usize].start_vert as usize];
-		}
-
-		ccw(v[0], v[1], v[2], self.tolerance) > 0 || is_01_longest(v[0], v[1], v[2])
-	}
-
-	fn get_impl(&mut self) -> &mut MeshBoolImpl {
-		self.meshbool_impl
-	}
-}
-
-trait Pred {
-	fn call(&self, edge: usize) -> bool;
-	fn get_impl(&mut self) -> &mut MeshBoolImpl;
-}
-
 #[derive(Default)]
 struct FlagStore {
 	s: Vec<usize>,
 }
 
 impl FlagStore {
-	fn run_seq<F>(&mut self, n: usize, mut pred: impl Pred, mut f: F)
-	where
-		F: FnMut(&mut MeshBoolImpl, usize),
-	{
+	fn run_seq(
+		&mut self,
+		mesh: &mut MeshBoolImpl,
+		n: usize,
+		mut pred: impl FnMut(&mut MeshBoolImpl, usize) -> bool,
+		mut f: impl FnMut(&mut MeshBoolImpl, usize),
+	) {
 		for i in 0..n {
-			if pred.call(i) {
+			if pred(mesh, i) {
 				self.s.push(i);
 			}
 		}
 
 		for &i in &self.s {
-			f(pred.get_impl(), i);
+			f(mesh, i);
 		}
+		self.s = Vec::default();
 	}
 
-	fn run<F>(&mut self, n: usize, pred: impl Pred, f: F)
-	where
-		F: FnMut(&mut MeshBoolImpl, usize),
-	{
-		self.run_seq(n, pred, f);
+	fn run(
+		&mut self,
+		mesh: &mut MeshBoolImpl,
+		n: usize,
+		pred: impl FnMut(&mut MeshBoolImpl, usize) -> bool,
+		f: impl FnMut(&mut MeshBoolImpl, usize),
+	) {
+		self.run_seq(mesh, n, pred, f)
 	}
 }
 
@@ -221,6 +102,8 @@ impl MeshBoolImpl {
 		self.collapse_short_edges(first_new_vert);
 		self.collapse_colinear_edges(first_new_vert);
 		self.swap_degenerates(first_new_vert);
+		// Merging verts causes their normals to change
+		self.calculate_vert_normals();
 	}
 
 	pub fn remove_degenerates(&mut self, first_new_vert: Option<i32>) {
@@ -232,6 +115,8 @@ impl MeshBoolImpl {
 		self.cleanup_topology();
 		self.collapse_short_edges(first_new_vert);
 		self.swap_degenerates(first_new_vert);
+		// Merging verts causes their normals to change
+		self.calculate_vert_normals();
 	}
 
 	fn collapse_short_edges(&mut self, first_new_vert: i32) {
@@ -243,16 +128,44 @@ impl MeshBoolImpl {
 		// Short edges get to skip several checks and hence remove more classes of
 		// degenerate triangles than flagged edges do, but this could in theory lead
 		// to error stacking where a vertex moves too far. For this reason this is
-		// restricted to epsilon, rather than tolerance.
-		let epsilon = self.epsilon;
-		let se = ShortEdge {
-			meshbool_impl: self,
-			epsilon,
-			first_new_vert: first_new_vert,
+		// restricted to epsilon, rather than tolerance. However, in the case of a
+		// Boolean operation, we set firstNewVert in order to only operate on
+		// newly-created verts, which means error stacking is not a concern, so we
+		// allow collapsing up to tolerance in that case.
+		let tol = if first_new_vert == 0 {
+			self.epsilon
+		} else {
+			self.tolerance
 		};
 
-		s.run(nb_edges, se, |myself, i| {
-			let did_collapse = myself.collapse_edge(i as i32, &mut scratch_buffer);
+		let short_edge = |myself: &mut MeshBoolImpl, edge| {
+			let edge = edge as i32;
+			let pair = myself.halfedge.pair(edge);
+			if pair < 0 {
+				return false;
+			}
+			let start = myself.halfedge.start(edge);
+			let end = myself.halfedge.end(edge);
+			if start < first_new_vert && end < first_new_vert {
+				return false;
+			}
+			// Flag short edges
+			let delta = myself.vert_pos[end as usize] - myself.vert_pos[start as usize];
+			let len_sq = delta.magnitude_squared();
+			// To ensure tolerance_-scale errors don't stack, only collapse these edges
+			// if they connect a new vert to an old vert, since old verts are only
+			// allowed to move by epsilon_.
+			let max_len = if end < first_new_vert {
+				tol * tol
+			} else {
+				myself.epsilon * myself.epsilon
+			};
+			len_sq < max_len
+		};
+
+		s.run(self, nb_edges, short_edge, |myself, i| {
+			let did_collapse =
+				myself.collapse_edge(i as i32, &mut scratch_buffer, tol, first_new_vert);
 			if did_collapse {
 				num_flagged += 1;
 			}
@@ -273,13 +186,37 @@ impl MeshBoolImpl {
 			// non-intersecting parts of the input meshes. Colinear is defined not by a
 			// local check, but by the global MarkCoplanar function, which keeps this
 			// from being vulnerable to error stacking.
-			let se = FlagEdge {
-				meshbool_impl: self,
-				first_new_vert,
+			let colinear_edge = |myself: &mut MeshBoolImpl, edge| {
+				let edge = edge as i32;
+				let pair = myself.halfedge.pair(edge);
+				if pair < 0 || myself.halfedge.start(edge) < first_new_vert {
+					return false;
+				}
+				// Flag redundant edges - those where the startVert is surrounded by only
+				// two original triangles.
+				let ref0 = myself.mesh_relation.tri_ref[(edge / 3) as usize];
+				let mut current = next_halfedge(pair);
+				let mut ref1 = myself.mesh_relation.tri_ref[(current / 3) as usize];
+				let mut ref1_updated = !ref0.same_face(&ref1);
+				while current != edge {
+					current = next_halfedge(myself.halfedge.pair(current));
+					let tri = current / 3;
+					let tri_ref = myself.mesh_relation.tri_ref[tri as usize];
+					if !tri_ref.same_face(&ref0) && !tri_ref.same_face(&ref1) {
+						if !ref1_updated {
+							ref1 = tri_ref;
+							ref1_updated = true;
+						} else {
+							return false;
+						}
+					}
+				}
+
+				true
 			};
 
-			s.run(nb_edges, se, |myself, i| {
-				let did_collapse = myself.collapse_edge(i as i32, &mut scratch_buffer);
+			s.run(self, nb_edges, colinear_edge, |myself, i| {
+				let did_collapse = myself.collapse_edge(i as i32, &mut scratch_buffer, -1.0, 0);
 				if did_collapse {
 					num_flagged += 1;
 				}
@@ -299,18 +236,48 @@ impl MeshBoolImpl {
 		let nb_edges = self.halfedge.len();
 		let mut scratch_buffer = Vec::with_capacity(10);
 
-		let tolerance = self.tolerance;
-		let he_len = self.halfedge.len();
-		let se = SwappableEdge {
-			meshbool_impl: self,
-			tolerance,
-			first_new_vert,
+		let swappable_edge = |myself: &mut MeshBoolImpl, edge| -> bool {
+			let mut edge = edge as i32;
+			let pair = myself.halfedge.pair(edge);
+			if pair < 0 {
+				return false;
+			}
+			let tri_edge = tri_of(edge);
+			let pair_tri_edge = tri_of(pair);
+			if myself.halfedge.start(tri_edge[0]) < first_new_vert
+				&& myself.halfedge.start(tri_edge[1]) < first_new_vert
+				&& myself.halfedge.start(tri_edge[2]) < first_new_vert
+				&& myself.halfedge.start(pair_tri_edge[2]) < first_new_vert
+			{
+				return false;
+			}
+
+			let mut tri = edge / 3;
+			let mut projection = get_axis_aligned_projection(myself.face_normal[tri as usize]);
+			let mut v = [Point2::<f64>::default(); 3];
+			for i in 0..3 {
+				v[i] = projection * myself.vert_pos[myself.halfedge.start(tri_edge[i]) as usize];
+			}
+			if ccw(v[0], v[1], v[2], myself.tolerance) > 0 || !is_01_longest(v[0], v[1], v[2]) {
+				return false;
+			}
+
+			// Switch to neighbor's projection.
+			edge = pair;
+			tri = edge / 3;
+			projection = get_axis_aligned_projection(myself.face_normal[tri as usize]);
+			for i in 0..3 {
+				v[i] =
+					projection * myself.vert_pos[myself.halfedge.start(pair_tri_edge[i]) as usize];
+			}
+
+			ccw(v[0], v[1], v[2], myself.tolerance) > 0 || is_01_longest(v[0], v[1], v[2])
 		};
 
 		let mut edge_swap_stack = Vec::new();
-		let mut visited = vec![-1; he_len];
+		let mut visited = vec![-1; self.halfedge.len()];
 		let mut tag = 0;
-		s.run(nb_edges, se, |myself, i| {
+		s.run(self, nb_edges, swappable_edge, |myself, i| {
 			num_flagged += 1;
 			tag += 1;
 			myself.recursive_edge_swap(
@@ -337,12 +304,13 @@ impl MeshBoolImpl {
 	// edges distinct. Also duplicates startVert if it becomes pinched.
 	fn dedupe_edge(&mut self, edge: i32) {
 		// Orbit endVert
-		let start_vert = self.halfedge[edge as usize].start_vert;
-		let end_vert = self.halfedge[edge as usize].end_vert;
-		let end_prop = self.halfedge[next_halfedge(edge) as usize].prop_vert;
-		let mut current = self.halfedge[next_halfedge(edge) as usize].paired_halfedge;
+		let next_edge = next_halfedge(edge);
+		let start_vert = self.halfedge.start(edge);
+		let end_vert = self.halfedge.start(next_edge);
+		let end_prop = self.halfedge.prop(next_edge);
+		let mut current = self.halfedge.pair(next_edge);
 		while current != edge {
-			let vert = self.halfedge[current as usize].start_vert;
+			let vert = self.halfedge.start(current);
 			if vert == start_vert {
 				// Single topological unit needs 2 faces added to be split
 				let new_vert = self.vert_pos.len() as i32;
@@ -351,38 +319,19 @@ impl MeshBoolImpl {
 					self.vert_normal.push(self.vert_normal[end_vert as usize]);
 				}
 
-				current = self.halfedge[next_halfedge(current) as usize].paired_halfedge;
-				let opposite = self.halfedge[next_halfedge(edge) as usize].paired_halfedge;
+				current = self.halfedge.pair(next_halfedge(current));
+				let opposite = self.halfedge.pair(next_halfedge(edge));
 
 				self.update_vert(new_vert, current, opposite);
 
 				let mut new_halfedge = self.halfedge.len() as i32;
 				let mut old_face = current / 3;
-				let mut outside_vert = self.halfedge[current as usize].start_vert;
-
-				self.halfedge.push(Halfedge {
-					start_vert: end_vert,
-					end_vert: new_vert,
-					paired_halfedge: -1,
-					prop_vert: end_prop,
-				});
-				self.halfedge.push(Halfedge {
-					start_vert: new_vert,
-					end_vert: outside_vert,
-					paired_halfedge: -1,
-					prop_vert: end_prop,
-				});
-				self.halfedge.push(Halfedge {
-					start_vert: outside_vert,
-					end_vert: end_vert,
-					paired_halfedge: -1,
-					prop_vert: self.halfedge[current as usize].prop_vert,
-				});
-
-				self.pair_up(
-					new_halfedge + 2,
-					self.halfedge[current as usize].paired_halfedge,
-				);
+				let mut outside_vert = self.halfedge.start(current);
+				self.halfedge.push(end_vert, -1, end_prop);
+				self.halfedge.push(new_vert, -1, end_prop);
+				self.halfedge
+					.push(outside_vert, -1, self.halfedge.prop(current));
+				self.pair_up(new_halfedge + 2, self.halfedge.pair(current));
 				self.pair_up(new_halfedge + 1, current);
 				if self.mesh_relation.tri_ref.len() > 0 {
 					self.mesh_relation
@@ -395,30 +344,12 @@ impl MeshBoolImpl {
 
 				new_halfedge += 3;
 				old_face = opposite / 3;
-				outside_vert = self.halfedge[opposite as usize].start_vert;
-				self.halfedge.push(Halfedge {
-					start_vert: new_vert,
-					end_vert: end_vert,
-					paired_halfedge: -1,
-					prop_vert: end_prop,
-				});
-				self.halfedge.push(Halfedge {
-					start_vert: end_vert,
-					end_vert: outside_vert,
-					paired_halfedge: -1,
-					prop_vert: end_prop,
-				});
-				self.halfedge.push(Halfedge {
-					start_vert: outside_vert,
-					end_vert: new_vert,
-					paired_halfedge: -1,
-					prop_vert: self.halfedge[opposite as usize].prop_vert,
-				});
-
-				self.pair_up(
-					new_halfedge + 2,
-					self.halfedge[opposite as usize].paired_halfedge,
-				);
+				outside_vert = self.halfedge.start(opposite);
+				self.halfedge.push(new_vert, -1, end_prop); // fix prop
+				self.halfedge.push(end_vert, -1, end_prop);
+				self.halfedge
+					.push(outside_vert, -1, self.halfedge.prop(opposite));
+				self.pair_up(new_halfedge + 2, self.halfedge.pair(opposite));
 				self.pair_up(new_halfedge + 1, opposite);
 				self.pair_up(new_halfedge, new_halfedge - 3);
 				if self.mesh_relation.tri_ref.len() > 0 {
@@ -433,7 +364,7 @@ impl MeshBoolImpl {
 				break;
 			}
 
-			current = self.halfedge[next_halfedge(current) as usize].paired_halfedge;
+			current = self.halfedge.pair(next_halfedge(current));
 		}
 
 		if current == edge {
@@ -445,23 +376,21 @@ impl MeshBoolImpl {
 			}
 
 			self.for_vert_mut(next_halfedge(current), |myself, e| {
-				let e = e as usize;
-				myself.halfedge[e].start_vert = new_vert;
-				let next = myself.halfedge[e].paired_halfedge as usize;
-				myself.halfedge[next].end_vert = new_vert;
+				myself.halfedge.set_start(e, new_vert);
+				myself.halfedge.set_end(myself.halfedge.pair(e), new_vert);
 			});
 		}
 
 		// Orbit startVert
-		let pair = self.halfedge[edge as usize].paired_halfedge;
-		current = self.halfedge[next_halfedge(pair) as usize].paired_halfedge;
+		let pair = self.halfedge.pair(edge);
+		current = self.halfedge.pair(next_halfedge(pair));
 		while current != pair {
-			let vert = self.halfedge[current as usize].start_vert;
+			let vert = self.halfedge.start(current);
 			if vert == end_vert {
 				break; //connected: not a pinched vert
 			}
 
-			current = self.halfedge[next_halfedge(current) as usize].paired_halfedge;
+			current = self.halfedge.pair(next_halfedge(current));
 		}
 
 		if current == pair {
@@ -473,17 +402,15 @@ impl MeshBoolImpl {
 			}
 
 			self.for_vert_mut(next_halfedge(current), |myself, e| {
-				let e = e as usize;
-				myself.halfedge[e].start_vert = new_vert;
-				let next = myself.halfedge[e].paired_halfedge as usize;
-				myself.halfedge[next].end_vert = new_vert;
+				myself.halfedge.set_start(e, new_vert);
+				myself.halfedge.set_end(myself.halfedge.pair(e), new_vert);
 			});
 		}
 	}
 
 	fn pair_up(&mut self, edge0: i32, edge1: i32) {
-		self.halfedge[edge0 as usize].paired_halfedge = edge1;
-		self.halfedge[edge1 as usize].paired_halfedge = edge0;
+		self.halfedge.set_pair(edge0, edge1);
+		self.halfedge.set_pair(edge1, edge0);
 	}
 
 	// Traverses CW around startEdge.endVert from startEdge to endEdge
@@ -492,10 +419,10 @@ impl MeshBoolImpl {
 	fn update_vert(&mut self, vert: i32, start_edge: i32, end_edge: i32) {
 		let mut current = start_edge;
 		while current != end_edge {
-			self.halfedge[current as usize].end_vert = vert;
+			self.halfedge.set_end(current, vert);
 			current = next_halfedge(current);
-			self.halfedge[current as usize].start_vert = vert;
-			current = self.halfedge[current as usize].paired_halfedge;
+			self.halfedge.set_start(current, vert);
+			current = self.halfedge.pair(current);
 			debug_assert!(current != start_edge, "infinite loop in decimator!");
 		}
 	}
@@ -506,91 +433,72 @@ impl MeshBoolImpl {
 	fn form_loop(&mut self, current: i32, end: i32) {
 		let start_vert = self.vert_pos.len() as i32;
 		self.vert_pos
-			.push(self.vert_pos[self.halfedge[current as usize].start_vert as usize]);
+			.push(self.vert_pos[self.halfedge.start(current) as usize]);
 		let end_vert = self.vert_pos.len() as i32;
 		self.vert_pos
-			.push(self.vert_pos[self.halfedge[current as usize].end_vert as usize]);
+			.push(self.vert_pos[self.halfedge.end(current) as usize]);
 
-		let old_match = self.halfedge[current as usize].paired_halfedge;
-		let new_match = self.halfedge[end as usize].paired_halfedge;
+		let old_match = self.halfedge.pair(current);
+		let new_match = self.halfedge.pair(end);
 
 		self.update_vert(start_vert, old_match, new_match);
 		self.update_vert(end_vert, end, current);
 
-		self.halfedge[current as usize].paired_halfedge = new_match;
-		self.halfedge[new_match as usize].paired_halfedge = current;
-		self.halfedge[end as usize].paired_halfedge = old_match;
-		self.halfedge[old_match as usize].paired_halfedge = end;
+		self.pair_up(current, new_match);
+		self.pair_up(end, old_match);
 
 		self.remove_if_folded(end);
 	}
 
 	fn collapse_tri(&mut self, tri_edge: &Vector3<i32>) {
-		if self.halfedge[tri_edge[1] as usize].paired_halfedge == -1 {
+		if self.halfedge.pair(tri_edge[1]) == -1 {
 			return;
 		}
-		let pair1 = self.halfedge[tri_edge[1] as usize].paired_halfedge;
-		let pair2 = self.halfedge[tri_edge[2] as usize].paired_halfedge;
-		self.halfedge[pair1 as usize].paired_halfedge = pair2;
-		self.halfedge[pair2 as usize].paired_halfedge = pair1;
+		let pair1 = self.halfedge.pair(tri_edge[1]);
+		let pair2 = self.halfedge.pair(tri_edge[2]);
+		self.pair_up(pair1, pair2);
 		for i in 0..3 {
-			self.halfedge[tri_edge[i] as usize] = Halfedge {
-				start_vert: -1,
-				end_vert: -1,
-				paired_halfedge: -1,
-				prop_vert: self.halfedge[tri_edge[i] as usize].prop_vert,
-			};
+			self.halfedge
+				.set(tri_edge[i], -1, -1, self.halfedge.prop(tri_edge[i]));
 		}
 	}
 
 	fn remove_if_folded(&mut self, edge: i32) {
 		let tri0_edge = tri_of(edge);
-		let tri1_edge = tri_of(self.halfedge[edge as usize].paired_halfedge);
-		if self.halfedge[tri0_edge[1] as usize].paired_halfedge == -1 {
+		let tri1_edge = tri_of(self.halfedge.pair(edge));
+		if self.halfedge.pair(tri0_edge[1]) == -1 {
 			return;
 		}
-		if self.halfedge[tri0_edge[1] as usize].end_vert
-			== self.halfedge[tri1_edge[1] as usize].end_vert
-		{
-			if self.halfedge[tri0_edge[1] as usize].paired_halfedge == tri1_edge[2] {
-				if self.halfedge[tri0_edge[2] as usize].paired_halfedge == tri1_edge[1] {
+		if self.halfedge.start(tri0_edge[2]) == self.halfedge.start(tri1_edge[2]) {
+			if self.halfedge.pair(tri0_edge[1]) == tri1_edge[2] {
+				if self.halfedge.pair(tri0_edge[2]) == tri1_edge[1] {
 					for i in 0..3 {
-						self.vert_pos[self.halfedge[tri0_edge[i] as usize].start_vert as usize] =
+						self.vert_pos[self.halfedge.start(tri0_edge[i]) as usize] =
 							Point3::new(f64::NAN, f64::NAN, f64::NAN);
 					}
 				} else {
-					self.vert_pos[self.halfedge[tri0_edge[1] as usize].start_vert as usize] =
+					self.vert_pos[self.halfedge.start(tri0_edge[1]) as usize] =
 						Point3::new(f64::NAN, f64::NAN, f64::NAN);
 				}
 			} else {
-				if self.halfedge[tri0_edge[2] as usize].paired_halfedge == tri1_edge[1] {
-					self.vert_pos[self.halfedge[tri1_edge[1] as usize].start_vert as usize] =
+				if self.halfedge.pair(tri0_edge[2]) == tri1_edge[1] {
+					self.vert_pos[self.halfedge.start(tri1_edge[1]) as usize] =
 						Point3::new(f64::NAN, f64::NAN, f64::NAN);
 				}
 			}
 
 			self.pair_up(
-				self.halfedge[tri0_edge[1] as usize].paired_halfedge,
-				self.halfedge[tri1_edge[2] as usize].paired_halfedge,
+				self.halfedge.pair(tri0_edge[1]),
+				self.halfedge.pair(tri1_edge[2]),
 			);
 			self.pair_up(
-				self.halfedge[tri0_edge[2] as usize].paired_halfedge,
-				self.halfedge[tri1_edge[1] as usize].paired_halfedge,
+				self.halfedge.pair(tri0_edge[2]),
+				self.halfedge.pair(tri1_edge[1]),
 			);
 
 			for i in 0..3 {
-				self.halfedge[tri0_edge[i] as usize] = Halfedge {
-					start_vert: -1,
-					end_vert: -1,
-					paired_halfedge: -1,
-					prop_vert: 0,
-				};
-				self.halfedge[tri1_edge[i] as usize] = Halfedge {
-					start_vert: -1,
-					end_vert: -1,
-					paired_halfedge: -1,
-					prop_vert: 0,
-				};
+				self.halfedge.set(tri0_edge[i], -1, -1, -1);
+				self.halfedge.set(tri1_edge[i], -1, -1, -1);
 			}
 		}
 	}
@@ -600,31 +508,50 @@ impl MeshBoolImpl {
 	///have resulted in a 4-manifold edge. Do not collapse an edge if startVert is
 	///pinched - the vert would be marked NaN, but other edges could still be
 	///pointing to it.
-	fn collapse_edge(&mut self, edge: i32, edges: &mut Vec<i32>) -> bool {
-		let to_remove = self.halfedge[edge as usize];
-		if to_remove.paired_halfedge < 0 {
+	fn collapse_edge(
+		&mut self,
+		edge: i32,
+		edges: &mut Vec<i32>,
+		mut tol: f64,
+		first_new_vert: i32,
+	) -> bool {
+		if tol < 0.0 {
+			tol = self.epsilon;
+		}
+
+		let pair = self.halfedge.pair(edge);
+		if pair < 0 {
 			return false;
 		}
 
-		let end_vert = to_remove.end_vert;
 		let tri0_edge = tri_of(edge);
-		let tri1_edge = tri_of(to_remove.paired_halfedge);
+		let tri1_edge = tri_of(pair);
+		let start_vert = self.halfedge.start(tri0_edge[0]);
+		let end_vert = self.halfedge.start(tri0_edge[1]);
 
 		let p_new = self.vert_pos[end_vert as usize];
-		let p_old = self.vert_pos[to_remove.start_vert as usize];
+		let p_old = self.vert_pos[start_vert as usize];
 		let delta = p_new - p_old;
-		let short_edge = delta.magnitude_squared() < self.epsilon.powi(2);
+		// We don't check that startVert is still new here - it may have been
+		// collapsed to a different neighbor. However, it's still fine to collapse it
+		// further, as it's still only collapsing its own original neighbors together,
+		// which can't stack errors arbitrarily far.
+		let max_len = if end_vert < first_new_vert {
+			tol * tol
+		} else {
+			self.epsilon * self.epsilon
+		};
+		let short_edge = delta.magnitude_squared() < max_len;
 
 		// Orbit startVert
-		let mut start = self.halfedge[tri1_edge[1] as usize].paired_halfedge;
+		let mut start = self.halfedge.pair(tri1_edge[1]);
 		if !short_edge {
 			let mut current = start;
-			let mut ref_check =
-				self.mesh_relation.tri_ref[(to_remove.paired_halfedge / 3) as usize];
-			let mut p_last = self.vert_pos[self.halfedge[tri1_edge[1] as usize].end_vert as usize];
+			let mut ref_check = self.mesh_relation.tri_ref[(pair / 3) as usize];
+			let mut p_last = self.vert_pos[self.halfedge.start(tri1_edge[2]) as usize];
 			while current != tri1_edge[0] {
 				current = next_halfedge(current);
-				let p_next = self.vert_pos[self.halfedge[current as usize].end_vert as usize];
+				let p_next = self.vert_pos[self.halfedge.end(current) as usize];
 				let tri = (current / 3) as usize;
 				let tri_ref = self.mesh_relation.tri_ref[tri];
 				let projection = get_axis_aligned_projection(self.face_normal[tri]);
@@ -639,9 +566,7 @@ impl MeshBoolImpl {
 
 					if tri_ref.mesh_id != old_ref.mesh_id
 						|| tri_ref.face_id != old_ref.face_id
-						|| self.face_normal[(to_remove.paired_halfedge / 3) as usize]
-							.dot(&self.face_normal[tri])
-							< -0.5
+						|| self.face_normal[(pair / 3) as usize].dot(&self.face_normal[tri]) < -0.5
 					{
 						// Restrict collapse to colinear edges when the edge separates faces
 						// or the edge is sharp. This ensures large shifts are not introduced
@@ -650,7 +575,7 @@ impl MeshBoolImpl {
 							projection * p_last,
 							projection * p_old,
 							projection * p_new,
-							self.epsilon,
+							tol,
 						) != 0
 						{
 							return false;
@@ -670,27 +595,27 @@ impl MeshBoolImpl {
 				}
 
 				p_last = p_next;
-				current = self.halfedge[current as usize].paired_halfedge;
+				current = self.halfedge.pair(current);
 			}
 		}
 
 		// Orbit endVert
 		{
-			let mut current = self.halfedge[tri0_edge[1] as usize].paired_halfedge;
+			let mut current = self.halfedge.pair(tri0_edge[1]);
 			while current != tri1_edge[2] {
 				current = next_halfedge(current);
 				edges.push(current);
-				current = self.halfedge[current as usize].paired_halfedge;
+				current = self.halfedge.pair(current);
 			}
 		}
 
 		// Remove toRemove.startVert and replace with endVert.
-		self.vert_pos[to_remove.start_vert as usize] = Point3::new(f64::NAN, f64::NAN, f64::NAN);
+		self.vert_pos[start_vert as usize] = Point3::new(f64::NAN, f64::NAN, f64::NAN);
 		self.collapse_tri(&tri1_edge);
 
 		// Orbit startVert
 		let tri0 = (edge / 3) as usize;
-		let tri1 = (to_remove.paired_halfedge / 3) as usize;
+		let tri1 = (pair / 3) as usize;
 		let mut current = start;
 		while current != tri0_edge[2] {
 			current = next_halfedge(current);
@@ -699,20 +624,19 @@ impl MeshBoolImpl {
 				// Update the shifted triangles to the vertBary of endVert
 				let tri = (current / 3) as usize;
 				if self.mesh_relation.tri_ref[tri].same_face(&self.mesh_relation.tri_ref[tri0]) {
-					self.halfedge[current as usize].prop_vert =
-						self.halfedge[next_halfedge(edge) as usize].prop_vert;
+					self.halfedge
+						.set_prop(current, self.halfedge.prop(next_halfedge(edge)));
 				} else if self.mesh_relation.tri_ref[tri]
 					.same_face(&self.mesh_relation.tri_ref[tri1])
 				{
-					self.halfedge[current as usize].prop_vert =
-						self.halfedge[to_remove.paired_halfedge as usize].prop_vert;
+					self.halfedge.set_prop(current, self.halfedge.prop(pair));
 				}
 			}
 
-			let vert = self.halfedge[current as usize].end_vert;
-			let next = self.halfedge[current as usize].paired_halfedge;
+			let vert = self.halfedge.end(current);
+			let next = self.halfedge.pair(current);
 			for i in 0..edges.len() {
-				if vert == self.halfedge[edges[i] as usize].end_vert {
+				if vert == self.halfedge.end(edges[i]) {
 					self.form_loop(edges[i], current);
 					start = next;
 					edges.truncate(i);
@@ -740,7 +664,7 @@ impl MeshBoolImpl {
 		if edge < 0 {
 			return;
 		}
-		let pair = self.halfedge[edge as usize].paired_halfedge;
+		let pair = self.halfedge.pair(edge);
 		if pair < 0 {
 			return;
 		}
@@ -756,8 +680,7 @@ impl MeshBoolImpl {
 		let projection = get_axis_aligned_projection(self.face_normal[(edge / 3) as usize]);
 		let mut v = [Point2::default(); 4];
 		for i in 0..3 {
-			v[i] = projection
-				* self.vert_pos[self.halfedge[tri0_edge[i] as usize].start_vert as usize];
+			v[i] = projection * self.vert_pos[self.halfedge.start(tri0_edge[i]) as usize];
 		}
 
 		// Only operate on the long edge of a degenerate triangle.
@@ -768,28 +691,21 @@ impl MeshBoolImpl {
 		// Switch to neighbor's projection.
 		let projection = get_axis_aligned_projection(self.face_normal[(pair / 3) as usize]);
 		for i in 0..3 {
-			v[i] = projection
-				* self.vert_pos[self.halfedge[tri0_edge[i] as usize].start_vert as usize];
+			v[i] = projection * self.vert_pos[self.halfedge.start(tri0_edge[i]) as usize];
 		}
 
-		v[3] = projection * self.vert_pos[self.halfedge[tri1_edge[2] as usize].start_vert as usize];
+		v[3] = projection * self.vert_pos[self.halfedge.start(tri1_edge[2]) as usize];
 
 		let swap_edge = |myself: &mut MeshBoolImpl| {
 			// The 0-verts are swapped to the opposite 2-verts.
-			let v0 = myself.halfedge[tri0_edge[2] as usize].start_vert;
-			let v1 = myself.halfedge[tri1_edge[2] as usize].start_vert;
-			myself.halfedge[tri0_edge[0] as usize].start_vert = v1;
-			myself.halfedge[tri0_edge[2] as usize].end_vert = v1;
-			myself.halfedge[tri1_edge[0] as usize].start_vert = v0;
-			myself.halfedge[tri1_edge[2] as usize].end_vert = v0;
-			myself.pair_up(
-				tri0_edge[0],
-				myself.halfedge[tri1_edge[2] as usize].paired_halfedge,
-			);
-			myself.pair_up(
-				tri1_edge[0],
-				myself.halfedge[tri0_edge[2] as usize].paired_halfedge,
-			);
+			let v0 = myself.halfedge.start(tri0_edge[2]);
+			let v1 = myself.halfedge.start(tri1_edge[2]);
+			myself.halfedge.set_start(tri0_edge[0], v1);
+			myself.halfedge.set_end(tri0_edge[2], v1);
+			myself.halfedge.set_start(tri1_edge[0], v0);
+			myself.halfedge.set_end(tri1_edge[2], v0);
+			myself.pair_up(tri0_edge[0], myself.halfedge.pair(tri1_edge[2]));
+			myself.pair_up(tri1_edge[0], myself.halfedge.pair(tri0_edge[2]));
 			myself.pair_up(tri0_edge[2], tri1_edge[2]);
 			// Both triangles are now subsets of the neighboring triangle.
 			let tri0 = (tri0_edge[0] / 3) as usize;
@@ -801,16 +717,19 @@ impl MeshBoolImpl {
 			let a = (l02 / l01).clamp(0.0, 1.0);
 			// Update properties if applicable
 			if myself.properties.len() > 0 {
-				myself.halfedge[tri0_edge[1] as usize].prop_vert =
-					myself.halfedge[tri1_edge[0] as usize].prop_vert;
-				myself.halfedge[tri0_edge[0] as usize].prop_vert =
-					myself.halfedge[tri1_edge[2] as usize].prop_vert;
-				myself.halfedge[tri0_edge[2] as usize].prop_vert =
-					myself.halfedge[tri1_edge[2] as usize].prop_vert;
+				myself
+					.halfedge
+					.set_prop(tri0_edge[1], myself.halfedge.prop(tri1_edge[0]));
+				myself
+					.halfedge
+					.set_prop(tri0_edge[0], myself.halfedge.prop(tri1_edge[2]));
+				myself
+					.halfedge
+					.set_prop(tri0_edge[2], myself.halfedge.prop(tri1_edge[2]));
 				let num_prop = myself.num_prop();
 				let new_prop = myself.properties.len() / num_prop;
-				let prop_idx0 = myself.halfedge[tri1_edge[0] as usize].prop_vert as usize;
-				let prop_idx1 = myself.halfedge[tri1_edge[1] as usize].prop_vert as usize;
+				let prop_idx0 = myself.halfedge.prop(tri1_edge[0]) as usize;
+				let prop_idx1 = myself.halfedge.prop(tri1_edge[1]) as usize;
 				for p in 0..num_prop {
 					myself.properties.push(
 						a * myself.properties[num_prop * prop_idx0 + p]
@@ -818,22 +737,22 @@ impl MeshBoolImpl {
 					);
 				}
 
-				myself.halfedge[tri1_edge[0] as usize].prop_vert = new_prop as i32;
-				myself.halfedge[tri0_edge[2] as usize].prop_vert = new_prop as i32;
+				myself.halfedge.set_prop(tri1_edge[0], new_prop as i32);
+				myself.halfedge.set_prop(tri0_edge[2], new_prop as i32);
 			}
 
 			// if the new edge already exists, duplicate the verts and split the mesh.
-			let mut current = myself.halfedge[tri1_edge[0] as usize].paired_halfedge;
-			let end_vert = myself.halfedge[tri1_edge[1] as usize].end_vert;
+			let mut current = myself.halfedge.pair(tri1_edge[0]);
+			let end_vert = myself.halfedge.end(tri1_edge[1]);
 			while current != tri0_edge[1] {
 				current = next_halfedge(current);
-				if myself.halfedge[current as usize].end_vert == end_vert {
+				if myself.halfedge.end(current) == end_vert {
 					myself.form_loop(tri0_edge[2], current);
 					myself.remove_if_folded(tri0_edge[2]);
 					return;
 				}
 
-				current = myself.halfedge[current as usize].paired_halfedge;
+				current = myself.halfedge.pair(current);
 			}
 		};
 
@@ -847,7 +766,7 @@ impl MeshBoolImpl {
 			let e23 = v[3] - v[2];
 			if e23.magnitude_squared() < self.tolerance.powi(2) {
 				*tag += 1;
-				self.collapse_edge(tri0_edge[2], edges);
+				self.collapse_edge(tri0_edge[2], edges, -1.0, 0);
 				edges.truncate(0);
 			} else {
 				visited[edge as usize] = *tag;
@@ -867,38 +786,36 @@ impl MeshBoolImpl {
 		visited[edge as usize] = *tag;
 		visited[pair as usize] = *tag;
 		edge_swap_stack.extend([
-			self.halfedge[tri1_edge[0] as usize].paired_halfedge,
-			self.halfedge[tri0_edge[1] as usize].paired_halfedge,
+			self.halfedge.pair(tri1_edge[0]),
+			self.halfedge.pair(tri0_edge[1]),
 		]);
 	}
 
 	fn split_pinched_verts(&mut self) {
 		let nb_edges = self.halfedge.len();
 
-		{
-			let mut vert_processed = vec![false; self.num_vert()];
-			let mut halfedge_processed = vec![false; nb_edges];
-			for i in 0..nb_edges {
-				if halfedge_processed[i] {
-					continue;
-				}
-				let mut vert = self.halfedge[i].start_vert;
-				if vert == -1 {
-					continue;
-				}
-				if vert_processed[vert as usize] {
-					self.vert_pos.push(self.vert_pos[vert as usize]);
-					vert = (self.num_vert() - 1) as i32;
-				} else {
-					vert_processed[vert as usize] = true;
-				}
-
-				self.for_vert_mut(i as i32, |myself, current| {
-					let current = current as usize;
-					halfedge_processed[current] = true;
-					myself.halfedge[current].start_vert = vert;
-					let edge_i = myself.halfedge[current].paired_halfedge as usize;
-					myself.halfedge[edge_i].end_vert = vert;
+		let mut vert_processed = vec![false; self.num_vert()];
+		let mut halfedge_processed = vec![false; nb_edges];
+		for i in 0..nb_edges as i32 {
+			if halfedge_processed[i as usize] {
+				continue;
+			}
+			let mut vert = self.halfedge.start(i);
+			if vert == -1 {
+				continue;
+			}
+			if vert_processed[vert as usize] {
+				self.vert_pos.push(self.vert_pos[vert as usize]);
+				vert = (self.num_vert() - 1) as i32;
+				self.for_vert_mut(i, |myself, current| {
+					halfedge_processed[current as usize] = true;
+					myself.halfedge.set_start(current, vert);
+					myself.halfedge.set_end(myself.halfedge.pair(current), vert);
+				});
+			} else {
+				vert_processed[vert as usize] = true;
+				self.for_vert_mut(i, |_, current| {
+					halfedge_processed[current as usize] = true;
 				});
 			}
 		}
@@ -929,13 +846,14 @@ impl MeshBoolImpl {
 					let mut end_verts: Vec<(i32, i32)> = Vec::new();
 					let mut end_vert_set: HashMap<i32, i32> = HashMap::new();
 					for i in start..end {
-						if local[i]
-							|| self.halfedge[i].start_vert == -1
-							|| self.halfedge[i].end_vert == -1
-						{
+						if local[i] {
 							continue;
 						}
-
+						let start_vert = self.halfedge.start(i as i32);
+						let end_vert = self.halfedge.end(i as i32);
+						if start_vert == -1 || end_vert == -1 {
+							continue;
+						}
 						// we want to keep the allocation
 						end_verts.clear();
 						end_vert_set.clear();
@@ -944,13 +862,11 @@ impl MeshBoolImpl {
 						// this makes sure we always report the same set of entries
 						self.for_vert(i as i32, |current| {
 							local[current as usize] = true;
-							if self.halfedge[current as usize].start_vert == -1
-								|| self.halfedge[current as usize].end_vert == -1
-							{
+							let start_vert = self.halfedge.start(current);
+							let end_v = self.halfedge.end(current);
+							if start_vert == -1 || end_v == -1 {
 								return;
 							}
-
-							let end_v = self.halfedge[current as usize].end_vert;
 							if end_vert_set.is_empty() {
 								let iter = end_verts.iter_mut().find(|pair| pair.0 == end_v);
 
@@ -982,13 +898,11 @@ impl MeshBoolImpl {
 						// we always report the same set of duplicates, excluding the smallest
 						// halfedge in the set of duplicates
 						self.for_vert(i as i32, |current| {
-							if self.halfedge[current as usize].start_vert == -1
-								|| self.halfedge[current as usize].end_vert == -1
-							{
+							let start_vert = self.halfedge.start(current);
+							let end_v = self.halfedge.end(current);
+							if start_vert == -1 || end_v == -1 {
 								return;
 							}
-
-							let end_v = self.halfedge[current as usize].end_vert;
 							if end_vert_set.is_empty() {
 								let iter = end_verts.iter().find(|pair| pair.0 == end_v).unwrap();
 

@@ -1,14 +1,18 @@
+use crate::MeshBoolError;
 use crate::collider::Collider;
-use crate::common::{AABB, FloatKind, LossyFrom, sun_acos};
+use crate::common::{AABB, LossyFrom};
 use crate::disjoint_sets::DisjointSets;
+use crate::mesh::MeshGLP;
 use crate::mesh_fixes::{FlipTris, transform_normal};
 use crate::parallel::exclusive_scan_in_place;
-use crate::shared::{Halfedge, TriRef, max_epsilon, next_halfedge, normal_transform};
-use crate::utils::{atomic_add_i32, mat3, mat4, next3_i32, next3_usize};
+use crate::shared::{
+	Halfedges, TriRef, inverse_normal_transform, max_epsilon, next_halfedge, normal_transform,
+	safe_normalize,
+};
+use crate::utils::{atomic_add_i32, mat3, mat4, next3_i32};
 use crate::vec::{vec_resize, vec_resize_nofill, vec_uninit};
-use crate::{ManifoldError, MeshGLP};
-use nalgebra::{Matrix3x4, Point3, Vector3, Vector4};
-use rayon::prelude::*;
+use nalgebra::{Matrix3, Matrix3x4, Point3, Vector2, Vector3, Vector4};
+use std::any::TypeId;
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering as AtomicOrdering};
@@ -35,7 +39,7 @@ pub enum Shape {
 	Octahedron,
 }
 
-pub static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(0);
+pub static MESH_ID_COUNTER: AtomicUsize = AtomicUsize::new(1);
 
 ///@brief This library's internal representation of an oriented, 2-manifold,
 ///triangle mesh - a simple boundary-representation of a solid object. Use this
@@ -64,9 +68,9 @@ pub struct MeshBoolImpl {
 	pub epsilon: f64,
 	pub tolerance: f64,
 	pub num_prop: i32,
-	pub status: ManifoldError,
+	pub status: MeshBoolError,
 	pub vert_pos: Vec<Point3<f64>>,
-	pub halfedge: Vec<Halfedge>,
+	pub halfedge: Halfedges,
 	pub properties: Vec<f64>,
 	// Note that vertNormal_ is not precise due to the use of an approximated acos
 	// function
@@ -99,6 +103,10 @@ pub struct Relation {
 	pub original_id: i32,
 	pub transform: Matrix3x4<f64>,
 	pub back_side: bool,
+	///True when this meshID's contribution to properties_ slots 0..2 holds
+	///world-frame vertex normals (set by CalculateNormals at slot 0). Carries
+	///through Transforms and Booleans. Exported as runFlags bit 1.
+	pub has_normals: bool,
 }
 
 impl Default for Relation {
@@ -107,7 +115,14 @@ impl Default for Relation {
 			original_id: -1,
 			transform: Matrix3x4::identity(),
 			back_side: false,
+			has_normals: false,
 		}
+	}
+}
+
+impl Relation {
+	pub fn get_inverse_normal_transform(&self) -> Matrix3<f64> {
+		inverse_normal_transform(&self.transform) * if self.back_side { -1.0 } else { 1.0 }
 	}
 }
 
@@ -141,7 +156,12 @@ impl MeshBoolImpl {
 	}
 }
 
-const K_REMOVED_HALFEDGE: i32 = -2;
+#[derive(Copy, Clone)]
+struct CreateHalfedge {
+	start_vert: i32,
+	end_vert: i32,
+	prop_vert: i32,
+}
 
 #[derive(Clone, Default)]
 struct HalfedgePairData {
@@ -151,7 +171,7 @@ struct HalfedgePairData {
 }
 
 struct PrepHalfedges<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> {
-	halfedges: &'a mut Vec<Halfedge>,
+	halfedges: &'a mut Vec<CreateHalfedge>,
 	tri_prop: &'a Vec<Vector3<i32>>,
 	tri_vert: &'a Vec<Vector3<i32>>,
 	f: &'a mut F,
@@ -173,11 +193,10 @@ impl<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> PrepHalfedges<'a, USE_PR
 			} else {
 				self.tri_vert[tri as usize][j as usize]
 			};
-			debug_assert_ne!(v0, v1, "topological degeneracy");
-			self.halfedges[e as usize] = Halfedge {
+			debug_assert!(v0 != v1, "topological degeneracy");
+			self.halfedges[e as usize] = CreateHalfedge {
 				start_vert: v0,
 				end_vert: v1,
-				paired_halfedge: -1,
 				prop_vert: props[i as usize],
 			};
 
@@ -187,42 +206,68 @@ impl<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> PrepHalfedges<'a, USE_PR
 }
 
 impl MeshBoolImpl {
+	///True only when every meshID carries normals at slot 0..2 - the
+	///condition under which GetMeshGL(-1) can safely auto-substitute that
+	///slot. A mixed Boolean output (some meshIDs with normals, some
+	///without) returns false; the output MeshGL's per-run bit 1 still
+	///marks the with-normals runs individually.
+	pub fn all_have_normals(&self) -> bool {
+		if self.mesh_relation.mesh_id_transform.is_empty() {
+			return false;
+		}
+		for m in self.mesh_relation.mesh_id_transform.values() {
+			if !m.has_normals {
+				return false;
+			}
+		}
+
+		true
+	}
+
+	///True iff the meshID owning `tri` has hasNormals set. Returns false when
+	///the meshID isn't in meshRelation_.meshIDtransform (treat as no-normals).
+	pub fn tri_has_normals(mesh_relation: &MeshRelationD, tri: i32) -> bool {
+		let mesh_id = mesh_relation.tri_ref[tri as usize].mesh_id;
+		let it = mesh_relation.mesh_id_transform.get(&mesh_id);
+		it.map(|it| it.has_normals).unwrap_or(false)
+	}
+
 	pub fn from_meshgl<F, I>(mesh_gl: &MeshGLP<F, I>) -> Self
 	where
-		F: LossyFrom<f64> + Copy + FloatKind,
+		F: LossyFrom<f64> + Copy,
 		f64: From<F>,
 		I: LossyFrom<usize> + Copy,
 		usize: LossyFrom<I>,
 	{
-		let num_vert = mesh_gl.num_vert();
-		let num_tri = mesh_gl.num_tri();
+		let num_vert = usize::lossy_from(mesh_gl.num_vert());
+		let num_tri = usize::lossy_from(mesh_gl.num_tri());
 
 		let mut manifold = Self::default();
 
 		if num_vert == 0 && num_tri == 0 {
-			manifold.make_empty(ManifoldError::NoError);
+			manifold.make_empty(MeshBoolError::NoError);
 			return manifold;
 		}
 
 		if num_vert < 4 || num_tri < 4 {
-			manifold.make_empty(ManifoldError::NotManifold);
+			manifold.make_empty(MeshBoolError::NotManifold);
 			return manifold;
 		}
 
 		if usize::lossy_from(mesh_gl.num_prop) < 3 {
-			manifold.make_empty(ManifoldError::MissingPositionProperties);
+			manifold.make_empty(MeshBoolError::MissingPositionProperties);
 			return manifold;
 		}
 
 		if mesh_gl.merge_from_vert.len() != mesh_gl.merge_to_vert.len() {
-			manifold.make_empty(ManifoldError::MergeVectorsDifferentLengths);
+			manifold.make_empty(MeshBoolError::MergeVectorsDifferentLengths);
 			return manifold;
 		}
 
 		if !mesh_gl.run_transform.is_empty()
 			&& 12 * mesh_gl.run_original_id.len() != mesh_gl.run_transform.len()
 		{
-			manifold.make_empty(ManifoldError::TransformWrongLength);
+			manifold.make_empty(MeshBoolError::TransformWrongLength);
 			return manifold;
 		}
 
@@ -231,12 +276,12 @@ impl MeshBoolImpl {
 			&& mesh_gl.run_original_id.len() + 1 != mesh_gl.run_index.len()
 			&& mesh_gl.run_original_id.len() != mesh_gl.run_index.len()
 		{
-			manifold.make_empty(ManifoldError::RunIndexWrongLength);
+			manifold.make_empty(MeshBoolError::RunIndexWrongLength);
 			return manifold;
 		}
 
-		if !mesh_gl.face_id.is_empty() && mesh_gl.face_id.len() != mesh_gl.num_tri() {
-			manifold.make_empty(ManifoldError::FaceIDWrongLength);
+		if !mesh_gl.face_id.is_empty() && mesh_gl.face_id.len() != num_tri {
+			manifold.make_empty(MeshBoolError::FaceIDWrongLength);
 			return manifold;
 		}
 
@@ -245,7 +290,7 @@ impl MeshBoolImpl {
 			.iter()
 			.any(|v| !f64::from(*v).is_finite())
 		{
-			manifold.make_empty(ManifoldError::NonFiniteVertex);
+			manifold.make_empty(MeshBoolError::NonFiniteVertex);
 			return manifold;
 		}
 
@@ -254,7 +299,7 @@ impl MeshBoolImpl {
 			.iter()
 			.any(|x| !f64::from(*x).is_finite())
 		{
-			manifold.make_empty(ManifoldError::InvalidConstruction);
+			manifold.make_empty(MeshBoolError::InvalidConstruction);
 			return manifold;
 		}
 
@@ -272,7 +317,7 @@ impl MeshBoolImpl {
 				let from = usize::lossy_from(mesh_gl.merge_from_vert[i]);
 				let to = usize::lossy_from(mesh_gl.merge_to_vert[i]);
 				if from >= num_vert || to >= num_vert {
-					manifold.make_empty(ManifoldError::MergeIndexOutOfBounds);
+					manifold.make_empty(MeshBoolError::MergeIndexOutOfBounds);
 					return manifold;
 				}
 				prop2vert[from] = to as i32;
@@ -283,21 +328,20 @@ impl MeshBoolImpl {
 
 		let num_prop = usize::lossy_from(mesh_gl.num_prop) - 3;
 		manifold.num_prop = num_prop as i32;
-		unsafe { vec_resize_nofill(&mut manifold.properties, mesh_gl.num_vert() * num_prop) };
+		unsafe { vec_resize_nofill(&mut manifold.properties, num_vert * num_prop) };
 		manifold.tolerance = f64::from(mesh_gl.tolerance);
 		// This will have unreferenced duplicate positions that will be removed by
 		// Impl::remove_unreferenced_verts().
-		unsafe { vec_resize_nofill(&mut manifold.vert_pos, mesh_gl.num_vert()) };
+		unsafe { vec_resize_nofill(&mut manifold.vert_pos, num_vert) };
 
-		for i in 0..mesh_gl.num_vert() {
+		for i in 0..num_vert {
 			for j in [0, 1, 2] {
 				manifold.vert_pos[i][j] =
 					mesh_gl.vert_properties[usize::lossy_from(mesh_gl.num_prop) * i + j].into();
 			}
 			for j in 0..num_prop {
-				manifold.properties[i * num_prop as usize + j as usize] = mesh_gl.vert_properties
-					[usize::lossy_from(mesh_gl.num_prop) * i + 3 + j as usize]
-					.into();
+				manifold.properties[i * num_prop + j] =
+					mesh_gl.vert_properties[usize::lossy_from(mesh_gl.num_prop) * i + 3 + j].into();
 			}
 		}
 
@@ -308,7 +352,7 @@ impl MeshBoolImpl {
 		//   }
 		// }
 
-		let mut tri_ref: Vec<TriRef> = unsafe { vec_uninit(mesh_gl.num_tri()) };
+		let mut tri_ref: Vec<TriRef> = unsafe { vec_uninit(num_tri) };
 
 		let mut run_index: Vec<usize> = mesh_gl
 			.run_index
@@ -332,6 +376,11 @@ impl MeshBoolImpl {
 		for i in 0..run_original_id.len() {
 			let mesh_id = start_id + i;
 			let original_id = run_original_id[i] as i32;
+			let backside = mesh_gl.backside(i);
+			// Per-run hasNormals (runFlags bit 1). Defensively require numProp >= 3
+			// so a caller setting the bit on a too-small MeshGL doesn't make us read
+			// past the property bounds.
+			let run_has_n = mesh_gl.has_normals(i) && num_prop >= 3;
 			for tri in (run_index[i] / 3)..(run_index[i + 1] / 3) {
 				let r = &mut tri_ref[tri as usize];
 				r.mesh_id = mesh_id as i32;
@@ -345,18 +394,23 @@ impl MeshBoolImpl {
 			}
 
 			if mesh_gl.run_transform.is_empty() {
-				manifold.mesh_relation.mesh_id_transform.insert(
-					mesh_id as i32,
-					Relation {
-						original_id: original_id,
-						..Relation::default() //in c++ the rest were uninitialized
-					},
-				);
+				manifold
+					.mesh_relation
+					.mesh_id_transform
+					.entry(mesh_id as i32)
+					.or_insert_with(|| Relation {
+						original_id,
+						transform: Matrix3x4::identity(),
+						back_side: backside,
+						has_normals: run_has_n,
+					});
 			} else {
 				let m: [_; 12] = array::from_fn(|j| f64::from(mesh_gl.run_transform[i * 12 + j]));
-				manifold.mesh_relation.mesh_id_transform.insert(
-					mesh_id as i32,
-					Relation {
+				manifold
+					.mesh_relation
+					.mesh_id_transform
+					.entry(mesh_id as i32)
+					.or_insert_with(|| Relation {
 						original_id: original_id,
 						transform: [
 							[m[0], m[1], m[2]],
@@ -365,9 +419,9 @@ impl MeshBoolImpl {
 							[m[9], m[10], m[11]],
 						]
 						.into(),
-						..Relation::default()
-					},
-				);
+						back_side: backside,
+						has_normals: run_has_n,
+					});
 			}
 		}
 
@@ -386,7 +440,7 @@ impl MeshBoolImpl {
 			for j in [0, 1, 2] {
 				let vert = usize::lossy_from(mesh_gl.tri_verts[3 * i + j]);
 				if vert >= num_vert {
-					manifold.make_empty(ManifoldError::VertexOutOfBounds);
+					manifold.make_empty(MeshBoolError::VertexOutOfBounds);
 					return manifold;
 				}
 				tri_p[j] = vert as i32;
@@ -411,27 +465,24 @@ impl MeshBoolImpl {
 
 		manifold.create_halfedges(tri_prop, tri_vert);
 		if !manifold.is_manifold() {
-			manifold.make_empty(ManifoldError::NotManifold);
+			manifold.make_empty(MeshBoolError::NotManifold);
 			return manifold;
 		}
 
 		manifold.calculate_bbox();
-		manifold.set_epsilon(-1.0f64, F::is_f32());
+		manifold.set_epsilon(-1.0f64, false); // TODO: if Precision == float
 
 		// we need to split pinched verts before calculating vertex normals, because
 		// the algorithm doesn't work with pinched verts
 		manifold.cleanup_topology();
-		manifold.calculate_normals();
-
 		manifold.dedupe_prop_verts();
-		manifold.mark_coplanar();
-
+		manifold.set_normals_and_coplanar();
 		manifold.remove_degenerates(None);
 		manifold.remove_unreferenced_verts();
-		manifold.finish();
+		manifold.sort_geometry();
 
 		if !manifold.is_finite() {
-			manifold.make_empty(ManifoldError::NonFiniteVertex);
+			manifold.make_empty(MeshBoolError::NonFiniteVertex);
 			return manifold;
 		}
 
@@ -440,6 +491,224 @@ impl MeshBoolImpl {
 		manifold.mesh_relation.original_id = -1;
 
 		manifold
+	}
+
+	#[inline]
+	pub fn get_mesh_gl_impl<Precision, I>(&self, normal_idx: i32) -> MeshGLP<Precision, I>
+	where
+		Precision: LossyFrom<f64> + Copy + 'static,
+		f64: From<Precision>,
+		I: LossyFrom<usize> + Copy,
+		usize: LossyFrom<I>,
+	{
+		let num_prop = self.num_prop();
+		let num_vert = self.num_prop_vert();
+		let num_tri = self.num_tri();
+
+		let is_original = self.mesh_relation.original_id >= 0;
+		let update_normals = !is_original && normal_idx >= 0;
+
+		let out_num_prop = 3 + num_prop;
+		let mut tolerance = self.tolerance;
+		if TypeId::of::<Precision>() == TypeId::of::<f32>() {
+			tolerance = tolerance.max((f32::EPSILON as f64) * self.bbox.scale());
+		}
+		let mut tri_verts: Vec<I> = vec![I::lossy_from(0); 3 * num_tri];
+
+		// Sort the triangles into runs
+		let mut face_id: Vec<I> = vec![I::lossy_from(0); num_tri];
+		let mut tri_new2old: Vec<_> = (0..num_tri).map(|i| i as i32).collect();
+		let tri_ref = &self.mesh_relation.tri_ref;
+		// Don't sort originals - keep them in order
+		if !is_original {
+			tri_new2old
+				.sort_by_key(|&i| (tri_ref[i as usize].original_id, tri_ref[i as usize].mesh_id));
+		}
+
+		let mut run_index: Vec<I> = Vec::new();
+		let mut run_original_id: Vec<u32> = Vec::new();
+		let mut run_transform: Vec<Precision> = Vec::new();
+		let mut run_flags: Vec<u8> = Vec::new();
+
+		// runFlags layout: bit 0 = backSide, bit 1 = hasNormals (slot 0..2 of the
+		// extra properties is world-frame vertex normals; consumers should skip
+		// re-applying runTransform to those channels).
+		let mut add_run = |tri, rel: Relation| {
+			run_index.push(I::lossy_from(3 * tri));
+			run_original_id.push(rel.original_id as u32);
+			// runFlags carries hasNormals (bit 1) which we want on originals too;
+			// runTransform is just metadata so skip it for originals where it would
+			// always be identity.
+			let flags = (rel.back_side as u8) | ((rel.has_normals as u8) << 1);
+			run_flags.push(flags);
+			if !is_original {
+				for col in 0..4 {
+					for row in 0..3 {
+						run_transform.push(Precision::lossy_from(rel.transform[(row, col)]))
+					}
+				}
+			}
+		};
+
+		let mut mesh_id_transform = self.mesh_relation.mesh_id_transform.clone();
+		let mut last_id = -1;
+		for tri in 0..num_tri {
+			let old_tri = tri_new2old[tri];
+			let tri_ref = tri_ref[old_tri as usize];
+			let mesh_id = tri_ref.mesh_id;
+
+			face_id[tri] = I::lossy_from(if tri_ref.face_id >= 0 {
+				tri_ref.face_id as usize
+			} else {
+				tri_ref.coplanar_id as usize
+			});
+			for i in 0..3 {
+				tri_verts[3 * tri + (i as usize)] =
+					I::lossy_from(self.halfedge.start(3 * old_tri + i) as usize);
+			}
+
+			if mesh_id != last_id {
+				let it = mesh_id_transform.remove(&mesh_id);
+				let rel = it.unwrap_or_default();
+				add_run(tri, rel);
+				last_id = mesh_id;
+			}
+		}
+
+		// Add runs for originals that did not contribute any faces to the output
+		for pair in mesh_id_transform {
+			add_run(num_tri, pair.1);
+		}
+
+		run_index.push(I::lossy_from(3 * num_tri));
+
+		// Early return for no props
+		if num_prop == 0 {
+			let mut vert_properties: Vec<Precision> =
+				vec![Precision::lossy_from(0.0); 3 * num_vert];
+			for i in 0..num_vert {
+				let v = self.vert_pos[i];
+				vert_properties[3 * i] = Precision::lossy_from(v.x);
+				vert_properties[3 * i + 1] = Precision::lossy_from(v.y);
+				vert_properties[3 * i + 2] = Precision::lossy_from(v.z);
+			}
+
+			return MeshGLP {
+				num_prop: I::lossy_from(out_num_prop),
+				vert_properties,
+				tri_verts,
+				merge_from_vert: Vec::default(),
+				merge_to_vert: Vec::default(),
+				run_index,
+				run_original_id,
+				run_transform,
+				run_flags,
+				face_id,
+				tolerance: Precision::lossy_from(tolerance),
+			};
+		}
+
+		// Duplicate verts with different props
+		let mut vert2idx: Vec<i32> = vec![-1; self.num_vert()];
+		let mut vert_prop_pair: Vec<Vec<Vector2<i32>>> = vec![Vec::new(); self.num_vert()];
+		let mut vert_properties: Vec<Precision> = Vec::with_capacity(num_vert * out_num_prop);
+
+		let mut merge_from_vert: Vec<I> = Vec::new();
+		let mut merge_to_vert: Vec<I> = Vec::new();
+
+		for run in 0..run_original_id.len() {
+			for tri in
+				(usize::lossy_from(run_index[run]) / 3)..(usize::lossy_from(run_index[run + 1]) / 3)
+			{
+				for i in 0..3 {
+					let prop = self.halfedge.prop(3 * tri_new2old[tri] + (i as i32));
+					let vert = usize::lossy_from(tri_verts[3 * tri + i]);
+
+					let bin = &mut vert_prop_pair[vert];
+					let mut b_found = false;
+					for b in bin.iter() {
+						if b.x == prop {
+							b_found = true;
+							tri_verts[3 * tri + i] = I::lossy_from(b.y as usize);
+							break;
+						}
+					}
+
+					if b_found {
+						continue;
+					}
+					let idx = vert_properties.len() / out_num_prop;
+					tri_verts[3 * tri + i] = I::lossy_from(idx);
+					bin.push(Vector2::new(prop, idx as i32));
+
+					for p in 0..3 {
+						vert_properties.push(Precision::lossy_from(self.vert_pos[vert][p]));
+					}
+					for p in 0..num_prop {
+						vert_properties.push(Precision::lossy_from(
+							self.properties[(prop as usize) * num_prop + p],
+						));
+					}
+
+					// Normalize the requested normal slot. For runs that already carry
+					// world-frame normals (hasNormals bit), just normalize; for legacy
+					// callers asking to interpret a slot as normals on a run without
+					// hasNormals, apply the per-run inverse-frame transform first.
+					// TODO: collapse the !runHasN branch into a no-op once the explicit-
+					// normalIdx parameter on GetMeshGL is removed and `updateNormals`
+					// becomes implied by the hasNormals bit.
+					if update_normals {
+						let mut normal = Vector3::<f64>::default();
+						let start = vert_properties.len() - out_num_prop;
+						for i in 0..3 {
+							normal[i] = f64::from(
+								vert_properties[((start + 3 + i) as i32 + normal_idx) as usize],
+							);
+						}
+						let run_has_n = !is_original && (run_flags[run] & 2) != 0;
+						if !is_original && !run_has_n {
+							let m: [_; 12] =
+								array::from_fn(|j| f64::from(run_transform[run * 12 + j]));
+							let t = Matrix3x4::from([
+								[m[0], m[1], m[2]],
+								[m[3], m[4], m[5]],
+								[m[6], m[7], m[8]],
+								[m[9], m[10], m[11]],
+							]);
+							normal = normal_transform(&t)
+								* (if (run_flags[run] & 1) != 0 { -1.0 } else { 1.0 })
+								* normal;
+						}
+						normal = safe_normalize(normal);
+						for i in 0..3 {
+							vert_properties[((start + 3 + i) as i32 + normal_idx) as usize] =
+								Precision::lossy_from(normal[i]);
+						}
+					}
+
+					if vert2idx[vert] == -1 {
+						vert2idx[vert] = idx as i32;
+					} else {
+						merge_from_vert.push(I::lossy_from(idx));
+						merge_to_vert.push(I::lossy_from(vert2idx[vert] as usize));
+					}
+				}
+			}
+		}
+
+		MeshGLP {
+			num_prop: I::lossy_from(out_num_prop),
+			vert_properties,
+			tri_verts,
+			merge_from_vert,
+			merge_to_vert,
+			run_index,
+			run_original_id,
+			run_transform,
+			run_flags,
+			face_id,
+			tolerance: Precision::lossy_from(tolerance),
+		}
 	}
 
 	pub fn from_shape(shape: Shape, m: Matrix3x4<f64>) -> Self {
@@ -516,9 +785,11 @@ impl MeshBoolImpl {
 		};
 
 		meshbool_impl.create_halfedges(tri_verts, Vec::new());
-		meshbool_impl.finish();
-		meshbool_impl.initialize_original(false);
-		meshbool_impl.mark_coplanar();
+		meshbool_impl.initialize_original();
+		meshbool_impl.calculate_bbox();
+		meshbool_impl.set_epsilon(-1.0, false);
+		meshbool_impl.sort_geometry();
+		meshbool_impl.set_normals_and_coplanar();
 
 		meshbool_impl
 	}
@@ -526,10 +797,10 @@ impl MeshBoolImpl {
 	pub fn remove_unreferenced_verts(&mut self) {
 		let num_vert = self.num_vert();
 		let keep = vec![0; num_vert];
-		for h in &self.halfedge {
-			if h.start_vert >= 0 {
-				let atomic_ref: &AtomicI32 =
-					unsafe { mem::transmute(&keep[h.start_vert as usize]) };
+		for edge in 0..self.halfedge.len() {
+			let start_vert = self.halfedge.start(edge as i32);
+			if start_vert >= 0 {
+				let atomic_ref: &AtomicI32 = unsafe { mem::transmute(&keep[start_vert as usize]) };
 				atomic_ref.store(1, AtomicOrdering::Relaxed);
 			}
 		}
@@ -541,74 +812,123 @@ impl MeshBoolImpl {
 		}
 	}
 
+	fn eager_transform_prop_normals(
+		halfedge: &Halfedges,
+		mesh_relation: &MeshRelationD,
+		normal_transform: Matrix3<f64>,
+		properties: &mut [f64],
+		num_prop_vert: usize,
+		stride: i32,
+		offset: i32,
+	) {
+		// Short-circuit when no meshID carries normals. OR semantics (any has
+		// it), unlike AllHaveNormals() - mixed inputs still need the per-meshID
+		// iteration below to rotate the with-normals subset.
+		let mut any_has_normals = false;
+		for m in mesh_relation.mesh_id_transform.values() {
+			if m.has_normals {
+				any_has_normals = true;
+				break;
+			}
+		}
+
+		if !any_has_normals {
+			return;
+		}
+		let mut prop_visited = vec![false; num_prop_vert];
+		for e in 0..halfedge.len() as i32 {
+			if !MeshBoolImpl::tri_has_normals(mesh_relation, e / 3) {
+				continue;
+			}
+			let prop = halfedge.prop(e);
+			if prop < 0 || prop_visited[prop as usize] {
+				continue;
+			}
+			prop_visited[prop as usize] = true;
+			let mut n = Vector3::default();
+			for i in 0..3 {
+				n[i as usize] = properties[((offset + prop) * stride + i) as usize];
+			}
+			// Re-normalize as we transform: non-orthogonal transforms (scale) and
+			// barycentric interpolation upstream both leave non-unit values that
+			// would otherwise compound and break downstream lighting / smoothing.
+			n = safe_normalize(normal_transform * n);
+			for i in 0..3 {
+				properties[((offset + prop) * stride + i) as usize] = n[i as usize];
+			}
+		}
+	}
+
 	pub fn reserve_ids(n: usize) -> usize {
 		MESH_ID_COUNTER.fetch_add(n, AtomicOrdering::Relaxed)
 	}
 
-	pub fn initialize_original(&mut self, keep_face_id: bool) {
+	pub fn initialize_original(&mut self) {
 		let mesh_id = MeshBoolImpl::reserve_ids(1) as i32;
 		self.mesh_relation.original_id = mesh_id;
 		let num_tri = self.num_tri();
-		let tri_ref = &mut self.mesh_relation.tri_ref;
 		unsafe {
-			vec_resize_nofill(tri_ref, num_tri);
+			vec_resize_nofill(&mut self.mesh_relation.tri_ref, num_tri);
 		}
-		for tri in 0..num_tri {
-			tri_ref[tri] = TriRef {
+		for i in 0..num_tri {
+			let tri = &mut self.mesh_relation.tri_ref[i];
+			let coplanar_id = tri.coplanar_id;
+			*tri = TriRef {
 				mesh_id,
 				original_id: mesh_id,
 				face_id: -1,
-				coplanar_id: if keep_face_id {
-					tri_ref[tri].coplanar_id
-				} else {
-					tri as i32
-				},
+				coplanar_id,
 			};
-
-			self.mesh_relation.mesh_id_transform.clear();
-			self.mesh_relation
-				.mesh_id_transform
-				.entry(mesh_id)
-				.or_insert_with(|| Relation {
-					original_id: mesh_id,
-					..Relation::default() //in c++ the rest were uninitialized
-				});
 		}
+
+		// Preserve the AND-across-old-Relations state so AsOriginal keeps the
+		// recording when it builds a fresh Relation. Primitives start with an
+		// empty map, which AllHaveNormals() returns false for.
+		let had_normals = self.all_have_normals();
+		self.mesh_relation.mesh_id_transform.clear();
+		self.mesh_relation
+			.mesh_id_transform
+			.entry(mesh_id)
+			.or_insert_with(|| Relation {
+				original_id: mesh_id,
+				transform: Matrix3x4::identity(),
+				back_side: false,
+				has_normals: had_normals,
+			});
 	}
 
-	pub fn mark_coplanar(&mut self) {
+	pub fn set_normals_and_coplanar(&mut self) {
 		let num_tri = self.num_tri();
+		vec_resize(&mut self.face_normal, num_tri, Vector3::default());
 		struct TriPriority {
 			area2: f64,
 			tri: i32,
 		}
 		let mut tri_priority = unsafe { vec_uninit(num_tri) };
-		self.mesh_relation.tri_ref[0..num_tri]
-			.par_iter_mut()
-			.enumerate()
-			.map(|(tri, mesh_relation_tri_ref)| {
-				mesh_relation_tri_ref.coplanar_id = -1;
-				if self.halfedge[3 * tri].start_vert < 0 {
-					TriPriority {
-						area2: 0.0,
-						tri: tri as i32,
-					}
-				} else {
-					let v = self.vert_pos[self.halfedge[3 * tri].start_vert as usize];
-					TriPriority {
-						area2: (self.vert_pos[self.halfedge[3 * tri].end_vert as usize] - v)
-							.cross(
-								&(self.vert_pos[self.halfedge[3 * tri + 1].end_vert as usize] - v),
-							)
-							.magnitude_squared(),
-						tri: tri as i32,
-					}
-				}
-			})
-			.collect_into_vec(&mut tri_priority);
+		for tri in 0..num_tri {
+			self.mesh_relation.tri_ref[tri].coplanar_id = -1;
+			if self.halfedge.start((3 * tri) as i32) < 0 {
+				tri_priority[tri] = TriPriority {
+					area2: 0.0,
+					tri: tri as i32,
+				};
+				continue;
+			}
 
-		tri_priority
-			.par_sort_by(|a, b| b.area2.partial_cmp(&a.area2).unwrap_or(CmpOrdering::Equal));
+			let v = self.vert_pos[self.halfedge.start((3 * tri) as i32) as usize];
+			let n = (self.vert_pos[self.halfedge.end(3 * (tri as i32)) as usize] - v)
+				.cross(&(self.vert_pos[self.halfedge.end((3 * tri + 1) as i32) as usize] - v));
+			self.face_normal[tri] = n.normalize();
+			if self.face_normal[tri].x.is_nan() {
+				self.face_normal[tri] = Vector3::new(0.0, 0.0, 1.0);
+			}
+			tri_priority[tri] = TriPriority {
+				area2: n.magnitude_squared(),
+				tri: tri as i32,
+			};
+		}
+
+		tri_priority.sort_by(|a, b| b.area2.partial_cmp(&a.area2).unwrap_or(CmpOrdering::Equal));
 
 		let mut interior_halfedges: Vec<i32> = Vec::default();
 		for tp in &tri_priority {
@@ -617,31 +937,30 @@ impl MeshBoolImpl {
 			}
 
 			self.mesh_relation.tri_ref[tp.tri as usize].coplanar_id = tp.tri;
-			if self.halfedge[(3 * tp.tri) as usize].start_vert < 0 {
+			if self.halfedge.start(3 * tp.tri) < 0 {
 				continue;
 			}
-			let base = self.vert_pos[self.halfedge[(3 * tp.tri) as usize].start_vert as usize];
+			let base = self.vert_pos[self.halfedge.start(3 * tp.tri) as usize];
 			let normal = self.face_normal[tp.tri as usize];
-			vec_resize(&mut interior_halfedges, 3);
+			vec_resize(&mut interior_halfedges, 3, 0);
 			interior_halfedges[0] = 3 * tp.tri;
 			interior_halfedges[1] = 3 * tp.tri + 1;
 			interior_halfedges[2] = 3 * tp.tri + 2;
 			while !interior_halfedges.is_empty() {
-				let h = next_halfedge(
-					self.halfedge[*interior_halfedges.last().unwrap() as usize].paired_halfedge,
-				);
+				let h = next_halfedge(self.halfedge.pair(*interior_halfedges.last().unwrap()));
 				interior_halfedges.pop().unwrap();
 				if self.mesh_relation.tri_ref[(h / 3) as usize].coplanar_id >= 0 {
 					continue;
 				}
 
-				let v = self.vert_pos[self.halfedge[h as usize].end_vert as usize];
+				let v = self.vert_pos[self.halfedge.end(h) as usize];
 				if (v - base).dot(&normal).abs() < self.tolerance {
-					self.mesh_relation.tri_ref[(h / 3) as usize].coplanar_id = tp.tri;
+					let tri = (h / 3) as usize;
+					self.mesh_relation.tri_ref[tri].coplanar_id = tp.tri;
+					self.face_normal[tri] = normal;
 
 					if interior_halfedges.is_empty()
-						|| h != self.halfedge[*interior_halfedges.last().unwrap() as usize]
-							.paired_halfedge
+						|| h != self.halfedge.pair(*interior_halfedges.last().unwrap())
 					{
 						interior_halfedges.push(h);
 					} else {
@@ -653,6 +972,76 @@ impl MeshBoolImpl {
 				}
 			}
 		}
+		self.calculate_vert_normals();
+	}
+
+	///Dereference duplicate property vertices if they are exactly floating-point
+	///equal. These unreferenced properties are then removed by CompactProps.
+	pub fn dedupe_prop_verts(&mut self) {
+		let num_prop = self.num_prop();
+		if num_prop == 0 {
+			return;
+		}
+
+		let mut vert2vert: Vec<(i32, i32)> = vec![(-1, -1); self.halfedge.len()];
+		for edge_idx in 0..self.halfedge.len() {
+			let pair = self.halfedge.pair(edge_idx as i32);
+			if pair < 0 {
+				continue;
+			}
+			let edge_face = edge_idx / 3;
+			let pair_face = pair / 3;
+
+			if self.mesh_relation.tri_ref[edge_face].mesh_id
+				!= self.mesh_relation.tri_ref[pair_face as usize].mesh_id
+			{
+				continue;
+			}
+
+			let prop0 = self.halfedge.prop(edge_idx as i32);
+			let prop1 = self.halfedge.prop(next_halfedge(pair));
+			let mut prop_equal = true;
+			for p in 0..num_prop {
+				if self.properties[num_prop * prop0 as usize + p]
+					!= self.properties[num_prop * prop1 as usize + p]
+				{
+					prop_equal = false;
+					break;
+				}
+			}
+			if prop_equal {
+				vert2vert[edge_idx] = (prop0, prop1);
+			}
+		}
+
+		let mut vert_labels: Vec<i32> = vec![];
+		let num_prop_vert = self.num_prop_vert();
+
+		fn get_labels(components: &mut Vec<i32>, edges: &Vec<(i32, i32)>, num_nodes: i32) -> i32 {
+			let uf = DisjointSets::new(num_nodes as u64);
+			for edge in edges {
+				if edge.0 == -1 || edge.1 == -1 {
+					continue;
+				}
+				uf.unite(edge.0 as u64, edge.1 as u64);
+			}
+
+			return uf.connected_components(components) as i32;
+		}
+
+		let num_labels = get_labels(&mut vert_labels, &vert2vert, num_prop_vert as i32) as usize;
+
+		let mut label2vert: Vec<i32> = vec![0; num_labels];
+		for v in 0..num_prop_vert {
+			label2vert[vert_labels[v] as usize] = v as i32;
+		}
+
+		for edge in 0..self.halfedge.len() as i32 {
+			self.halfedge.set_prop(
+				edge,
+				label2vert[vert_labels[self.halfedge.prop(edge) as usize] as usize],
+			);
+		}
 	}
 
 	///Create the halfedge_ data structure from a list of triangles. If the optional
@@ -662,12 +1051,8 @@ impl MeshBoolImpl {
 	///to map the propVert indices to vert indices.
 	pub fn create_halfedges(&mut self, tri_prop: Vec<Vector3<i32>>, tri_vert: Vec<Vector3<i32>>) {
 		let num_tri = tri_prop.len();
-		let num_halfedge: i32 = (3 * num_tri) as i32;
-		// drop the old value first to avoid copy
-		self.halfedge.clear();
-		unsafe {
-			vec_resize_nofill(&mut self.halfedge, num_halfedge as usize);
-		}
+		let num_halfedge = (3 * num_tri) as i32;
+		let mut halfedge = unsafe { vec_uninit(num_halfedge as usize) };
 
 		let vert_count = self.vert_pos.len() as i32;
 
@@ -684,7 +1069,7 @@ impl MeshBoolImpl {
 
 				if tri_vert.is_empty() {
 					let mut job = PrepHalfedges::<true, _> {
-						halfedges: &mut self.halfedge,
+						halfedges: &mut halfedge,
 						tri_prop: &tri_prop,
 						tri_vert: &tri_vert,
 						f: &mut set_edge,
@@ -696,7 +1081,7 @@ impl MeshBoolImpl {
 					}
 				} else {
 					let mut job = PrepHalfedges::<false, _> {
-						halfedges: &mut self.halfedge,
+						halfedges: &mut halfedge,
 						tri_prop: &tri_prop,
 						tri_vert: &tri_vert,
 						f: &mut set_edge,
@@ -708,8 +1093,8 @@ impl MeshBoolImpl {
 					}
 				}
 
-				let mut ids: Vec<i32> = (0..num_halfedge).into_par_iter().collect();
-				ids.par_sort_by_key(|&i| edge[i as usize]);
+				let mut ids: Vec<i32> = (0..num_halfedge).collect();
+				ids.sort_by_key(|&i| edge[i as usize]);
 				ids
 			} else {
 				// For larger vertex count, we separate the ids into slices for halfedges
@@ -728,7 +1113,7 @@ impl MeshBoolImpl {
 
 				if tri_vert.is_empty() {
 					let mut job = PrepHalfedges::<true, _> {
-						halfedges: &mut self.halfedge,
+						halfedges: &mut halfedge,
 						tri_prop: &tri_prop,
 						tri_vert: &tri_vert,
 						f: &mut set_offset,
@@ -740,7 +1125,7 @@ impl MeshBoolImpl {
 					}
 				} else {
 					let mut job = PrepHalfedges::<false, _> {
-						halfedges: &mut self.halfedge,
+						halfedges: &mut halfedge,
 						tri_prop: &tri_prop,
 						tri_vert: &tri_vert,
 						f: &mut set_offset,
@@ -759,8 +1144,8 @@ impl MeshBoolImpl {
 					for i in 0..3 {
 						let e = 3 * tri + i;
 						let e_usize = e as usize;
-						let v0 = self.halfedge[e_usize].start_vert;
-						let v1 = self.halfedge[e_usize].end_vert;
+						let v0 = halfedge[e_usize].start_vert;
+						let v1 = halfedge[e_usize].end_vert;
 						let offset = if v0 > v1 { 0 } else { vert_count as i32 };
 						let start = v0.min(v1);
 						let index =
@@ -803,28 +1188,62 @@ impl MeshBoolImpl {
 		// Mark opposed triangles for removal - this may strand unreferenced verts
 		// which are removed later by self.remove_unreferenced_verts() and self.finish().
 		let num_edge = num_halfedge / 2;
+		let mut removed = vec![false; num_halfedge as usize];
+
 		let mut consecutive_start = 0;
 		for i in 0..num_edge {
 			let pair0 = ids[i as usize];
-			let h0 = self.halfedge[pair0 as usize];
+			let h0 = halfedge[pair0 as usize];
 			let mut k = num_edge + consecutive_start;
 			loop {
 				let pair1 = ids[k as usize];
-				let h1 = self.halfedge[pair1 as usize];
+				let h1 = halfedge[pair1 as usize];
 				if h0.start_vert != h1.end_vert || h0.end_vert != h1.start_vert {
 					break;
 				}
-				if h1.paired_halfedge != K_REMOVED_HALFEDGE
-					&& self.halfedge[next_halfedge(pair0) as usize].end_vert
-						== self.halfedge[next_halfedge(pair1) as usize].end_vert
+				if !removed[pair1 as usize]
+					&& halfedge[next_halfedge(pair0) as usize].end_vert
+						== halfedge[next_halfedge(pair1) as usize].end_vert
 				{
-					self.halfedge[pair0 as usize].paired_halfedge = K_REMOVED_HALFEDGE;
-					self.halfedge[pair1 as usize].paired_halfedge = K_REMOVED_HALFEDGE;
-					// Reorder so that remaining edges pair up
-					if k != i + num_edge {
-						ids.swap((i + num_edge) as usize, k as usize);
+					removed[pair0 as usize] = true;
+					removed[pair1 as usize] = true;
+					if i + num_edge != k {
+						// Reorder so that remaining edges pair up, while preserving relative
+						// order between the edges (triangle id order)
+						// cannot directly use move and move_backward because we need to keep
+						// removed halfedges in-place
+						let dir = if i + num_edge < k { 1 } else { -1 };
+						let mut a = k;
+						let mut b = k + dir;
+						let is_removed =
+							|x: i32, ids: &mut [i32]| removed[ids[x as usize] as usize];
+						let in_range = |a: i32| {
+							if dir > 0 {
+								a >= i + num_edge
+							} else {
+								a <= i + num_edge
+							}
+						};
+						loop {
+							loop {
+								a -= dir;
+								if !(in_range(a) && is_removed(a, &mut ids)) {
+									break;
+								}
+							}
+							if !in_range(a) {
+								break;
+							}
+							loop {
+								b -= dir;
+								if !(is_removed(b, &mut ids) && b != k) {
+									break;
+								}
+							}
+							ids[b as usize] = ids[a as usize];
+						}
+						ids[(i + num_edge) as usize] = pair1;
 					}
-
 					break;
 				}
 
@@ -837,7 +1256,7 @@ impl MeshBoolImpl {
 			if i + 1 == num_edge {
 				continue;
 			}
-			let h1 = self.halfedge[ids[(i + 1) as usize] as usize];
+			let h1 = halfedge[ids[(i + 1) as usize] as usize];
 			if h1.start_vert == h0.start_vert && h1.end_vert == h0.end_vert {
 				continue;
 			}
@@ -845,47 +1264,43 @@ impl MeshBoolImpl {
 			consecutive_start = i + 1;
 		}
 
-		for i in 0..num_edge as usize {
-			let i = i as i32;
+		self.halfedge = Halfedges::default();
+		unsafe {
+			self.halfedge.resize_nofill(num_halfedge as usize);
+		}
+		for i in 0..num_edge {
 			let pair0 = ids[i as usize];
 			let pair1 = ids[(i + num_edge) as usize];
-			let pair0_usize = pair0 as usize;
-			let pair1_usize = pair1 as usize;
-
-			if self.halfedge[pair0_usize].paired_halfedge != K_REMOVED_HALFEDGE {
-				self.halfedge[pair0_usize].paired_halfedge = pair1;
-				self.halfedge[pair1_usize].paired_halfedge = pair0;
+			if !removed[pair0 as usize] {
+				self.halfedge
+					.set_start(pair0, halfedge[pair0 as usize].start_vert);
+				self.halfedge
+					.set_prop(pair0, halfedge[pair0 as usize].prop_vert);
+				self.halfedge.set_pair(pair0, pair1);
+				self.halfedge
+					.set_start(pair1, halfedge[pair1 as usize].start_vert);
+				self.halfedge
+					.set_prop(pair1, halfedge[pair1 as usize].prop_vert);
+				self.halfedge.set_pair(pair1, pair0);
 			} else {
-				let new_halfedge = Halfedge {
-					start_vert: -1,
-					end_vert: -1,
-					paired_halfedge: -1,
-					prop_vert: 0,
-				};
-
-				self.halfedge[pair0_usize] = new_halfedge;
-				self.halfedge[pair1_usize] = new_halfedge;
+				self.halfedge.set_start(pair0, -1);
+				self.halfedge.set_prop(pair0, 0);
+				self.halfedge.set_pair(pair0, -1);
+				self.halfedge.set_start(pair1, -1);
+				self.halfedge.set_prop(pair1, 0);
+				self.halfedge.set_pair(pair1, -1);
 			}
 		}
 	}
 
-	///Does a full recalculation of the face bounding boxes, including updating
-	///the collider, but does not resort the faces.
-	fn update(&mut self) {
-		self.calculate_bbox();
-		let mut face_box = Vec::new();
-		let mut face_morton = Vec::new();
-		self.get_face_box_morton(&mut face_box, &mut face_morton);
-		self.collider.update_boxes(&face_box);
-	}
-
-	pub fn make_empty(&mut self, status: ManifoldError) {
+	pub fn make_empty(&mut self, status: MeshBoolError) {
 		self.bbox = AABB::default();
 		self.vert_pos = Vec::default();
-		self.halfedge = Vec::default();
+		self.halfedge = Halfedges::default();
 		self.vert_normal = Vec::default();
 		self.face_normal = Vec::default();
 		self.mesh_relation = MeshRelationD::default();
+		self.collider = Collider::default();
 		self.status = status;
 	}
 
@@ -899,14 +1314,12 @@ impl MeshBoolImpl {
 		warp_func(&mut self.vert_pos);
 		self.calculate_bbox();
 		if !self.is_finite() {
-			self.make_empty(ManifoldError::NonFiniteVertex);
+			self.make_empty(MeshBoolError::NonFiniteVertex);
 			return;
 		}
-		self.update();
-		self.face_normal.clear(); // force recalculation of triNormal
 		self.set_epsilon(-1.0, false);
-		self.finish();
-		self.mark_coplanar();
+		self.sort_geometry();
+		self.set_normals_and_coplanar();
 		self.mesh_relation.original_id = -1;
 	}
 
@@ -920,16 +1333,15 @@ impl MeshBoolImpl {
 			return self.clone();
 		}
 		let mut result = MeshBoolImpl::default();
-		if self.status != ManifoldError::NoError {
+		if self.status != MeshBoolError::NoError {
 			result.status = self.status;
 			return result;
 		}
 		if !transform.iter().fold(true, |acc, e| acc && e.is_finite()) {
-			result.make_empty(ManifoldError::NonFiniteVertex);
+			result.make_empty(MeshBoolError::NonFiniteVertex);
 			return result;
 		}
 
-		result.collider = self.collider.clone();
 		result.mesh_relation = self.mesh_relation.clone();
 		result.epsilon = self.epsilon;
 		result.tolerance = self.tolerance;
@@ -943,9 +1355,17 @@ impl MeshBoolImpl {
 			m.1.transform = transform * mat4(&m.1.transform);
 		}
 
-		vec_resize(&mut result.vert_pos, self.num_vert());
-		vec_resize(&mut result.face_normal, self.face_normal.len());
-		vec_resize(&mut result.vert_normal, self.vert_normal.len());
+		vec_resize(&mut result.vert_pos, self.num_vert(), Point3::default());
+		vec_resize(
+			&mut result.face_normal,
+			self.face_normal.len(),
+			Vector3::default(),
+		);
+		vec_resize(
+			&mut result.vert_normal,
+			self.vert_normal.len(),
+			Vector3::default(),
+		);
 		for i in 0..self.vert_pos.len() {
 			let v = &self.vert_pos[i];
 			result.vert_pos[i] = (transform * Vector4::new(v.x, v.y, v.z, 1.0)).into();
@@ -959,54 +1379,46 @@ impl MeshBoolImpl {
 			result.vert_normal[i] = transform_normal(normal_transform, self.vert_normal[i]);
 		}
 
+		if self.num_prop >= 3 {
+			MeshBoolImpl::eager_transform_prop_normals(
+				&self.halfedge,
+				&self.mesh_relation,
+				normal_transform,
+				&mut result.properties,
+				self.num_prop_vert(),
+				self.num_prop,
+				0,
+			);
+		}
+
 		let invert = mat3(transform).determinant() < 0.0;
 		if invert {
 			for tri in 0..result.num_tri() {
 				FlipTris {
 					halfedge: &mut result.halfedge,
 				}
-				.call(tri);
+				.call(tri as i32);
 			}
-		}
-
-		// This optimization does a cheap collider update if the transform is
-		// axis-aligned.
-		if !result.collider.transform(*transform) {
-			result.update();
 		}
 
 		result.calculate_bbox();
 		result.epsilon *= mat3(transform).svd(false, false).singular_values[0];
 		result.set_epsilon(result.epsilon, false);
+
+		result.collider = self.collider.clone();
 		result
 	}
 
-	pub fn set_epsilon(&mut self, min_epsilon: f64, use_single: bool) {
-		self.epsilon = max_epsilon(min_epsilon, &self.bbox);
-		let mut min_tol = self.epsilon;
-		if use_single {
-			min_tol = min_tol.max(f32::EPSILON as f64 * self.bbox.scale());
-		}
-
-		self.tolerance = self.tolerance.max(min_tol);
-	}
-
-	///If face normals are already present, this function uses them to compute
-	///vertex normals (angle-weighted pseudo-normals); otherwise it also computes
-	///the face normals. Face normals are only calculated when needed because
-	///nearly degenerate faces will accrue rounding error, while the Boolean can
-	///retain their original normal, which is more accurate and can help with
-	///merging coplanar faces.
-	///
-	///If the face normals have been invalidated by an operation like Warp(),
-	///ensure you do faceNormal_.resize(0) before calling this function to force
-	///recalculation.
-	pub fn calculate_normals(&mut self) {
+	///This function uses the face normals to compute
+	///vertex normals (angle-weighted pseudo-normals). Face normals should only be
+	///calculated when needed because nearly degenerate faces will accrue rounding
+	///error, while the Boolean can retain their original normal, which is more
+	///accurate and can help with merging coplanar faces.
+	pub fn calculate_vert_normals(&mut self) {
 		let num_vert = self.num_vert();
-		vec_resize(&mut self.vert_normal, num_vert);
+		vec_resize(&mut self.vert_normal, num_vert, Vector3::default());
 
 		let vert_halfedge_map: Vec<AtomicI32> = (0..self.num_vert())
-			.into_par_iter()
 			.map(|_| AtomicI32::new(i32::MAX))
 			.collect();
 
@@ -1028,47 +1440,8 @@ impl MeshBoolImpl {
 			}
 		};
 
-		if self.face_normal.len() != self.num_tri() {
-			let num_tri = self.num_tri();
-			vec_resize(&mut self.face_normal, num_tri);
-			self.face_normal[0..num_tri]
-				.par_iter_mut()
-				.enumerate()
-				.for_each(|(face, tri_normal)| {
-					let face = face as i32;
-					if self.halfedge[(3 * face) as usize].start_vert < 0 {
-						*tri_normal = Vector3::new(0.0, 0.0, 1.0);
-						return;
-					}
-
-					let mut tri_verts = Vector3::<i32>::default();
-					for i in 0..3 {
-						let v = self.halfedge[(3 * face + i) as usize].start_vert;
-						tri_verts[i as usize] = v;
-						atomic_min(3 * face + i, v);
-					}
-
-					let mut edge = [Vector3::<f64>::default(); 3];
-					for i in 0..3 {
-						let j = next3_usize(i);
-						edge[i] = (self.vert_pos[tri_verts[j] as usize]
-							- self.vert_pos[tri_verts[i] as usize])
-							.normalize();
-					}
-
-					*tri_normal = edge[0].cross(&edge[1]).normalize();
-					if tri_normal.x.is_nan() {
-						*tri_normal = Vector3::new(0.0, 0.0, 1.0);
-					}
-				});
-		} else {
-			self.halfedge
-				.par_iter_mut()
-				.enumerate()
-				.for_each(|(i, halfedge)| {
-					let i = i as i32;
-					atomic_min(i, halfedge.start_vert);
-				});
+		for i in 0..self.halfedge.len() as i32 {
+			atomic_min(i, self.halfedge.start(i));
 		}
 
 		for vert in 0..self.num_vert() {
@@ -1082,9 +1455,9 @@ impl MeshBoolImpl {
 			let mut normal = Vector3::from_element(0.0);
 			self.for_vert(first_edge, |edge| {
 				let tri_verts = Vector3::<i32>::new(
-					self.halfedge[edge as usize].start_vert,
-					self.halfedge[edge as usize].end_vert,
-					self.halfedge[next_halfedge(edge) as usize].end_vert,
+					self.halfedge.start(edge),
+					self.halfedge.end(edge),
+					self.halfedge.end(next_halfedge(edge)),
 				);
 				let curr_edge = (self.vert_pos[tri_verts[1] as usize]
 					- self.vert_pos[tri_verts[0] as usize])
@@ -1104,13 +1477,23 @@ impl MeshBoolImpl {
 				} else if dot <= -1.0 {
 					f64::consts::PI
 				} else {
-					sun_acos(dot)
+					libm::acos(dot)
 				};
 				normal += phi * self.face_normal[(edge / 3) as usize];
 			});
 
-			self.vert_normal[vert] = normal.normalize();
+			self.vert_normal[vert] = safe_normalize(normal);
 		}
+	}
+
+	pub fn set_epsilon(&mut self, min_epsilon: f64, use_single: bool) {
+		self.epsilon = max_epsilon(min_epsilon, &self.bbox);
+		let mut min_tol = self.epsilon;
+		if use_single {
+			min_tol = min_tol.max(f32::EPSILON as f64 * self.bbox.scale());
+		}
+
+		self.tolerance = self.tolerance.max(min_tol);
 	}
 
 	///Remaps all the contained meshIDs to new unique values to represent new
@@ -1134,7 +1517,7 @@ impl MeshBoolImpl {
 		let num_tri = self.num_tri();
 		for i in 0..num_tri {
 			let tri_ref = &mut self.mesh_relation.tri_ref[i];
-			tri_ref.mesh_id = *mesh_id_old2new.get(&tri_ref.mesh_id).unwrap_or(&0)
+			tri_ref.mesh_id = *mesh_id_old2new.get(&tri_ref.mesh_id).unwrap()
 		}
 	}
 
@@ -1142,7 +1525,7 @@ impl MeshBoolImpl {
 	pub fn for_vert(&self, halfedge: i32, mut func: impl FnMut(i32)) {
 		let mut current = halfedge;
 		loop {
-			current = next_halfedge(self.halfedge[current as usize].paired_halfedge);
+			current = next_halfedge(self.halfedge.pair(current));
 			func(current);
 			if current == halfedge {
 				break;
@@ -1154,7 +1537,7 @@ impl MeshBoolImpl {
 	pub fn for_vert_mut(&mut self, halfedge: i32, mut func: impl FnMut(&mut Self, i32)) {
 		let mut current = halfedge;
 		loop {
-			current = next_halfedge(self.halfedge[current as usize].paired_halfedge);
+			current = next_halfedge(self.halfedge.pair(current));
 			func(self, current);
 			if current == halfedge {
 				break;
@@ -1163,7 +1546,7 @@ impl MeshBoolImpl {
 	}
 
 	#[inline]
-	pub fn for_vert_fun<T>(
+	pub fn for_vert_fn<T>(
 		&self,
 		halfedge: i32,
 		mut transform: impl FnMut(i32) -> T,
@@ -1172,7 +1555,7 @@ impl MeshBoolImpl {
 		let mut here: T = transform(halfedge);
 		let mut current: i32 = halfedge;
 		loop {
-			let next_halfedge: i32 = next_halfedge(self.halfedge[current as usize].paired_halfedge);
+			let next_halfedge: i32 = next_halfedge(self.halfedge.pair(current));
 			let mut next: T = transform(next_halfedge);
 			binary_op(current, &here, &mut next);
 			here = next;
@@ -1180,75 +1563,6 @@ impl MeshBoolImpl {
 			if current == halfedge {
 				break;
 			}
-		}
-	}
-
-	///Dereference duplicate property vertices if they are exactly floating-point
-	///equal. These unreferenced properties are then removed by CompactProps.
-	pub fn dedupe_prop_verts(&mut self) {
-		let num_prop = self.num_prop();
-		if num_prop == 0 {
-			return;
-		}
-
-		let mut vert2vert: Vec<(i32, i32)> = vec![(-1, -1); self.halfedge.len()];
-		for edge_idx in 0..self.halfedge.len() {
-			let edge = self.halfedge[edge_idx];
-			if edge.paired_halfedge < 0 {
-				continue;
-			}
-			let edge_face = edge_idx / 3;
-			let pair_face = edge.paired_halfedge / 3;
-
-			if self.mesh_relation.tri_ref[edge_face].mesh_id
-				!= self.mesh_relation.tri_ref[pair_face as usize].mesh_id
-			{
-				continue;
-			}
-
-			let prop0 = self.halfedge[edge_idx].prop_vert;
-			let prop1 = self.halfedge[next_halfedge(edge.paired_halfedge) as usize].prop_vert;
-			let mut prop_equal = true;
-			for p in 0..num_prop {
-				if self.properties[num_prop * prop0 as usize + p]
-					!= self.properties[num_prop * prop1 as usize + p]
-				{
-					prop_equal = false;
-					break;
-				}
-			}
-			if prop_equal {
-				vert2vert[edge_idx] = (prop0, prop1);
-			}
-		}
-
-		let mut vert_labels: Vec<i32> = vec![];
-		let num_prop_vert = self.num_prop_vert();
-
-		fn get_labels(
-			components: &mut Vec<i32>,
-			edges: &Vec<(i32, i32)>,
-			num_nodes: usize,
-		) -> usize {
-			let uf = DisjointSets::new(num_nodes as u32);
-			for edge in edges {
-				if edge.0 == -1 || edge.1 == -1 {
-					continue;
-				}
-				uf.unite(edge.0 as u32, edge.1 as u32);
-			}
-
-			return uf.connected_components(components);
-		}
-
-		let num_labels = get_labels(&mut vert_labels, &vert2vert, num_prop_vert);
-
-		let mut label2vert: Vec<i32> = vec![0; num_labels];
-		for v in 0..num_prop_vert {
-			label2vert[vert_labels[v] as usize] = v as i32;
-		}
-		for edge in self.halfedge.iter_mut() {
-			edge.prop_vert = label2vert[vert_labels[edge.prop_vert as usize] as usize];
 		}
 	}
 }
@@ -1260,9 +1574,9 @@ impl Default for MeshBoolImpl {
 			epsilon: -1.0,
 			tolerance: -1.0,
 			num_prop: 0,
-			status: ManifoldError::NoError,
+			status: MeshBoolError::NoError,
 			vert_pos: Vec::default(),
-			halfedge: Vec::default(),
+			halfedge: Halfedges::default(),
 			properties: Vec::default(),
 			vert_normal: Vec::default(),
 			face_normal: Vec::default(),
