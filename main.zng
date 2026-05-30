@@ -8,7 +8,6 @@ type bool {
 
 mod ::std {
 	mod vec {
-		// For internal use
 		type Vec<::nalgebra::Vector3<f64>> {
 			#layout(size = 24, align = 8);
 
@@ -24,7 +23,7 @@ mod ::std {
 			fn with_capacity(usize) -> Vec<::nalgebra::Vector3<i32>>;
 			fn push(&mut self, ::nalgebra::Vector3<i32>);
 			fn as_ptr(&self) -> *const ::nalgebra::Vector3<i32>;
-            fn get(&self, usize) -> ::core::option::Option<&::nalgebra::Vector3<i32>> deref [::nalgebra::Vector3<i32>];
+			fn get(&self, usize) -> ::core::option::Option<&::nalgebra::Vector3<i32>> deref [::nalgebra::Vector3<i32>];
 		}
 		type Vec<::nalgebra::Vector4<f64>> {
 			#layout(size = 24, align = 8);
@@ -41,8 +40,7 @@ mod ::std {
 			fn new() -> Vec<u32>;
 			fn clone(&self) -> Vec<u32>;
 			fn len(&self) -> usize;
-            fn get(&self, usize) -> ::core::option::Option<&u32> deref [u32];
-            //fn get_mut(&mut self, usize) -> ::core::option::Option<&mut u32> deref [u32];
+			fn get(&self, usize) -> ::core::option::Option<&u32> deref [u32];
 			fn is_empty(&self) -> bool;
 			fn push(&mut self, u32);
 			fn as_ptr(&self) -> *const u32;
@@ -57,8 +55,7 @@ mod ::std {
 			fn new() -> Vec<f32>;
 			fn clone(&self) -> Vec<f32>;
 			fn len(&self) -> usize;
-            fn get(&self, usize) -> ::core::option::Option<&f32> deref [f32];
-            //fn get_mut(&mut self, usize) -> ::core::option::Option<&mut f32> deref [f32];
+			fn get(&self, usize) -> ::core::option::Option<&f32> deref [f32];
 			fn is_empty(&self) -> bool;
 			fn push(&mut self, f32);
 			fn as_ptr(&self) -> *const f32;
@@ -73,8 +70,7 @@ mod ::std {
 			fn new() -> Vec<u64>;
 			fn clone(&self) -> Vec<u64>;
 			fn len(&self) -> usize;
-            fn get(&self, usize) -> ::core::option::Option<&u64> deref [u64];
-            //fn get_mut(&mut self, usize) -> ::core::option::Option<&mut u64> deref [u64];
+			fn get(&self, usize) -> ::core::option::Option<&u64> deref [u64];
 			fn is_empty(&self) -> bool;
 			fn push(&mut self, u64);
 			fn as_ptr(&self) -> *const u64;
@@ -89,8 +85,7 @@ mod ::std {
 			fn new() -> Vec<f64>;
 			fn clone(&self) -> Vec<f64>;
 			fn len(&self) -> usize;
-            fn get(&self, usize) -> ::core::option::Option<&f64> deref [f64];
-            //fn get_mut(&mut self, usize) -> ::core::option::Option<&mut f64> deref [f64];
+			fn get(&self, usize) -> ::core::option::Option<&f64> deref [f64];
 			fn is_empty(&self) -> bool;
 			fn push(&mut self, f64);
 			fn as_ptr(&self) -> *const f64;
@@ -99,11 +94,43 @@ mod ::std {
 			fn resize(&mut self, usize, f64);
 		}
 
+		type Vec<u8> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<u8>;
+			fn clone(&self) -> Vec<u8>;
+			fn len(&self) -> usize;
+			fn is_empty(&self) -> bool;
+			fn push(&mut self, u8);
+			fn as_ptr(&self) -> *const u8;
+			fn as_mut_ptr(&mut self) -> *mut u8;
+			fn clear(&mut self);
+		}
+
 		type Vec<crate::MeshBool> {
 			#layout(size = 24, align = 8);
 
+			fn new() -> Vec<crate::MeshBool>;
 			fn len(&self) -> usize;
-            fn get(&self, usize) -> ::core::option::Option<&crate::MeshBool> deref [crate::MeshBool];
+			fn push(&mut self, crate::MeshBool);
+			fn get(&self, usize) -> ::core::option::Option<&crate::MeshBool> deref [crate::MeshBool];
+		}
+
+		type Vec<::nalgebra::Point2<f64>> {
+			#layout(size = 24, align = 8);
+
+			fn get(&self, usize) -> ::core::option::Option<&::nalgebra::Point2<f64>> deref [::nalgebra::Point2<f64>];
+			fn len(&self) -> usize;
+			fn new() -> Vec<::nalgebra::Point2<f64>>;
+			fn push(&mut self, ::nalgebra::Point2<f64>);
+		}
+		type Vec<Vec<::nalgebra::Point2<f64>>> {
+			#layout(size = 24, align = 8);
+
+			fn get(&self, usize) -> ::core::option::Option<&Vec<::nalgebra::Point2<f64>>> deref [Vec<::nalgebra::Point2<f64>>];
+			fn len(&self) -> usize;
+			fn new() -> Vec<Vec<::nalgebra::Point2<f64>>>;
+			fn push(&mut self, Vec<::nalgebra::Point2<f64>>);
 		}
 	}
 }
@@ -174,14 +201,6 @@ mod ::core {
 
 			fn unwrap(self) -> &crate::MeshBool;
 		}
-
-		type Option<&::nalgebra::Point3<f64>> {
-			#layout(size = 8, align = 8);
-			wellknown_traits(Copy);
-
-			fn is_some(&self) -> bool;
-			fn unwrap(self) -> &::nalgebra::Point3<f64>;
-		}
 		type Option<Box<dyn Fn(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>> {
 			#layout(size = 16, align = 8);
 
@@ -192,7 +211,7 @@ mod ::core {
 }
 
 type [f64] {
-    wellknown_traits(?Sized);
+	wellknown_traits(?Sized);
 
 	fn as_ptr(&self) -> *const f64;
 	fn as_mut_ptr(&mut self) -> *mut f64;
@@ -201,16 +220,6 @@ type [f64] {
 type [::nalgebra::Vector3<f64>] {
 	wellknown_traits(?Sized);
 }
-
-type [::nalgebra::Point3<f64>] {
-	wellknown_traits(?Sized);
-
-	fn len(&self) -> usize;
-	fn get(&self, usize) -> core::option::Option<&::nalgebra::Point3<f64>>;
-	//fn get_mut(&mut self, usize) -> core::option::Option<&mut ::nalgebra::Point3<f64>> deref [::nalgebra::Point3<f64>];
-}
-
-
 
 mod ::std::slice {
 	fn from_raw_parts<f64>(*const f64, usize) -> &[f64];
@@ -242,8 +251,6 @@ mod ::nalgebra {
 
 		fn new(i32, i32, i32) -> Vector3<i32>;
 
-		// field name (offset = X, type = T);
-
 		fn get_x(&self) -> i32;
 		fn get_y(&self) -> i32;
 		fn get_z(&self) -> i32;
@@ -255,8 +262,6 @@ mod ::nalgebra {
 		wellknown_traits(Copy);
 
 		fn new(f64, f64, f64) -> Vector3<f64>;
-
-		// field name (offset = X, type = T);
 	}
 
 	type Vector4<f64> {
@@ -279,8 +284,6 @@ mod ::nalgebra {
 
 		fn new(i32, i32, i32, i32) -> Vector4<i32>;
 
-		// field name (offset = X, type = T);
-
 		fn get_x(&self) -> i32;
 		fn get_y(&self) -> i32;
 		fn get_z(&self) -> i32;
@@ -293,8 +296,6 @@ mod ::nalgebra {
 		wellknown_traits(Copy);
 
 		fn new(bool, bool, bool, bool) -> Vector4<bool>;
-
-		// field name (offset = X, type = T);
 	}
 
 	type Point2<f64> {
@@ -319,40 +320,6 @@ mod ::nalgebra {
 	}
 }
 
-mod ::std {
-	mod vec {
-		type Vec<crate::polygon::PolyVert> {
-			#layout(size = 24, align = 8);
-			fn len(&self) -> usize;
-			fn new() -> Vec<crate::polygon::PolyVert>;
-			fn push(&mut self, crate::polygon::PolyVert);
-		}
-		type Vec<Vec<crate::polygon::PolyVert>> {
-			#layout(size = 24, align = 8);
-			fn len(&self) -> usize;
-			fn new() -> Vec<Vec<crate::polygon::PolyVert>>;
-			fn push(&mut self, Vec<crate::polygon::PolyVert>);
-		}
-
-		type Vec<::nalgebra::Point2<f64>> {
-			#layout(size = 24, align = 8);
-
-            fn get(&self, usize) -> ::core::option::Option<&::nalgebra::Point2<f64>> deref [::nalgebra::Point2<f64>];
-			fn len(&self) -> usize;
-			fn new() -> Vec<::nalgebra::Point2<f64>>;
-			fn push(&mut self, ::nalgebra::Point2<f64>);
-		}
-		type Vec<Vec<::nalgebra::Point2<f64>>> {
-			#layout(size = 24, align = 8);
-
-            fn get(&self, usize) -> ::core::option::Option<&Vec<::nalgebra::Point2<f64>>> deref [Vec<::nalgebra::Point2<f64>>];
-			fn len(&self) -> usize;
-			fn new() -> Vec<Vec<::nalgebra::Point2<f64>>>;
-			fn push(&mut self, Vec<::nalgebra::Point2<f64>>);
-		}
-	}
-}
-
 type Box<dyn Fn(&mut [f64], ::nalgebra::Point3<f64>, &[f64])> {
 	#layout(size = 16, align = 8);
 }
@@ -361,34 +328,21 @@ type Box<dyn Fn(&mut ::nalgebra::Point3<f64>)> {
 	#layout(size = 16, align = 8);
 }
 
-type Box<dyn Fn(&mut [::nalgebra::Point3<f64>])> {
-	#layout(size = 16, align = 8);
-}
-
 mod crate {
 	mod polygon {
-		type PolyVert {
-			#layout(size = 24, align = 8);
-			field pos (offset = 0, type = ::nalgebra::Point2<f64>);
-			field idx (offset = 16, type = i32);
-
-			fn new(::nalgebra::Point2<f64>, i32) -> PolyVert;
-		}
-		fn triangulate_idx(
-			&::std::vec::Vec<::std::vec::Vec<PolyVert>>,
-			f64,
-			bool
-		) -> ::std::vec::Vec<::nalgebra::Vector3<i32>>;
 		fn triangulate(
 			&::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>,
 			f64,
 			bool
 		) -> ::std::vec::Vec<::nalgebra::Vector3<i32>>;
 	}
+
 	type MeshBool {
-		#layout(size = 320, align = 8);
+		// BorgerLand master as of 9889b05
+		#layout(size = 368, align = 8);
 
 		fn default() -> MeshBool;
+		fn clone(&self) -> MeshBool;
 		fn simplify(&self, ::core::option::Option<f64>) -> MeshBool;
 		fn genus(&self) -> usize;
 		fn surface_area(&self) -> f64;
@@ -396,13 +350,7 @@ mod crate {
 		fn original_id(&self) -> i32;
 		fn tetrahedron() -> MeshBool;
 		fn cube(::nalgebra::Vector3<f64>, bool) -> MeshBool;
-		fn cylinder(
-			f64,
-			f64,
-			f64,
-			u32,
-			bool,
-		) -> MeshBool;
+		fn cylinder(f64, f64, f64, i32, bool) -> MeshBool;
 		fn sphere(f64, i32) -> MeshBool;
 		fn extrude(
 			&::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>,
@@ -410,11 +358,6 @@ mod crate {
 			u32,
 			f64,
 			::nalgebra::Vector2<f64>,
-		) -> MeshBool;
-		fn revolve(
-			&::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>,
-			i32,
-			f64,
 		) -> MeshBool;
 		fn decompose(&self) -> ::std::vec::Vec<MeshBool>;
 		fn as_original(&self) -> MeshBool;
@@ -426,13 +369,12 @@ mod crate {
 		fn rotate(&self, f64, f64, f64) -> MeshBool;
 		fn transform(&self, &::nalgebra::Matrix3x4<f64>) -> MeshBool;
 		fn mirror(&self, ::nalgebra::Vector3<f64>) -> MeshBool;
-		fn warp(&self, Box<dyn Fn(&mut ::nalgebra::Point3<f64>)>) -> MeshBool;
-		fn warp_batch(&self, Box<dyn Fn(&mut [::nalgebra::Point3<f64>])>) -> MeshBool;
-		fn set_properties(
+		fn set_properties_boxed(
 			&self,
 			i32,
 			::core::option::Option<Box<dyn Fn(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>>,
 		) -> MeshBool;
+		fn warp_boxed(&self, Box<dyn Fn(&mut ::nalgebra::Point3<f64>)>) -> MeshBool;
 		fn calculate_curvature(&self, i32, i32) -> MeshBool;
 		fn calculate_normals(&self, i32, f64) -> MeshBool;
 		fn refine(&self, i32) -> MeshBool;
@@ -448,7 +390,7 @@ mod crate {
 		fn from_meshgl_32(&MeshGL32) -> MeshBool;
 		fn from_meshgl_64(&MeshGL64) -> MeshBool;
 		fn is_empty(&self) -> bool;
-		fn status(&self) -> ManifoldError;
+		fn status(&self) -> MeshBoolError;
 		fn num_vert(&self) -> usize;
 		fn num_edge(&self) -> usize;
 		fn num_tri(&self) -> usize;
@@ -460,18 +402,22 @@ mod crate {
 		fn set_tolerance(&self, f64) -> MeshBool;
 		fn project(&self) -> ::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>;
 		fn min_gap(&self, &MeshBool, f64) -> f64;
-
-		fn clone(&self) -> MeshBool;
 	}
+
 	type (MeshBool, MeshBool) {
-		#layout(size = 640, align = 8);
+		#layout(size = 736, align = 8);
 
 		field 0 (offset = 0, type = MeshBool);
-		field 1 (offset = 320, type = MeshBool);
+		field 1 (offset = 368, type = MeshBool);
 	}
 
+	// MeshGLP<f32, u32> — BorgerLand has run_flags (Vec<u8>) between run_transform and face_id
+	// Offsets confirmed by offset_of! probe:
+	//   vert_properties=0  tri_verts=24  merge_from_vert=48  merge_to_vert=72
+	//   run_index=96  run_original_id=120  run_transform=144  run_flags=168
+	//   face_id=192  num_prop=216  tolerance=220  total=224
 	type MeshGL32 {
-		#layout(size = 200, align = 8);
+		#layout(size = 224, align = 8);
 
 		fn default() -> MeshGL32;
 		fn clone(&self) -> MeshGL32;
@@ -479,23 +425,27 @@ mod crate {
 		fn num_vert(&self) -> usize;
 		fn num_tri(&self) -> usize;
 
-		//field name (offset = X, type = T);
-		field num_prop (offset = 192, type = u32);
-		field vert_properties (offset = 0, type = ::std::vec::Vec<f32>);
-		field tri_verts (offset = 24, type = ::std::vec::Vec<u32>);
-		field merge_from_vert (offset = 48, type = ::std::vec::Vec<u32>);
-		field merge_to_vert (offset = 72, type = ::std::vec::Vec<u32>);
-		field run_index (offset = 96, type = ::std::vec::Vec<u32>);
+		field num_prop      (offset = 216, type = u32);
+		field vert_properties (offset = 0,   type = ::std::vec::Vec<f32>);
+		field tri_verts       (offset = 24,  type = ::std::vec::Vec<u32>);
+		field merge_from_vert (offset = 48,  type = ::std::vec::Vec<u32>);
+		field merge_to_vert   (offset = 72,  type = ::std::vec::Vec<u32>);
+		field run_index       (offset = 96,  type = ::std::vec::Vec<u32>);
 		field run_original_id (offset = 120, type = ::std::vec::Vec<u32>);
-		field run_transform (offset = 144, type = ::std::vec::Vec<f32>);
-		field face_id (offset = 168, type = ::std::vec::Vec<u32>);
-		field tolerance (offset = 196, type = f32);
+		field run_transform   (offset = 144, type = ::std::vec::Vec<f32>);
+		field face_id         (offset = 192, type = ::std::vec::Vec<u32>);
+		field tolerance       (offset = 220, type = f32);
 
 		fn merge(&mut self) -> bool;
 	}
 
+	// MeshGLP<f64, u64> — same extra run_flags field
+	// Offsets: each Vec<f64/u64>=24, run_original_id is Vec<u32>=24
+	//   vert_properties=0  tri_verts=24  merge_from_vert=48  merge_to_vert=72
+	//   run_index=96  run_original_id=120  run_transform=144  run_flags=168
+	//   face_id=192  num_prop=216  tolerance=224  total=232
 	type MeshGL64 {
-		#layout(size = 208, align = 8);
+		#layout(size = 232, align = 8);
 
 		fn default() -> MeshGL64;
 		fn clone(&self) -> MeshGL64;
@@ -503,17 +453,16 @@ mod crate {
 		fn num_vert(&self) -> usize;
 		fn num_tri(&self) -> usize;
 
-		//field name (offset = X, type = T);
-		field num_prop (offset = 192, type = u64);
-		field vert_properties (offset = 0, type = ::std::vec::Vec<f64>);
-		field tri_verts (offset = 24, type = ::std::vec::Vec<u64>);
-		field merge_from_vert (offset = 48, type = ::std::vec::Vec<u64>);
-		field merge_to_vert (offset = 72, type = ::std::vec::Vec<u64>);
-		field run_index (offset = 96, type = ::std::vec::Vec<u64>);
+		field num_prop        (offset = 216, type = u64);
+		field vert_properties (offset = 0,   type = ::std::vec::Vec<f64>);
+		field tri_verts       (offset = 24,  type = ::std::vec::Vec<u64>);
+		field merge_from_vert (offset = 48,  type = ::std::vec::Vec<u64>);
+		field merge_to_vert   (offset = 72,  type = ::std::vec::Vec<u64>);
+		field run_index       (offset = 96,  type = ::std::vec::Vec<u64>);
 		field run_original_id (offset = 120, type = ::std::vec::Vec<u32>);
-		field run_transform (offset = 144, type = ::std::vec::Vec<f64>);
-		field face_id (offset = 168, type = ::std::vec::Vec<u64>);
-		field tolerance (offset = 200, type = f64);
+		field run_transform   (offset = 144, type = ::std::vec::Vec<f64>);
+		field face_id         (offset = 192, type = ::std::vec::Vec<u64>);
+		field tolerance       (offset = 224, type = f64);
 
 		fn merge(&mut self) -> bool;
 	}
@@ -523,7 +472,7 @@ mod crate {
 
 		wellknown_traits(Copy);
 
-		field min (offset = 0, type = ::nalgebra::Point3<f64>);
+		field min (offset = 0,  type = ::nalgebra::Point3<f64>);
 		field max (offset = 24, type = ::nalgebra::Point3<f64>);
 	}
 
@@ -537,7 +486,7 @@ mod crate {
 		constructor Intersect;
 	}
 
-	type ManifoldError {
+	type MeshBoolError {
 		#layout(size = 1, align = 1);
 
 		wellknown_traits(Copy);
@@ -567,36 +516,5 @@ mod crate {
 		fn is_face_id_wrong_length(&self) -> bool;
 		fn is_merge_index_out_of_bounds(&self) -> bool;
 		fn is_vertex_out_of_bounds(&self) -> bool;
-	}
-	// TMP
-	mod utils {
-		fn ccw(::nalgebra::Point2<f64>, ::nalgebra::Point2<f64>, ::nalgebra::Point2<f64>, f64) -> i32;
-		fn mat3(&::nalgebra::Matrix3x4<f64>) -> ::nalgebra::Matrix3<f64>;
-	}
-	// For internal use
-	mod tri_dis {
-		fn distance_triangle_triangle_squared(&[::nalgebra::Vector3<f64>], &[::nalgebra::Vector3<f64>]) -> f64;
-	}
-
-	mod subdivision {
-		type Partition {
-			#layout(size = 80, align = 8);
-
-			field idx (offset = 48, type = ::nalgebra::Vector4<i32>);
-			field sorted_divisions (offset = 64, type = ::nalgebra::Vector4<i32>);
-			field vert_bary (offset = 0, type = ::std::vec::Vec<::nalgebra::Vector4<f64>>);
-			field tri_vert (offset = 24, type = ::std::vec::Vec<::nalgebra::Vector3<i32>>);
-
-			fn interior_offset(&self) -> i32;
-			fn num_interior(&self) -> i32;
-			fn get_partition(::nalgebra::Vector4<i32>) -> Partition;
-			fn reindex(
-				&self,
-				::nalgebra::Vector4<i32>,
-				::nalgebra::Vector4<i32>,
-				::nalgebra::Vector4<bool>,
-				i32,
-			) -> ::std::vec::Vec<::nalgebra::Vector3<i32>>;
-		}
 	}
 }
