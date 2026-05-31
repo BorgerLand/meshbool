@@ -26,6 +26,12 @@ impl PolyVert {
 	pub fn new(pos: Point2<f64>, idx: i32) -> Self {
 		Self { pos, idx }
 	}
+	pub fn get_pos(&self) -> Point2<f64> {
+		self.pos
+	}
+	pub fn get_idx(&self) -> i32 {
+		self.idx
+	}
 }
 
 pub type SimplePolygonIdx = Vec<PolyVert>;

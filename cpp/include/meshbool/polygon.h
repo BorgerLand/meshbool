@@ -78,12 +78,7 @@ inline std::vector<ivec3> TriangulateIdx(const PolygonsIdx& polys,
   new_cpp.reserve(return_val.len());
   for (size_t i = 0; i < return_val.len(); i++) {
     auto vec = return_val.get(i).unwrap();
-    new_cpp.push_back({vec.get_x(), vec.get_y(), vec.get_z()});
-  }
-  return new_cpp;
-}
-
-inline std::vector<ivec3> Triangulate(const Polygons& polygons,
+    new_cpp.push_back(ivec3(vec.get_x(), vec.get_y(), vec.get_z()));(const Polygons& polygons,
                                       double epsilon = -1,
                                       bool allowConvex = true) {
   auto new_p = CPPPolygonsToRSPolygons(polygons);
@@ -95,7 +90,7 @@ inline std::vector<ivec3> Triangulate(const Polygons& polygons,
   new_cpp.reserve(return_val.len());
   for (size_t i = 0; i < return_val.len(); i++) {
     auto vec = return_val.get(i).unwrap();
-    new_cpp.push_back({vec.get_x(), vec.get_y(), vec.get_z()});
+    new_cpp.push_back(ivec3(vec.get_x(), vec.get_y(), vec.get_z()));
   }
   return new_cpp;
 }
