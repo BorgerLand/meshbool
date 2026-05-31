@@ -101,6 +101,7 @@ mod ::std {
 			fn clone(&self) -> Vec<u8>;
 			fn len(&self) -> usize;
 			fn is_empty(&self) -> bool;
+			fn get(&self, usize) -> ::core::option::Option<&u8> deref [u8];
 			fn push(&mut self, u8);
 			fn as_ptr(&self) -> *const u8;
 			fn as_mut_ptr(&mut self) -> *mut u8;
@@ -169,6 +170,13 @@ mod ::core {
 
 			fn is_some(&self) -> bool;
 			fn unwrap(self) -> &f32;
+		}
+		type Option<&u8> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &u8;
 		}
 		type Option<&u32> {
 			#layout(size = 8, align = 8);
@@ -380,7 +388,7 @@ mod crate {
 		fn original_id(&self) -> i32;
 		fn tetrahedron() -> MeshBool;
 		fn cube(::nalgebra::Vector3<f64>, bool) -> MeshBool;
-		fn cylinder(f64, f64, f64, i32, bool) -> MeshBool;
+		fn cylinder(f64, f64, f64, u32, bool) -> MeshBool;
 		fn sphere(f64, i32) -> MeshBool;
 		fn extrude(
 			&::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>,
@@ -452,8 +460,8 @@ mod crate {
 		fn default() -> MeshGL32;
 		fn clone(&self) -> MeshGL32;
 
-		fn num_vert(&self) -> usize;
-		fn num_tri(&self) -> usize;
+		fn num_vert(&self) -> u32;
+		fn num_tri(&self) -> u32;
 
 		field num_prop      (offset = 216, type = u32);
 		field vert_properties (offset = 0,   type = ::std::vec::Vec<f32>);
@@ -466,8 +474,6 @@ mod crate {
 		field run_flags       (offset = 168, type = ::std::vec::Vec<u8>);
 		field face_id         (offset = 192, type = ::std::vec::Vec<u32>);
 		field tolerance       (offset = 220, type = f32);
-
-		fn merge(&mut self) -> bool;
 	}
 
 	// MeshGLP<f64, u64> — same extra run_flags field
@@ -481,8 +487,8 @@ mod crate {
 		fn default() -> MeshGL64;
 		fn clone(&self) -> MeshGL64;
 
-		fn num_vert(&self) -> usize;
-		fn num_tri(&self) -> usize;
+		fn num_vert(&self) -> u64;
+		fn num_tri(&self) -> u64;
 
 		field num_prop        (offset = 216, type = u64);
 		field vert_properties (offset = 0,   type = ::std::vec::Vec<f64>);
@@ -495,8 +501,6 @@ mod crate {
 		field run_flags       (offset = 168, type = ::std::vec::Vec<u8>);
 		field face_id         (offset = 192, type = ::std::vec::Vec<u64>);
 		field tolerance       (offset = 224, type = f64);
-
-		fn merge(&mut self) -> bool;
 	}
 
 	type AABB {

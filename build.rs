@@ -11,14 +11,14 @@ fn main() {
 		let crate_dir = build_rs::input::cargo_manifest_dir();
 		let out_dir = build_rs::input::out_dir();
 
-		build_rs::output::rerun_if_changed("main.zng");
+		build_rs::output::rerun_if_changed("test/test.zng");
 
-		let generated_cpp = path::PathBuf::from("generated/meshbool/");
+		let generated_cpp = path::PathBuf::from("test/generated/meshbool/");
 		let _ = fs::create_dir_all(&generated_cpp);
 		let rs_file = out_dir.join("generated.rs");
 		let h_file = generated_cpp.join("meshbool.h");
 
-		Zngur::from_zng_file(crate_dir.join("main.zng"))
+		Zngur::from_zng_file(crate_dir.join("test/test.zng"))
 			.with_cpp_file(generated_cpp.join("generated.cpp"))
 			.with_h_file(h_file)
 			.with_rs_file(rs_file.clone())

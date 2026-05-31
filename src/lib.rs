@@ -32,6 +32,18 @@ mod tri_dis;
 mod utils;
 mod vec;
 
+#[cfg(feature = "test")]
+mod zngur_stubs;
+
+#[cfg(feature = "test")]
+use zngur_stubs::{
+    Vector3i32Coords as _, Vector4f64Coords as _, Vector4i32Coords as _,
+    Point2f64Coords as _, Point3f64Coords as _,
+};
+
+#[cfg(feature = "test")]
+include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+
 #[test]
 fn test() {
 	use nalgebra::Vector3;
