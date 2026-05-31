@@ -1,5 +1,3 @@
-/target
-/build
-/generated
-/test/generated
-/test/build
+target
+test/generated
+test/build

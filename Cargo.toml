@@ -7,6 +7,7 @@ edition = "2024"
 crate-type = ["staticlib"]
 
 [features]
+default=["test"]
 test = ["dep:zngur", "dep:build-rs"]
 
 [dependencies]
@@ -14,6 +15,5 @@ libm = "0.2"
 nalgebra = { version = "0.34", default-features = false, features = ["std", "libm-force"] }
 
 [build-dependencies]
-# zngur = { version = "0.10", optional = true }
-zngur = { git = "https://github.com/HKalbasi/zngur.git", rev = "0765d1ba9a6395528406576dfee33142f318b1d5", optional = true }
+zngur = { version = "0.10", optional = true }
 build-rs = { version = "0.3.2", optional = true}

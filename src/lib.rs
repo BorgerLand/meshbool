@@ -33,34 +33,16 @@ mod utils;
 mod vec;
 
 #[cfg(feature = "test")]
-mod zngur_stubs;
+mod test;
 
 #[cfg(feature = "test")]
-use zngur_stubs::{
-    Vector3i32Coords as _, Vector4f64Coords as _, Vector4i32Coords as _,
-    Point2f64Coords as _, Point3f64Coords as _,
+use test::{
+	Point2f64Coords as _, Point3f64Coords as _, Vector3i32Coords as _, Vector4f64Coords as _,
+	Vector4i32Coords as _,
 };
 
 #[cfg(feature = "test")]
-include!(concat!(env!("OUT_DIR"), "/generated.rs"));
-
-#[test]
-fn test() {
-	use nalgebra::Vector3;
-
-	//just make sure it don't crash at the sight of the simplest shapes
-	let cube1 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), true);
-	let cube2 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), false);
-
-	let union = &cube1 + &cube2;
-	println!("{:?}", union.get_mesh_gl_32(0));
-
-	let difference = &cube1 - &cube2;
-	println!("{:?}", difference.get_mesh_gl_32(0));
-
-	let intersection = &cube1 ^ &cube2;
-	println!("{:?}", intersection.get_mesh_gl_32(0));
-}
+include!(concat!(env!("OUT_DIR"), "/test.rs"));
 
 fn halfspace(b_box: AABB, mut normal: Vector3<f64>, origin_offset: f64) -> MeshBool {
 	normal.normalize_mut();
