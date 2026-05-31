@@ -3,8 +3,17 @@ name = "meshbool"
 version = "0.0.0"
 edition = "2024"
 
+[lib]
+crate-type = ["staticlib"]
+
 [features]
+default=["test"]
+test = ["dep:zngur", "dep:build-rs"]
 
 [dependencies]
 libm = "0.2"
 nalgebra = { version = "0.34", default-features = false, features = ["std", "libm-force"] }
+
+[build-dependencies]
+zngur = { version = "0.10", optional = true }
+build-rs = { version = "0.3.2", optional = true}

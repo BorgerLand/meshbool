@@ -1,0 +1,556 @@
+//#convert_panic_to_exception
+
+type bool {
+	#layout(size = 1, align = 1);
+
+	wellknown_traits(Copy);
+}
+
+mod ::std {
+	mod vec {
+		type Vec<::nalgebra::Vector3<f64>> {
+			#layout(size = 24, align = 8);
+
+			fn len(&self) -> usize;
+			fn with_capacity(usize) -> Vec<::nalgebra::Vector3<f64>>;
+			fn push(&mut self, ::nalgebra::Vector3<f64>);
+			fn as_slice(&self) -> &[::nalgebra::Vector3<f64>];
+		}
+		type Vec<::nalgebra::Vector3<i32>> {
+			#layout(size = 24, align = 8);
+
+			fn len(&self) -> usize;
+			fn with_capacity(usize) -> Vec<::nalgebra::Vector3<i32>>;
+			fn push(&mut self, ::nalgebra::Vector3<i32>);
+			fn as_ptr(&self) -> *const ::nalgebra::Vector3<i32>;
+			fn get(&self, usize) -> ::core::option::Option<&::nalgebra::Vector3<i32>> deref [::nalgebra::Vector3<i32>];
+		}
+		type Vec<::nalgebra::Vector4<f64>> {
+			#layout(size = 24, align = 8);
+
+			fn len(&self) -> usize;
+			fn with_capacity(usize) -> Vec<::nalgebra::Vector4<f64>>;
+			fn push(&mut self, ::nalgebra::Vector4<f64>);
+			fn as_ptr(&self) -> *const ::nalgebra::Vector4<f64>;
+		}
+
+		type Vec<u32> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<u32>;
+			fn clone(&self) -> Vec<u32>;
+			fn len(&self) -> usize;
+			fn get(&self, usize) -> ::core::option::Option<&u32> deref [u32];
+			fn is_empty(&self) -> bool;
+			fn push(&mut self, u32);
+			fn as_ptr(&self) -> *const u32;
+			fn as_mut_ptr(&mut self) -> *mut u32;
+			fn clear(&mut self);
+			fn resize(&mut self, usize, u32);
+		}
+
+		type Vec<f32> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<f32>;
+			fn clone(&self) -> Vec<f32>;
+			fn len(&self) -> usize;
+			fn get(&self, usize) -> ::core::option::Option<&f32> deref [f32];
+			fn is_empty(&self) -> bool;
+			fn push(&mut self, f32);
+			fn as_ptr(&self) -> *const f32;
+			fn as_mut_ptr(&mut self) -> *mut f32;
+			fn clear(&mut self);
+			fn resize(&mut self, usize, f32);
+		}
+
+		type Vec<u64> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<u64>;
+			fn clone(&self) -> Vec<u64>;
+			fn len(&self) -> usize;
+			fn get(&self, usize) -> ::core::option::Option<&u64> deref [u64];
+			fn is_empty(&self) -> bool;
+			fn push(&mut self, u64);
+			fn as_ptr(&self) -> *const u64;
+			fn as_mut_ptr(&mut self) -> *mut u64;
+			fn clear(&mut self);
+			fn resize(&mut self, usize, u64);
+		}
+
+		type Vec<f64> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<f64>;
+			fn clone(&self) -> Vec<f64>;
+			fn len(&self) -> usize;
+			fn get(&self, usize) -> ::core::option::Option<&f64> deref [f64];
+			fn is_empty(&self) -> bool;
+			fn push(&mut self, f64);
+			fn as_ptr(&self) -> *const f64;
+			fn as_mut_ptr(&mut self) -> *mut f64;
+			fn clear(&mut self);
+			fn resize(&mut self, usize, f64);
+		}
+
+		type Vec<u8> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<u8>;
+			fn clone(&self) -> Vec<u8>;
+			fn len(&self) -> usize;
+			fn is_empty(&self) -> bool;
+			fn get(&self, usize) -> ::core::option::Option<&u8> deref [u8];
+			fn push(&mut self, u8);
+			fn as_ptr(&self) -> *const u8;
+			fn as_mut_ptr(&mut self) -> *mut u8;
+			fn clear(&mut self);
+		}
+
+		type Vec<crate::MeshBool> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<crate::MeshBool>;
+			fn len(&self) -> usize;
+			fn push(&mut self, crate::MeshBool);
+			fn get(&self, usize) -> ::core::option::Option<&crate::MeshBool> deref [crate::MeshBool];
+		}
+
+		type Vec<::nalgebra::Point2<f64>> {
+			#layout(size = 24, align = 8);
+
+			fn get(&self, usize) -> ::core::option::Option<&::nalgebra::Point2<f64>> deref [::nalgebra::Point2<f64>];
+			fn len(&self) -> usize;
+			fn new() -> Vec<::nalgebra::Point2<f64>>;
+			fn push(&mut self, ::nalgebra::Point2<f64>);
+		}
+		type Vec<Vec<::nalgebra::Point2<f64>>> {
+			#layout(size = 24, align = 8);
+
+			fn get(&self, usize) -> ::core::option::Option<&Vec<::nalgebra::Point2<f64>>> deref [Vec<::nalgebra::Point2<f64>>];
+			fn len(&self) -> usize;
+			fn new() -> Vec<Vec<::nalgebra::Point2<f64>>>;
+			fn push(&mut self, Vec<::nalgebra::Point2<f64>>);
+		}
+
+		type Vec<crate::polygon::PolyVert> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<crate::polygon::PolyVert>;
+			fn len(&self) -> usize;
+			fn push(&mut self, crate::polygon::PolyVert);
+		}
+
+		type Vec<Vec<crate::polygon::PolyVert>> {
+			#layout(size = 24, align = 8);
+
+			fn new() -> Vec<Vec<crate::polygon::PolyVert>>;
+			fn len(&self) -> usize;
+			fn push(&mut self, Vec<crate::polygon::PolyVert>);
+		}
+	}
+}
+
+mod ::core {
+	mod option {
+		type Option<f64> {
+			#layout(size = 16, align = 8);
+			wellknown_traits(Copy);
+
+			constructor None;
+			constructor Some(f64);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> f64;
+		}
+		type Option<&f32> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &f32;
+		}
+		type Option<&u8> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &u8;
+		}
+		type Option<&u32> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &u32;
+		}
+		type Option<&f64> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &f64;
+		}
+		type Option<&u64> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &u64;
+		}
+		type Option<&::nalgebra::Vector3<i32>> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &::nalgebra::Vector3<i32>;
+		}
+		type Option<&::nalgebra::Point2<f64>> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &::nalgebra::Point2<f64>;
+		}
+		type Option<&::std::vec::Vec<::nalgebra::Point2<f64>>> {
+			#layout(size = 8, align = 8);
+			wellknown_traits(Copy);
+
+			fn is_some(&self) -> bool;
+			fn unwrap(self) -> &::std::vec::Vec<::nalgebra::Point2<f64>>;
+		}
+		type Option<&crate::MeshBool> {
+			#layout(size = 8, align = 8);
+
+			fn unwrap(self) -> &crate::MeshBool;
+		}
+		type Option<Box<dyn Fn(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>> {
+			#layout(size = 16, align = 8);
+
+			constructor None;
+			constructor Some(Box<dyn Fn(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>);
+		}
+	}
+}
+
+type [f64] {
+	wellknown_traits(?Sized);
+
+	fn as_ptr(&self) -> *const f64;
+	fn as_mut_ptr(&mut self) -> *mut f64;
+}
+
+type [::nalgebra::Vector3<f64>] {
+	wellknown_traits(?Sized);
+}
+
+mod ::std::slice {
+	fn from_raw_parts<f64>(*const f64, usize) -> &[f64];
+}
+
+mod ::nalgebra {
+	type Matrix3x4<f64> {
+		#layout(size = 96, align = 8);
+
+		fn from_column_slice(&[f64]) -> Matrix3x4<f64>;
+	}
+
+	type Matrix3<f64> {
+		#layout(size = 72, align = 8);
+	}
+
+	type Vector2<f64> {
+		#layout(size = 16, align = 8);
+
+		wellknown_traits(Copy);
+
+		fn new(f64, f64) -> Vector2<f64>;
+	}
+
+	type Vector3<i32> {
+		#layout(size = 12, align = 4);
+
+		wellknown_traits(Copy);
+
+		fn new(i32, i32, i32) -> Vector3<i32>;
+
+		fn get_x(&self) -> i32;
+		fn get_y(&self) -> i32;
+		fn get_z(&self) -> i32;
+	}
+
+	type Vector3<f64> {
+		#layout(size = 24, align = 8);
+
+		wellknown_traits(Copy);
+
+		fn new(f64, f64, f64) -> Vector3<f64>;
+	}
+
+	type Vector4<f64> {
+		#layout(size = 32, align = 8);
+
+		wellknown_traits(Copy);
+
+		fn new(f64, f64, f64, f64) -> Vector4<f64>;
+
+		fn get_x(&self) -> f64;
+		fn get_y(&self) -> f64;
+		fn get_z(&self) -> f64;
+		fn get_w(&self) -> f64;
+	}
+
+	type Vector4<i32> {
+		#layout(size = 16, align = 4);
+
+		wellknown_traits(Copy);
+
+		fn new(i32, i32, i32, i32) -> Vector4<i32>;
+
+		fn get_x(&self) -> i32;
+		fn get_y(&self) -> i32;
+		fn get_z(&self) -> i32;
+		fn get_w(&self) -> i32;
+	}
+
+	type Vector4<bool> {
+		#layout(size = 4, align = 1);
+
+		wellknown_traits(Copy);
+
+		fn new(bool, bool, bool, bool) -> Vector4<bool>;
+	}
+
+	type Point2<f64> {
+		#layout(size = 16, align = 8);
+
+		wellknown_traits(Copy);
+
+		fn new(f64, f64) -> Point2<f64>;
+		fn get_x(&self) -> f64;
+		fn get_y(&self) -> f64;
+	}
+
+	type Point3<f64> {
+		#layout(size = 24, align = 8);
+
+		wellknown_traits(Copy);
+
+		fn new(f64, f64, f64) -> Point3<f64>;
+		fn get_x(&self) -> f64;
+		fn get_y(&self) -> f64;
+		fn get_z(&self) -> f64;
+	}
+}
+
+type Box<dyn Fn(&mut [f64], ::nalgebra::Point3<f64>, &[f64])> {
+	#layout(size = 16, align = 8);
+}
+
+type Box<dyn Fn(&mut ::nalgebra::Point3<f64>)> {
+	#layout(size = 16, align = 8);
+}
+
+mod crate {
+	mod polygon {
+		type PolyVert {
+			#layout(size = 24, align = 8);
+
+			fn new(::nalgebra::Point2<f64>, i32) -> PolyVert;
+			fn get_pos(&self) -> ::nalgebra::Point2<f64>;
+			fn get_idx(&self) -> i32;
+		}
+
+		fn triangulate(
+			&::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>,
+			f64,
+			bool
+		) -> ::std::vec::Vec<::nalgebra::Vector3<i32>>;
+
+		fn triangulate_idx(
+			&::std::vec::Vec<::std::vec::Vec<crate::polygon::PolyVert>>,
+			f64,
+			bool
+		) -> ::std::vec::Vec<::nalgebra::Vector3<i32>>;
+	}
+
+	type MeshBool {
+		// BorgerLand master as of 9889b05
+		#layout(size = 368, align = 8);
+
+		fn default() -> MeshBool;
+		fn clone(&self) -> MeshBool;
+		fn simplify(&self, ::core::option::Option<f64>) -> MeshBool;
+		fn genus(&self) -> usize;
+		fn surface_area(&self) -> f64;
+		fn volume(&self) -> f64;
+		fn original_id(&self) -> i32;
+		fn tetrahedron() -> MeshBool;
+		fn cube(::nalgebra::Vector3<f64>, bool) -> MeshBool;
+		fn cylinder(f64, f64, f64, u32, bool) -> MeshBool;
+		fn sphere(f64, i32) -> MeshBool;
+		fn extrude(
+			&::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>,
+			f64,
+			u32,
+			f64,
+			::nalgebra::Vector2<f64>,
+		) -> MeshBool;
+		fn decompose(&self) -> ::std::vec::Vec<MeshBool>;
+		fn as_original(&self) -> MeshBool;
+		fn reserve_ids(u32) -> u32;
+		fn matches_tri_normals(&self) -> bool;
+		fn num_degenerate_tris(&self) -> usize;
+		fn translate(&self, ::nalgebra::Vector3<f64>) -> MeshBool;
+		fn scale(&self, ::nalgebra::Vector3<f64>) -> MeshBool;
+		fn rotate(&self, f64, f64, f64) -> MeshBool;
+		fn transform(&self, &::nalgebra::Matrix3x4<f64>) -> MeshBool;
+		fn mirror(&self, ::nalgebra::Vector3<f64>) -> MeshBool;
+		fn set_properties_boxed(
+			&self,
+			i32,
+			::core::option::Option<Box<dyn Fn(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>>,
+		) -> MeshBool;
+		fn warp_boxed(&self, Box<dyn Fn(&mut ::nalgebra::Point3<f64>)>) -> MeshBool;
+		fn calculate_curvature(&self, i32, i32) -> MeshBool;
+		fn calculate_normals(&self, i32, f64) -> MeshBool;
+		fn refine(&self, i32) -> MeshBool;
+		fn refine_to_length(&self, f64) -> MeshBool;
+		fn refine_to_tolerance(&self, f64) -> MeshBool;
+		fn boolean(&self, &MeshBool, OpType) -> MeshBool;
+		fn split(&self, &MeshBool) -> (MeshBool, MeshBool);
+		fn split_by_plane(&self, ::nalgebra::Vector3<f64>, f64) -> (MeshBool, MeshBool);
+		fn trim_by_plane(&self, ::nalgebra::Vector3<f64>, f64) -> MeshBool;
+		fn slice(&self, f64) -> ::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>;
+		fn get_mesh_gl_32(&self, i32) -> MeshGL32;
+		fn get_mesh_gl_64(&self, i32) -> MeshGL64;
+		fn from_meshgl_32(&MeshGL32) -> MeshBool;
+		fn from_meshgl_64(&MeshGL64) -> MeshBool;
+		fn is_empty(&self) -> bool;
+		fn status(&self) -> MeshBoolError;
+		fn num_vert(&self) -> usize;
+		fn num_edge(&self) -> usize;
+		fn num_tri(&self) -> usize;
+		fn num_prop(&self) -> usize;
+		fn num_prop_vert(&self) -> usize;
+		fn bounding_box(&self) -> AABB;
+		fn get_epsilon(&self) -> f64;
+		fn get_tolerance(&self) -> f64;
+		fn set_tolerance(&self, f64) -> MeshBool;
+		fn project(&self) -> ::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>;
+		fn min_gap(&self, &MeshBool, f64) -> f64;
+	}
+
+	type (MeshBool, MeshBool) {
+		#layout(size = 736, align = 8);
+
+		field 0 (offset = 0, type = MeshBool);
+		field 1 (offset = 368, type = MeshBool);
+	}
+
+	// MeshGLP<f32, u32> — BorgerLand has run_flags (Vec<u8>) between run_transform and face_id
+	// Offsets confirmed by offset_of! probe:
+	//   vert_properties=0  tri_verts=24  merge_from_vert=48  merge_to_vert=72
+	//   run_index=96  run_original_id=120  run_transform=144  run_flags=168
+	//   face_id=192  num_prop=216  tolerance=220  total=224
+	type MeshGL32 {
+		#layout(size = 224, align = 8);
+
+		fn default() -> MeshGL32;
+		fn clone(&self) -> MeshGL32;
+
+		fn num_vert(&self) -> u32;
+		fn num_tri(&self) -> u32;
+
+		field num_prop      (offset = 216, type = u32);
+		field vert_properties (offset = 0,   type = ::std::vec::Vec<f32>);
+		field tri_verts       (offset = 24,  type = ::std::vec::Vec<u32>);
+		field merge_from_vert (offset = 48,  type = ::std::vec::Vec<u32>);
+		field merge_to_vert   (offset = 72,  type = ::std::vec::Vec<u32>);
+		field run_index       (offset = 96,  type = ::std::vec::Vec<u32>);
+		field run_original_id (offset = 120, type = ::std::vec::Vec<u32>);
+		field run_transform   (offset = 144, type = ::std::vec::Vec<f32>);
+		field run_flags       (offset = 168, type = ::std::vec::Vec<u8>);
+		field face_id         (offset = 192, type = ::std::vec::Vec<u32>);
+		field tolerance       (offset = 220, type = f32);
+	}
+
+	// MeshGLP<f64, u64> — same extra run_flags field
+	// Offsets: each Vec<f64/u64>=24, run_original_id is Vec<u32>=24
+	//   vert_properties=0  tri_verts=24  merge_from_vert=48  merge_to_vert=72
+	//   run_index=96  run_original_id=120  run_transform=144  run_flags=168
+	//   face_id=192  num_prop=216  tolerance=224  total=232
+	type MeshGL64 {
+		#layout(size = 232, align = 8);
+
+		fn default() -> MeshGL64;
+		fn clone(&self) -> MeshGL64;
+
+		fn num_vert(&self) -> u64;
+		fn num_tri(&self) -> u64;
+
+		field num_prop        (offset = 216, type = u64);
+		field vert_properties (offset = 0,   type = ::std::vec::Vec<f64>);
+		field tri_verts       (offset = 24,  type = ::std::vec::Vec<u64>);
+		field merge_from_vert (offset = 48,  type = ::std::vec::Vec<u64>);
+		field merge_to_vert   (offset = 72,  type = ::std::vec::Vec<u64>);
+		field run_index       (offset = 96,  type = ::std::vec::Vec<u64>);
+		field run_original_id (offset = 120, type = ::std::vec::Vec<u32>);
+		field run_transform   (offset = 144, type = ::std::vec::Vec<f64>);
+		field run_flags       (offset = 168, type = ::std::vec::Vec<u8>);
+		field face_id         (offset = 192, type = ::std::vec::Vec<u64>);
+		field tolerance       (offset = 224, type = f64);
+	}
+
+	type AABB {
+		#layout(size = 48, align = 8);
+
+		wellknown_traits(Copy);
+
+		field min (offset = 0,  type = ::nalgebra::Point3<f64>);
+		field max (offset = 24, type = ::nalgebra::Point3<f64>);
+	}
+
+	type OpType {
+		#layout(size = 1, align = 1);
+
+		wellknown_traits(Copy);
+
+		constructor Add;
+		constructor Subtract;
+		constructor Intersect;
+	}
+
+	type MeshBoolError {
+		#layout(size = 1, align = 1);
+
+		wellknown_traits(Copy);
+
+		constructor NoError;
+		constructor NonFiniteVertex;
+		constructor InvalidConstruction;
+		constructor ResultTooLarge;
+		constructor NotManifold;
+		constructor MissingPositionProperties;
+		constructor MergeVectorsDifferentLengths;
+		constructor TransformWrongLength;
+		constructor RunIndexWrongLength;
+		constructor FaceIDWrongLength;
+		constructor MergeIndexOutOfBounds;
+		constructor VertexOutOfBounds;
+
+		fn is_no_error(&self) -> bool;
+		fn is_non_finite_vertex(&self) -> bool;
+		fn is_invalid_construction(&self) -> bool;
+		fn is_result_too_large(&self) -> bool;
+		fn is_not_manifold(&self) -> bool;
+		fn is_missing_position_properties(&self) -> bool;
+		fn is_merge_vectors_different_lengths(&self) -> bool;
+		fn is_transform_wrong_length(&self) -> bool;
+		fn is_run_index_wrong_length(&self) -> bool;
+		fn is_face_id_wrong_length(&self) -> bool;
+		fn is_merge_index_out_of_bounds(&self) -> bool;
+		fn is_vertex_out_of_bounds(&self) -> bool;
+	}
+}
