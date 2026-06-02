@@ -48,7 +48,6 @@ I'm aware of the **[manifold-rs crate](https://github.com/WilstonOreo/manifold-r
 
 **Roadmap priorities:**
 
-- Port the test suite
 - Standard stuff: CI, code formatting, publish on crates.io
 - Port parallelization (Rayon?)
 - General cleanup/idiomatic refactor: I'm most looking forward to removing all classes that make up the algorithm's pipeline. Pure functional, chronological order

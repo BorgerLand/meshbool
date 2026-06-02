@@ -32,23 +32,8 @@ mod tri_dis;
 mod utils;
 mod vec;
 
-#[test]
-fn test() {
-	use nalgebra::Vector3;
-
-	//just make sure it don't crash at the sight of the simplest shapes
-	let cube1 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), true);
-	let cube2 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), false);
-
-	let union = &cube1 + &cube2;
-	println!("{:?}", union.get_mesh_gl_32(0));
-
-	let difference = &cube1 - &cube2;
-	println!("{:?}", difference.get_mesh_gl_32(0));
-
-	let intersection = &cube1 ^ &cube2;
-	println!("{:?}", intersection.get_mesh_gl_32(0));
-}
+#[cfg(feature = "test")]
+mod test;
 
 fn halfspace(b_box: AABB, mut normal: Vector3<f64>, origin_offset: f64) -> MeshBool {
 	normal.normalize_mut();
@@ -411,7 +396,7 @@ impl MeshBool {
 	///matter after a non-rigid warp.
 	///
 	///@param warpFunc A function that modifies a given vertex position.
-	pub fn warp(&self, warp_func: impl Fn(&mut Point3<f64>)) -> Self {
+	pub fn warp(&self, warp_func: impl FnMut(&mut Point3<f64>)) -> Self {
 		if self.meshbool_impl.status != MeshBoolError::NoError {
 			return Self::propagate_status(self.meshbool_impl.status);
 		}
@@ -429,7 +414,7 @@ impl MeshBool {
 	///warp.
 	///
 	///@param warpFunc A function that modifies multiple vertex positions.
-	pub fn warp_batch(&self, warp_func: impl Fn(&mut [Point3<f64>])) -> Self {
+	pub fn warp_batch(&self, warp_func: impl FnMut(&mut [Point3<f64>])) -> Self {
 		if self.meshbool_impl.status != MeshBoolError::NoError {
 			return Self::propagate_status(self.meshbool_impl.status);
 		}
@@ -457,7 +442,7 @@ impl MeshBool {
 	pub fn set_properties(
 		&self,
 		num_prop: i32,
-		prop_func: Option<impl Fn(&mut [f64], Point3<f64>, &[f64])>,
+		prop_func: Option<impl FnMut(&mut [f64], Point3<f64>, &[f64])>,
 	) -> Self {
 		if self.meshbool_impl.status != MeshBoolError::NoError {
 			return Self::propagate_status(self.meshbool_impl.status);
@@ -472,7 +457,7 @@ impl MeshBool {
 		} else {
 			meshbool_impl.properties = vec![0.0; num_prop as usize * self.num_prop_vert()];
 
-			if let Some(prop_func) = prop_func {
+			if let Some(mut prop_func) = prop_func {
 				for tri in 0..self.num_tri() {
 					for i in 0..3 {
 						let edge = (3 * tri + i) as i32;

@@ -8,23 +8,20 @@ fn main() {
 	#[cfg(feature = "test")]
 	{
 		build_rs::output::rerun_if_changed("Cargo.toml");
+		build_rs::output::rerun_if_changed("test/test.zng");
+
 		let crate_dir = build_rs::input::cargo_manifest_dir();
+		let generated_dir = path::PathBuf::from("test/generated");
 		let out_dir = build_rs::input::out_dir();
 
-		build_rs::output::rerun_if_changed("main.zng");
+		fs::create_dir_all(&generated_dir).unwrap();
+		let rs_file = out_dir.join("test.rs");
 
-		let generated_cpp = path::PathBuf::from("generated/meshbool/");
-		let _ = fs::create_dir_all(&generated_cpp);
-		let rs_file = out_dir.join("generated.rs");
-		let h_file = generated_cpp.join("meshbool.h");
-
-		Zngur::from_zng_file(crate_dir.join("main.zng"))
-			.with_cpp_file(generated_cpp.join("generated.cpp"))
-			.with_h_file(h_file)
+		Zngur::from_zng_file(crate_dir.join("test/test.zng"))
+			.with_cpp_file(generated_dir.join("test.cpp"))
+			.with_h_file(generated_dir.join("test.h"))
 			.with_rs_file(rs_file.clone())
+			.with_zng_header(generated_dir.join("zngur.h"))
 			.generate();
-		let s = fs::read_to_string(&rs_file).expect("File should exist");
-		let new = s.replace("#[no_mangle]", "#[unsafe(no_mangle)]");
-		fs::write(rs_file, new).expect("Failed to write file");
 	}
 }

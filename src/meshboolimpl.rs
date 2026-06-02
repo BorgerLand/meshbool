@@ -1304,13 +1304,13 @@ impl MeshBoolImpl {
 		self.status = status;
 	}
 
-	pub fn warp(&mut self, warp_func: impl Fn(&mut Point3<f64>)) {
+	pub fn warp(&mut self, mut warp_func: impl FnMut(&mut Point3<f64>)) {
 		self.warp_batch(|vecs| {
 			vecs.iter_mut().for_each(|v| warp_func(v));
 		});
 	}
 
-	pub fn warp_batch(&mut self, warp_func: impl Fn(&mut [Point3<f64>])) {
+	pub fn warp_batch(&mut self, mut warp_func: impl FnMut(&mut [Point3<f64>])) {
 		warp_func(&mut self.vert_pos);
 		self.calculate_bbox();
 		if !self.is_finite() {
