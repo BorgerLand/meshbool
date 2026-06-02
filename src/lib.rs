@@ -1,8 +1,8 @@
 use crate::boolean3::Boolean3;
-use crate::common::{LossyFrom, Polygons};
+use crate::common::{LossyFrom, Polygons, cosd, sind};
 use crate::mesh::MeshGLP;
 use crate::meshboolimpl::MeshBoolImpl;
-use nalgebra::{Matrix3, Matrix3x4, Point3, UnitQuaternion, Vector3};
+use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3};
 use std::ops::{Add, AddAssign, BitXor, BitXorAssign, Sub, SubAssign};
 
 pub use crate::common::{AABB, MeshGL32, MeshGL64, OpType};
@@ -339,16 +339,45 @@ impl MeshBool {
 	///@param yDegrees Second rotation, degrees about the global Y-axis.
 	///@param zDegrees Third rotation, degrees about the global Z-axis.
 	pub fn rotate(&self, x_degrees: f64, y_degrees: f64, z_degrees: f64) -> Self {
-		let transform = UnitQuaternion::from_euler_angles(
-			x_degrees.to_radians(),
-			y_degrees.to_radians(),
-			z_degrees.to_radians(),
-		)
-		.to_homogeneous()
-		.fixed_view::<3, 4>(0, 0)
-		.into_owned();
+		let rx = Matrix3::from_column_slice(&[
+			1.0,
+			0.0,
+			0.0,
+			0.0,
+			cosd(x_degrees),
+			sind(x_degrees),
+			0.0,
+			-sind(x_degrees),
+			cosd(x_degrees),
+		]);
+		let ry = Matrix3::from_column_slice(&[
+			cosd(y_degrees),
+			0.0,
+			-sind(y_degrees),
+			0.0,
+			1.0,
+			0.0,
+			sind(y_degrees),
+			0.0,
+			cosd(y_degrees),
+		]);
+		let rz = Matrix3::from_column_slice(&[
+			cosd(z_degrees),
+			sind(z_degrees),
+			0.0,
+			-sind(z_degrees),
+			cosd(z_degrees),
+			0.0,
+			0.0,
+			0.0,
+			1.0,
+		]);
 
-		Self::from(self.meshbool_impl.transform(&transform))
+		let mut transform = Matrix3x4::default();
+		transform
+			.fixed_view_mut::<3, 3>(0, 0)
+			.copy_from(&(rx * ry * rz));
+		self.transform(&transform)
 	}
 
 	///Transform this Manifold in space. The first three columns form a 3x3 matrix
