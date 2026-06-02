@@ -372,14 +372,14 @@ impl Collider {
 		if self.internal_children.is_empty() {
 			return;
 		}
+		let mut find_collision = FindCollision::<SELF_COLLISION, _, _, _> {
+			f: &f,
+			node_bbox: &self.node_bbox,
+			internal_children: &self.internal_children,
+			recorder,
+		};
 		for query_idx in 0..n {
-			FindCollision::<SELF_COLLISION, _, _, _> {
-				f: &f,
-				node_bbox: &self.node_bbox,
-				internal_children: &self.internal_children,
-				recorder,
-			}
-			.call(query_idx as i32);
+			find_collision.call(query_idx as i32);
 		}
 	}
 
@@ -416,7 +416,7 @@ impl Collider {
 			.wrapping_add(z)
 	}
 
-	fn is_axis_aligned(transform: &Matrix3x4<f64>) -> bool {
+	pub fn is_axis_aligned(transform: &Matrix3x4<f64>) -> bool {
 		for row in 0..3 {
 			let mut count = 0;
 			for col in 0..3 {

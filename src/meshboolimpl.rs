@@ -1405,7 +1405,19 @@ impl MeshBoolImpl {
 		result.epsilon *= mat3(transform).svd(false, false).singular_values[0];
 		result.set_epsilon(result.epsilon, false);
 
-		result.collider = self.collider.clone();
+		if !result.is_empty() {
+			if Collider::is_axis_aligned(transform) {
+				result.collider = self.collider.clone();
+				result.collider.transform(*transform);
+			} else {
+				result.collider = self.collider.clone();
+				let mut face_box = Vec::new();
+				let mut face_morton = Vec::new();
+				result.get_face_box_morton(&mut face_box, &mut face_morton);
+				result.collider.update_boxes(&face_box);
+			}
+		}
+
 		result
 	}
 
