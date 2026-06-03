@@ -15,7 +15,7 @@ MeshBool via [Zngur](https://github.com/HKalbasi/zngur)-generated FFI bindings.
 
 | Tool         | Version                          |
 | ------------ | -------------------------------- |
-| Rust         | stable (1.80+)                   |
+| Rust         | 1.88+                            |
 | CMake        | 3.23+                            |
 | C++ compiler | C++17, e.g. GCC 11+ or Clang 14+ |
 
