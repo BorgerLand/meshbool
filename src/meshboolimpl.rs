@@ -354,18 +354,14 @@ impl MeshBoolImpl {
 
 		let mut tri_ref: Vec<TriRef> = unsafe { vec_uninit(num_tri) };
 
-		let mut run_index: Vec<usize> = mesh_gl
-			.run_index
-			.iter()
-			.map(|x| usize::lossy_from(*x))
-			.collect();
+		let mut run_index = mesh_gl.run_index.clone();
 		let run_end = mesh_gl.tri_verts.len();
 		if run_index.is_empty() {
-			run_index = vec![0, run_end];
+			run_index = vec![I::lossy_from(0), I::lossy_from(run_end)];
 		} else if run_index.len() == mesh_gl.run_original_id.len() {
-			run_index.push(run_end);
+			run_index.push(I::lossy_from(run_end));
 		} else if run_index.len() == 1 {
-			run_index.push(run_end);
+			run_index.push(I::lossy_from(run_end));
 		}
 
 		let start_id = MeshBoolImpl::reserve_ids(1.max(mesh_gl.run_original_id.len()));
@@ -381,16 +377,18 @@ impl MeshBoolImpl {
 			// so a caller setting the bit on a too-small MeshGL doesn't make us read
 			// past the property bounds.
 			let run_has_n = mesh_gl.has_normals(i) && num_prop >= 3;
-			for tri in (run_index[i] / 3)..(run_index[i + 1] / 3) {
-				let r = &mut tri_ref[tri as usize];
-				r.mesh_id = mesh_id as i32;
-				r.original_id = original_id;
-				r.face_id = if mesh_gl.face_id.is_empty() {
-					-1
-				} else {
-					usize::lossy_from(mesh_gl.face_id[tri]) as i32
+			for tri in usize::lossy_from(run_index[i]) / 3..usize::lossy_from(run_index[i + 1]) / 3
+			{
+				tri_ref[tri as usize] = TriRef {
+					mesh_id: mesh_id as i32,
+					original_id,
+					face_id: if mesh_gl.face_id.is_empty() {
+						-1
+					} else {
+						usize::lossy_from(mesh_gl.face_id[tri]) as i32
+					},
+					coplanar_id: tri as i32,
 				};
-				r.coplanar_id = tri as i32;
 			}
 
 			if mesh_gl.run_transform.is_empty() {

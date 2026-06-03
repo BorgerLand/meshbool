@@ -15,7 +15,7 @@ MeshBool via [Zngur](https://github.com/HKalbasi/zngur)-generated FFI bindings.
 
 | Tool         | Version                          |
 | ------------ | -------------------------------- |
-| Rust         | 1.88+                            |
+| Rust         | 1.91+                            |
 | CMake        | 3.23+                            |
 | C++ compiler | C++17, e.g. GCC 11+ or Clang 14+ |
 
@@ -29,7 +29,7 @@ Clipper2, GoogleTest, and Corrosion (Rust/CMake integration) are fetched automat
 
 ```bash
 #if you haven't cloned the main repo yet:
-git clone --recurse-submodules https://github.com/JaminKoke/meshbool.git
+git clone --recurse-submodules https://github.com/BorgerLand/meshbool.git
 cd meshbool
 
 #if you've already cloned the main repo:

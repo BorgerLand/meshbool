@@ -412,6 +412,7 @@ mod ::std
 			#layout(size = 24, align = 8);
 			
 			fn len(&self) -> usize;
+			fn as_ptr(&self) -> *const u8;
 			fn as_mut_ptr(&mut self) -> *mut u8;
 			fn resize(&mut self, usize, u8);
 		}
