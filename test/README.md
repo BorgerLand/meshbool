@@ -40,14 +40,14 @@ git submodule update --init --recursive
 ### 2. Build
 
 ```bash
-mkdir -p test/build && cd test/build
-cargo build --features test && cmake ../manifold -DMANIFOLD_CBIND=OFF && make manifold_test -j$(nproc)
+mkdir -p test/manifold/build && cd test/manifold/build
+cmake .. -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
 ```
 
 ### 3. Run the tests
 
 ```bash
-cd test #from inside test/build
+cd test #from inside test/manifold/build
 ./manifold_test
 ```
 
