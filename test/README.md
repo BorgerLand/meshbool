@@ -41,7 +41,7 @@ git submodule update --init --recursive
 
 ```bash
 mkdir -p test/manifold/build && cd test/manifold/build
-cmake .. -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
+cmake .. -DCMAKE_BUILD_TYPE=Debug -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
 ```
 
 ### 3. Run the tests
