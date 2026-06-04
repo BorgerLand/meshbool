@@ -376,7 +376,7 @@ impl MeshBool {
 		let mut transform = Matrix3x4::default();
 		transform
 			.fixed_view_mut::<3, 3>(0, 0)
-			.copy_from(&(rx * ry * rz));
+			.copy_from(&(rz * ry * rx));
 		self.transform(&transform)
 	}
 
