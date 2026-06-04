@@ -219,15 +219,15 @@ impl MeshBoolImpl {
 		};
 
 		// Kahan summation
-		let mut value: f64 = 0.0;
-		let mut value_compensation: f64 = 0.0;
+		let mut value = 0.0;
+		let mut value_compensation = 0.0;
 		for i in 0..self.num_tri() {
-			let value1: f64 = if prop == Property::SurfaceArea {
+			let value1 = if prop == Property::SurfaceArea {
 				area(i)
 			} else {
 				volume(i)
 			};
-			let t: f64 = value + value1;
+			let t = value + value1;
 			value_compensation += (value - t) + value1;
 			value = t;
 		}

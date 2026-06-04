@@ -61,5 +61,6 @@ excluded from the build in `test/CMakeLists.txt`:
 
 | Feature                                | Disabled                                                                              |
 | -------------------------------------- | ------------------------------------------------------------------------------------- |
-| `ExecutionContext` / `WithContext`     | entire `context_test.cpp`; `DeepChainDoesNotOverflowNumLeaves` in `manifold_test.cpp` |
+| `ExecutionContext` / `WithContext`     | Entire `context_test.cpp`; `DeepChainDoesNotOverflowNumLeaves` in `manifold_test.cpp` |
 | `halfedgeTangents` / `InvalidTangents` | `InvalidTangents` in `smooth_test.cpp`                                                |
+| C Bindings (`MANIFOLD_CBIND`)          | Entire `manifoldc_test.cpp`                                                           |
