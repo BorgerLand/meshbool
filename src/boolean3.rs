@@ -508,7 +508,7 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 
 	// Invariant: every ctx-passing parallel op is followed by IsCancelled to
 	// keep partial output from feeding unconditional downstream consumers.
-	let u_a = DisjointSets::new(a.vert_pos.len() as u64);
+	let u_a = DisjointSets::new(a.vert_pos.len());
 	for edge in 0..a.halfedge.len() as i32 {
 		let start = a.halfedge.start(edge);
 		let end = a.halfedge.end(edge);
@@ -518,14 +518,14 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		// check if the edge is broken
 		let it = p1q2.partition_point(|collision_pair| collision_pair[index] < edge);
 		if it == p1q2.len() || p1q2[it][index] != edge {
-			u_a.unite(start as u64, end as u64);
+			u_a.unite(start as usize, end as usize);
 		}
 	}
 
 	// find components, the hope is the number of components should be small
 	let mut components = HashSet::new();
 	for v in 0..a.vert_pos.len() {
-		components.insert(u_a.find(v as u64));
+		components.insert(u_a.find(v));
 	}
 
 	let verts: Vec<_> = components.into_iter().map(|c| c as i32).collect();
@@ -546,7 +546,7 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		.collisions_from_fn::<false, _>(&mut recorder, f, verts.len(), true);
 	// flood fill
 	for i in 0..w03.len() {
-		let root = u_a.find(i as u64) as usize;
+		let root = u_a.find(i);
 		if root == i {
 			continue;
 		}

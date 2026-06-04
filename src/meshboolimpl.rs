@@ -1016,15 +1016,15 @@ impl MeshBoolImpl {
 		let num_prop_vert = self.num_prop_vert();
 
 		fn get_labels(components: &mut Vec<i32>, edges: &Vec<(i32, i32)>, num_nodes: i32) -> i32 {
-			let uf = DisjointSets::new(num_nodes as u64);
+			let uf = DisjointSets::new(num_nodes as usize);
 			for edge in edges {
 				if edge.0 == -1 || edge.1 == -1 {
 					continue;
 				}
-				uf.unite(edge.0 as u64, edge.1 as u64);
+				uf.unite(edge.0 as usize, edge.1 as usize);
 			}
 
-			return uf.connected_components(components) as i32;
+			return uf.connected_components(components);
 		}
 
 		let num_labels = get_labels(&mut vert_labels, &vert2vert, num_prop_vert as i32) as usize;

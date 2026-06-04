@@ -11,18 +11,18 @@ pub struct DisjointSets {
 }
 
 impl DisjointSets {
-	pub fn new(size: u64) -> Self {
-		assert!(size <= u32::MAX as u64);
+	pub fn new(size: usize) -> Self {
+		assert!(size <= u32::MAX as usize);
 		Self {
-			m_data: (0..size).map(|i| AtomicU64::new(i)).collect(),
+			m_data: (0..size).map(|i| AtomicU64::new(i as u64)).collect(),
 		}
 	}
 
-	pub fn find(&self, id: u64) -> u64 {
-		self.find_impl(DisjointSets::to_index(id)) as u64
+	pub fn find(&self, id: usize) -> usize {
+		self.find_impl(DisjointSets::to_index(id)) as usize
 	}
 
-	pub fn unite(&self, id1_in: u64, id2_in: u64) -> u64 {
+	pub fn unite(&self, id1_in: usize, id2_in: usize) -> usize {
 		let mut id1 = DisjointSets::to_index(id1_in);
 		let mut id2 = DisjointSets::to_index(id2_in);
 		loop {
@@ -30,7 +30,7 @@ impl DisjointSets {
 			id2 = self.find_impl(id2);
 
 			if id1 == id2 {
-				return id1 as u64;
+				return id1 as usize;
 			}
 
 			let mut r1 = self.rank(id1);
@@ -66,7 +66,7 @@ impl DisjointSets {
 			break;
 		}
 
-		id2 as u64
+		id2 as usize
 	}
 
 	fn rank(&self, id: u32) -> u32 {
@@ -77,14 +77,14 @@ impl DisjointSets {
 		self.m_data[id as usize].load(Ordering::SeqCst) as u32
 	}
 
-	pub fn connected_components(&self, components: &mut Vec<i32>) -> usize {
+	pub fn connected_components(&self, components: &mut Vec<i32>) -> i32 {
 		unsafe { vec_resize_nofill(components, self.m_data.len()) };
 		let mut lonely_nodes = 0;
 		let mut to_label: HashMap<u32, i32> = HashMap::new();
 		for i in 0..self.m_data.len() {
 			// we optimize for connected component of size 1
 			// no need to put them into the hashmap
-			let i_parent = self.find_impl(DisjointSets::to_index(i as u64));
+			let i_parent = self.find_impl(DisjointSets::to_index(i as usize));
 			if self.rank(i_parent) == 0 {
 				components[i] = to_label.len() as i32 + lonely_nodes;
 				lonely_nodes += 1;
@@ -98,11 +98,11 @@ impl DisjointSets {
 				components[i] = s as i32;
 			}
 		}
-		return to_label.len() + lonely_nodes as usize;
+		return to_label.len() as i32 + lonely_nodes;
 	}
 
-	fn to_index(id: u64) -> u32 {
-		assert!(id <= u32::MAX as u64);
+	fn to_index(id: usize) -> u32 {
+		assert!(id <= u32::MAX as usize);
 		id as u32
 	}
 

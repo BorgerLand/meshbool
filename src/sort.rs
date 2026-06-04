@@ -131,10 +131,13 @@ where
 	permute(&mut open_verts, &vert_new2old);
 
 	let collider = Collider::new(&vert_box, &vert_morton);
-	let uf = DisjointSets::new(num_vert as u64);
+	let uf = DisjointSets::new(num_vert);
 
 	let mut f = |a: i32, b: i32| {
-		uf.unite(open_verts[a as usize] as u64, open_verts[b as usize] as u64);
+		uf.unite(
+			open_verts[a as usize] as usize,
+			open_verts[b as usize] as usize,
+		);
 	};
 
 	let mut recorder = SimpleRecorder::new(&mut f);
@@ -142,15 +145,15 @@ where
 
 	for i in 0..mesh.merge_from_vert.len() {
 		uf.unite(
-			u64::lossy_from(mesh.merge_from_vert[i]),
-			u64::lossy_from(mesh.merge_to_vert[i]),
+			usize::lossy_from(mesh.merge_from_vert[i]),
+			usize::lossy_from(mesh.merge_to_vert[i]),
 		);
 	}
 
 	mesh.merge_to_vert.clear();
 	mesh.merge_from_vert.clear();
 	for v in 0..num_vert {
-		let merge_to = uf.find(v as u64) as usize;
+		let merge_to = uf.find(v);
 		if merge_to != v {
 			mesh.merge_from_vert.push(I::lossy_from(v));
 			mesh.merge_to_vert.push(I::lossy_from(merge_to));
