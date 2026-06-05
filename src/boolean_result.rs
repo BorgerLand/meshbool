@@ -245,20 +245,15 @@ fn add_new_edge_verts(
 			mem::swap(&mut key_left.0, &mut key_left.1);
 		}
 
-		let stable_direction = inclusion < 0;
-		let mut direction = stable_direction;
-
+		let direction = inclusion < 0;
 		for k in 0..3 {
 			let tuple = match k {
-				0 => (stable_direction, edges_p.entry(edge_p).or_default()),
+				0 => (direction, edges_p.entry(edge_p).or_default()),
 				1 => (
-					stable_direction ^ !forward,
+					direction ^ !forward,
 					edges_new.entry(key_right).or_default(),
 				), //revert if not forward
-				2 => (
-					stable_direction ^ forward,
-					edges_new.entry(key_left).or_default(),
-				),
+				2 => (direction ^ forward, edges_new.entry(key_left).or_default()),
 				_ => unreachable!(),
 			};
 
@@ -270,8 +265,6 @@ fn add_new_edge_verts(
 					is_start: tuple.0,
 				});
 			}
-
-			direction = !direction;
 		}
 	}
 }
@@ -602,23 +595,19 @@ fn update_reference(
 		.call(tri_ref);
 	}
 
-	for pair in &in_p.mesh_relation.mesh_id_transform {
-		out_r
-			.mesh_relation
-			.mesh_id_transform
-			.entry(*pair.0)
-			.or_insert(*pair.1);
-	}
+	out_r
+		.mesh_relation
+		.mesh_id_transform
+		.extend(&in_p.mesh_relation.mesh_id_transform);
 
-	for pair in &in_q.mesh_relation.mesh_id_transform {
-		let mut relation = *pair.1;
-		relation.back_side ^= invert_q;
-		out_r
-			.mesh_relation
-			.mesh_id_transform
-			.entry(pair.0 + offset_q)
-			.or_insert(relation);
-	}
+	out_r
+		.mesh_relation
+		.mesh_id_transform
+		.extend(in_q.mesh_relation.mesh_id_transform.iter().map(|pair| {
+			let mut relation = *pair.1;
+			relation.back_side ^= invert_q;
+			(pair.0 + offset_q, relation)
+		}));
 }
 
 struct Barycentric<'a> {

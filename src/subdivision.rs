@@ -308,8 +308,8 @@ impl Partition {
 		}
 
 		let mut lock = PARTITION_CACHE.lock().unwrap();
-		lock.insert(n, partition.clone());
-		return partition;
+		lock.entry(n).or_insert_with(|| partition.clone());
+		partition
 	}
 
 	// Side 0 has added edges while sides 1 and 2 do not. Fan spreads from vert 2.

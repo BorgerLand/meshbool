@@ -392,23 +392,20 @@ impl MeshBoolImpl {
 			}
 
 			if mesh_gl.run_transform.is_empty() {
-				manifold
-					.mesh_relation
-					.mesh_id_transform
-					.entry(mesh_id as i32)
-					.or_insert_with(|| Relation {
+				manifold.mesh_relation.mesh_id_transform.insert(
+					mesh_id as i32,
+					Relation {
 						original_id,
 						transform: Matrix3x4::identity(),
 						back_side: backside,
 						has_normals: run_has_n,
-					});
+					},
+				);
 			} else {
 				let m: [_; 12] = array::from_fn(|j| f64::from(mesh_gl.run_transform[i * 12 + j]));
-				manifold
-					.mesh_relation
-					.mesh_id_transform
-					.entry(mesh_id as i32)
-					.or_insert_with(|| Relation {
+				manifold.mesh_relation.mesh_id_transform.insert(
+					mesh_id as i32,
+					Relation {
 						original_id: original_id,
 						transform: [
 							[m[0], m[1], m[2]],
@@ -419,7 +416,8 @@ impl MeshBoolImpl {
 						.into(),
 						back_side: backside,
 						has_normals: run_has_n,
-					});
+					},
+				);
 			}
 		}
 
@@ -884,15 +882,15 @@ impl MeshBoolImpl {
 		// empty map, which AllHaveNormals() returns false for.
 		let had_normals = self.all_have_normals();
 		self.mesh_relation.mesh_id_transform.clear();
-		self.mesh_relation
-			.mesh_id_transform
-			.entry(mesh_id)
-			.or_insert_with(|| Relation {
+		self.mesh_relation.mesh_id_transform.insert(
+			mesh_id,
+			Relation {
 				original_id: mesh_id,
 				transform: Matrix3x4::identity(),
 				back_side: false,
 				has_normals: had_normals,
-			});
+			},
+		);
 	}
 
 	pub fn set_normals_and_coplanar(&mut self) {
@@ -1516,17 +1514,17 @@ impl MeshBoolImpl {
 		let num_mesh_ids = old_transforms.len();
 		let mut next_mesh_id = MeshBoolImpl::reserve_ids(num_mesh_ids) as i32;
 		for pair in old_transforms {
-			mesh_id_old2new.insert(pair.0, next_mesh_id);
+			mesh_id_old2new.entry(pair.0).or_insert(next_mesh_id);
 			self.mesh_relation
 				.mesh_id_transform
-				.entry(next_mesh_id)
-				.or_insert(pair.1);
+				.insert(next_mesh_id, pair.1);
 			next_mesh_id += 1;
 		}
 
 		let num_tri = self.num_tri();
 		for i in 0..num_tri {
 			let tri_ref = &mut self.mesh_relation.tri_ref[i];
+			//struct UpdateMeshID is inlined here
 			tri_ref.mesh_id = *mesh_id_old2new.get(&tri_ref.mesh_id).unwrap()
 		}
 	}

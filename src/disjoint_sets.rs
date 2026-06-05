@@ -94,7 +94,7 @@ impl DisjointSets {
 				components[i] = *value;
 			} else {
 				let s = to_label.len() as u32 + lonely_nodes as u32;
-				to_label.insert(i_parent, s as i32);
+				to_label.entry(i_parent).or_insert(s as i32);
 				components[i] = s as i32;
 			}
 		}
