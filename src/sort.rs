@@ -1,15 +1,15 @@
-use crate::ManifoldError;
 use crate::MeshGLP;
 use crate::collider::Collider;
 use crate::common::{AABB, LossyFrom};
 use crate::disjoint_sets::DisjointSets;
 use crate::meshboolimpl::MeshBoolImpl;
 use crate::parallel::{gather, inclusive_scan, scatter};
-use crate::shared::Halfedge;
+use crate::shared::Halfedges;
 use crate::utils::{K_PRECISION, permute};
 use crate::vec::{vec_resize, vec_resize_nofill, vec_uninit};
 use nalgebra::{Point3, Vector3};
 use std::mem;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 use crate::collider::SimpleRecorder;
 
@@ -25,24 +25,51 @@ fn morton_code(position: Point3<f64>, bbox: AABB) -> u32 {
 	}
 }
 
+struct ReindexFace<'a> {
+	halfedge: &'a mut Halfedges,
+	old_halfedge: &'a Halfedges,
+	face_new2old: &'a [i32],
+	face_old2new: &'a [i32],
+}
+
+impl ReindexFace<'_> {
+	fn call(&mut self, new_face: i32) {
+		let old_face = self.face_new2old[new_face as usize];
+		for i in 0..3 {
+			let old_edge = 3 * old_face + i;
+			let mut edge = self.old_halfedge.get(old_edge);
+			let paired_face = edge.paired_halfedge / 3;
+			let offset = edge.paired_halfedge - 3 * paired_face;
+			edge.paired_halfedge = 3 * self.face_old2new[paired_face as usize] + offset;
+			let new_edge = 3 * new_face + i;
+			self.halfedge.set(
+				new_edge,
+				edge.start_vert,
+				edge.paired_halfedge,
+				edge.prop_vert,
+			);
+		}
+	}
+}
+
 fn merge_mesh_glp<Precision, I>(mesh: &mut MeshGLP<Precision, I>) -> bool
 where
 	Precision: LossyFrom<f64> + Copy,
 	I: LossyFrom<usize> + Copy,
 	usize: LossyFrom<I>,
-	u32: LossyFrom<I>,
+	u64: LossyFrom<I>,
 	i32: LossyFrom<I>,
 	f64: LossyFrom<Precision>,
 {
 	let mut open_edges: Vec<(i32, i32)> = vec![];
 
-	let mut merge: Vec<i32> = (0..mesh.num_vert() as i32).collect();
+	let mut merge: Vec<i32> = (0..i32::lossy_from(mesh.num_vert())).collect();
 	for i in 0..mesh.merge_from_vert.len() {
 		merge[usize::lossy_from(mesh.merge_from_vert[i])] = i32::lossy_from(mesh.merge_to_vert[i]);
 	}
 
-	let num_vert = mesh.num_vert();
-	let num_tri = mesh.num_tri();
+	let num_vert = usize::lossy_from(mesh.num_vert());
+	let num_tri = usize::lossy_from(mesh.num_tri());
 	let next: [i32; 3] = [1, 2, 0];
 	for tri in 0..num_tri {
 		for i in [0, 1, 2] {
@@ -132,26 +159,29 @@ where
 	permute(&mut open_verts, &vert_new2old);
 
 	let collider = Collider::new(&vert_box, &vert_morton);
-	let uf = DisjointSets::new(num_vert as u32);
+	let uf = DisjointSets::new(num_vert);
 
 	let mut f = |a: i32, b: i32| {
-		uf.unite(open_verts[a as usize] as u32, open_verts[b as usize] as u32);
+		uf.unite(
+			open_verts[a as usize] as usize,
+			open_verts[b as usize] as usize,
+		);
 	};
 
 	let mut recorder = SimpleRecorder::new(&mut f);
-	collider.collisions_from_slice::<true, _, SimpleRecorder<'_>>(&vert_box, &mut recorder, false);
+	collider.collisions_from_slice::<true, _>(&mut recorder, &vert_box, false);
 
 	for i in 0..mesh.merge_from_vert.len() {
 		uf.unite(
-			u32::lossy_from(mesh.merge_from_vert[i]),
-			u32::lossy_from(mesh.merge_to_vert[i]),
+			usize::lossy_from(mesh.merge_from_vert[i]),
+			usize::lossy_from(mesh.merge_to_vert[i]),
 		);
 	}
 
 	mesh.merge_to_vert.clear();
 	mesh.merge_from_vert.clear();
 	for v in 0..num_vert {
-		let merge_to: usize = uf.find(v as u32) as usize;
+		let merge_to = uf.find(v);
 		if merge_to != v {
 			mesh.merge_from_vert.push(I::lossy_from(v));
 			mesh.merge_to_vert.push(I::lossy_from(merge_to));
@@ -161,49 +191,18 @@ where
 	return true;
 }
 
-struct ReindexFace<'a> {
-	halfedge: &'a mut [Halfedge],
-	// halfedge_tangent: &'a mut [Vector4<f64>],
-	old_halfedge: &'a [Halfedge],
-	// old_halfedge_tangent: &'a [Vector4<f64>],
-	face_new2old: &'a [i32],
-	face_old2new: &'a [i32],
-}
-
-impl ReindexFace<'_> {
-	fn call(&mut self, new_face: u32) {
-		let old_face = self.face_new2old[new_face as usize];
-		for i in 0..3 {
-			let old_edge = 3 * old_face + i;
-			let mut edge = self.old_halfedge[old_edge as usize];
-			let paired_face = edge.paired_halfedge / 3;
-			let offset = edge.paired_halfedge - 3 * paired_face;
-			edge.paired_halfedge = 3 * self.face_old2new[paired_face as usize] + offset;
-			let new_edge = 3 * new_face + i as u32;
-			self.halfedge[new_edge as usize] = edge;
-			// if !self.old_halfedge_tangent.is_empty() {
-			// 	self.halfedge_tangent[new_edge] = self.old_halfedge_tangent[old_edge];
-			// }
-		}
-	}
-}
-
 impl MeshBoolImpl {
 	///Once halfedge_ has been filled in, this function can be called to create the
 	///rest of the internal data structures. This function also removes the verts
 	///and halfedges flagged for removal (NaN verts and -1 halfedges).
-	pub fn finish(&mut self) {
+	pub fn sort_geometry(&mut self) {
 		if self.halfedge.len() == 0 {
+			self.collider = Collider::default();
 			return;
 		}
 
-		self.calculate_bbox();
-		self.set_epsilon(self.epsilon, false);
-		if !self.bbox.is_finite() {
-			// Decimated out of existence - early out.
-			self.make_empty(ManifoldError::NoError);
-			return;
-		}
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
 
 		self.sort_verts();
 		let mut face_box: Vec<AABB> = Vec::default();
@@ -211,8 +210,11 @@ impl MeshBoolImpl {
 		self.get_face_box_morton(&mut face_box, &mut face_morton);
 		self.sort_faces(&mut face_box, &mut face_morton);
 		if self.halfedge.len() == 0 {
+			self.collider = Collider::default();
 			return;
 		}
+		self.collider = Collider::new(&face_box, &face_morton);
+		self.bbox = self.collider.get_bounding_box();
 		self.compact_props();
 
 		debug_assert!(
@@ -224,15 +226,8 @@ impl MeshBoolImpl {
 				|| self.mesh_relation.tri_ref.len() == 0,
 			"Mesh Relation doesn't fit!"
 		);
-		debug_assert!(
-			self.face_normal.len() == self.num_tri() || self.face_normal.len() == 0,
-			"face_normal size = {}, num_tri = {}",
-			self.face_normal.len(),
-			self.num_tri()
-		);
 
-		self.calculate_normals();
-		self.collider = Collider::new(&face_box, &face_morton);
+		debug_assert!(self.is_2_manifold(), "mesh is not 2-manifold!");
 	}
 
 	///Sorts the vertices according to their Morton code.
@@ -253,7 +248,7 @@ impl MeshBoolImpl {
 		let new_num_vert =
 			vert_new2old.partition_point(|&vert| vert_morton[vert as usize] < K_NO_CODE);
 
-		vec_resize(&mut vert_new2old, new_num_vert);
+		vec_resize(&mut vert_new2old, new_num_vert, 0);
 		permute(&mut self.vert_pos, &vert_new2old);
 
 		if self.vert_normal.len() == num_vert {
@@ -265,17 +260,20 @@ impl MeshBoolImpl {
 	///vertNew2Old. This may be a subset, so the total number of original verts is
 	///also given.
 	pub fn reindex_verts(&mut self, vert_new2old: &[i32], old_num_vert: usize) {
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
 		let mut vert_old2new: Vec<i32> = unsafe { vec_uninit(old_num_vert) };
 		scatter(0..self.num_vert() as i32, vert_new2old, &mut vert_old2new);
 		let has_prop = self.num_prop() > 0;
-		for edge in &mut self.halfedge {
-			if edge.start_vert < 0 {
+		for idx in 0..self.halfedge.len() as i32 {
+			let start_vert = self.halfedge.start(idx);
+			if start_vert < 0 {
 				continue;
 			}
-			edge.start_vert = vert_old2new[edge.start_vert as usize];
-			edge.end_vert = vert_old2new[edge.end_vert as usize];
+			let new_start = vert_old2new[start_vert as usize];
+			self.halfedge.set_start(idx, new_start);
 			if !has_prop {
-				edge.prop_vert = edge.start_vert;
+				self.halfedge.set_prop(idx, new_start);
 			}
 		}
 	}
@@ -284,13 +282,16 @@ impl MeshBoolImpl {
 		if self.num_prop == 0 {
 			return;
 		}
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
 
 		let num_prop = self.num_prop();
 		let num_verts = self.properties.len() / num_prop;
 		let mut keep = vec![0; num_verts];
 
-		for h in &self.halfedge {
-			keep[h.prop_vert as usize] = 1;
+		for idx in 0..self.halfedge.len() {
+			let keep: &[AtomicI32] = unsafe { std::mem::transmute(keep.as_mut_slice()) };
+			keep[self.halfedge.prop(idx as i32) as usize].store(1, Ordering::Relaxed);
 		}
 
 		let mut prop_old2new = vec![0_i32; num_verts + 1];
@@ -311,8 +312,9 @@ impl MeshBoolImpl {
 			}
 		}
 
-		for edge in &mut self.halfedge {
-			edge.prop_vert = prop_old2new[edge.prop_vert as usize];
+		for idx in 0..self.halfedge.len() as i32 {
+			self.halfedge
+				.set_prop(idx, prop_old2new[self.halfedge.prop(idx) as usize]);
 		}
 	}
 
@@ -320,8 +322,10 @@ impl MeshBoolImpl {
 	///codes of the faces, respectively. The Morton code is based on the center of
 	///the bounding box.
 	pub fn get_face_box_morton(&self, face_box: &mut Vec<AABB>, face_morton: &mut Vec<u32>) {
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
 		// faceBox should be initialized
-		vec_resize(face_box, self.num_tri());
+		vec_resize(face_box, self.num_tri(), AABB::default());
 		unsafe {
 			vec_resize_nofill(face_morton, self.num_tri());
 		}
@@ -329,7 +333,7 @@ impl MeshBoolImpl {
 			// Removed tris are marked by all halfedges having pairedHalfedge
 			// = -1, and this will sort them to the end (the Morton code only
 			// uses the first 30 of 32 bits).
-			if self.halfedge[(3 * face) as usize].paired_halfedge < 0 {
+			if self.halfedge.pair((3 * face) as i32) < 0 {
 				face_morton[face] = K_NO_CODE;
 				continue;
 			}
@@ -337,7 +341,7 @@ impl MeshBoolImpl {
 			let mut center = Point3::<f64>::new(0.0, 0.0, 0.0);
 
 			for i in 0..3 {
-				let pos = self.vert_pos[self.halfedge[(3 * face + i) as usize].start_vert as usize];
+				let pos = self.vert_pos[self.halfedge.start((3 * face + i) as i32) as usize];
 				center += pos.coords;
 				face_box[face].union_point(pos);
 			}
@@ -351,6 +355,8 @@ impl MeshBoolImpl {
 	///Sorts the faces of this manifold according to their input Morton code. The
 	///bounding box and Morton code arrays are also sorted accordingly.
 	fn sort_faces(&mut self, face_box: &mut Vec<AABB>, face_morton: &mut Vec<u32>) {
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
 		let mut face_new2old: Vec<_> = (0..self.num_tri() as i32).collect();
 		face_new2old.sort_by_key(|&i| face_morton[i as usize]);
 
@@ -359,7 +365,7 @@ impl MeshBoolImpl {
 		let new_num_tri =
 			face_new2old.partition_point(|&face| face_morton[face as usize] < K_NO_CODE);
 
-		vec_resize(&mut face_new2old, new_num_tri);
+		vec_resize(&mut face_new2old, new_num_tri, 0);
 
 		permute(face_morton, &face_new2old);
 		permute(face_box, &face_new2old);
@@ -369,7 +375,9 @@ impl MeshBoolImpl {
 	///Creates the halfedge_ vector for this manifold by copying a set of faces from
 	///another manifold, given by oldHalfedge. Input faceNew2Old defines the old
 	///faces to gather into this.
-	pub fn gather_faces(&mut self, face_new2old: &[i32]) {
+	fn gather_faces(&mut self, face_new2old: &[i32]) {
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
 		let num_tri = face_new2old.len();
 		if self.mesh_relation.tri_ref.len() == self.num_tri() {
 			permute(&mut self.mesh_relation.tri_ref, face_new2old);
@@ -379,44 +387,39 @@ impl MeshBoolImpl {
 			permute(&mut self.face_normal, face_new2old);
 		}
 
-		let mut old_halfedge = unsafe { vec_uninit(3 * num_tri) };
-		mem::swap(&mut old_halfedge, &mut self.halfedge);
-
-		// let mut old_halfedge_tangent = unsafe { vec_uninit(3 * num_tri) };
-		// mem::swap(&mut old_halfedge_tangent, &mut self.halfedge_tangent);
-
+		let old_halfedge = mem::take(&mut self.halfedge);
+		unsafe { self.halfedge.resize_nofill(3 * num_tri) };
 		let mut face_old2new = unsafe { vec_uninit(old_halfedge.len() / 3) };
 		scatter(0..num_tri as i32, face_new2old, &mut face_old2new);
 
 		let mut reindex_face = ReindexFace {
 			halfedge: &mut self.halfedge,
-			// halfedge_tangent: &mut self.halfedge_tangent,
 			old_halfedge: &old_halfedge,
-			// old_halfedge_tangent: &old_halfedge_tangent,
 			face_new2old: &face_new2old,
 			face_old2new: &face_old2new,
 		};
 		for new_face in 0..num_tri {
-			reindex_face.call(new_face as u32);
+			reindex_face.call(new_face as i32);
 		}
 	}
 
-	pub fn gather_faces_with_old(&mut self, old: &Self, face_new2old: &[i32]) {
+	pub fn gather_faces_from_old(&mut self, old: &MeshBoolImpl, face_new2old: &[i32]) {
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
 		let num_tri = face_new2old.len();
 
-		unsafe { vec_resize_nofill(&mut self.mesh_relation.tri_ref, num_tri) };
-
+		unsafe {
+			vec_resize_nofill(&mut self.mesh_relation.tri_ref, num_tri);
+		}
 		gather(
 			face_new2old,
 			&old.mesh_relation.tri_ref,
 			&mut self.mesh_relation.tri_ref,
 		);
 
-		for pair in old.mesh_relation.mesh_id_transform.iter() {
-			self.mesh_relation
-				.mesh_id_transform
-				.insert(*pair.0, pair.1.clone());
-		}
+		self.mesh_relation
+			.mesh_id_transform
+			.extend(&old.mesh_relation.mesh_id_transform);
 
 		if old.num_prop() > 0 {
 			self.num_prop = old.num_prop;
@@ -433,20 +436,71 @@ impl MeshBoolImpl {
 		let mut face_old2new = unsafe { vec_uninit(old.num_tri()) };
 		scatter(0..num_tri as i32, face_new2old, &mut face_old2new);
 
-		unsafe { vec_resize_nofill(&mut self.halfedge, 3 * num_tri) };
-		// if old.halfedge_tangent.len() != 0 {
-		// 	halfedgeTangent_.resize_nofill(3 * numTri);
-		// }
+		unsafe {
+			self.halfedge.resize_nofill(3 * num_tri);
+		}
 		let mut reindex_face = ReindexFace {
 			halfedge: &mut self.halfedge,
 			// halfedge_tangent: &mut self.halfedge_tangent,
 			old_halfedge: &old.halfedge,
-			// old_halfedge_tangent: &old.halfedge_tangent,
+			// old_halfedge_tangent: &old_halfedge_tangent,
 			face_new2old: &face_new2old,
 			face_old2new: &face_old2new,
 		};
 		for new_face in 0..num_tri {
-			reindex_face.call(new_face as u32);
+			reindex_face.call(new_face as i32);
+		}
+	}
+
+	pub fn reorder_halfedges(&mut self) {
+		// halfedges in the same face are added in non-deterministic order, so we have
+		// to reorder them for determinism
+
+		// step 1: reorder within the same face, such that the halfedge with the
+		// smallest starting vertex is placed first
+		for tri in 0..(self.halfedge.len() / 3) {
+			let face = [
+				self.halfedge.get((tri * 3) as i32),
+				self.halfedge.get((tri * 3 + 1) as i32),
+				self.halfedge.get((tri * 3 + 2) as i32),
+			];
+			if face[0].start_vert < 0 {
+				continue;
+			}
+			let mut index = 0;
+			for i in 1..3 {
+				if face[i].start_vert < face[index].start_vert {
+					index = i;
+				};
+			}
+			for i in 0..3 {
+				let f = face[(index + i) % 3];
+				self.halfedge.set(
+					(tri * 3 + i) as i32,
+					f.start_vert,
+					f.paired_halfedge,
+					f.prop_vert,
+				);
+			}
+		}
+		// step 2: fix paired halfedge
+		'outer: for tri in 0..self.halfedge.len() / 3 {
+			for i in 0..3 {
+				let curr_idx = (tri * 3 + i) as i32;
+				let start_vert = self.halfedge.start(curr_idx);
+				if start_vert < 0 {
+					continue 'outer;
+				}
+				let opposite_face = self.halfedge.pair(curr_idx) / 3;
+				let mut index = -1;
+				for j in 0..3 {
+					if start_vert == self.halfedge.end(opposite_face * 3 + j) {
+						index = j;
+					}
+				}
+
+				self.halfedge.set_pair(curr_idx, opposite_face * 3 + index);
+			}
 		}
 	}
 }
@@ -468,6 +522,7 @@ where
 	F: LossyFrom<f64> + Copy,
 	I: LossyFrom<usize> + Copy,
 	usize: LossyFrom<I>,
+	u64: LossyFrom<I>,
 	u32: LossyFrom<I>,
 	i32: LossyFrom<I>,
 	f64: LossyFrom<F>,
