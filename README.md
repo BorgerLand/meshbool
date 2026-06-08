@@ -4,7 +4,7 @@
 
 Meshbool is a pure-Rust implementation/port of Manifold's state of the art **mesh boolean algorithm**, known for its guarantee that, given manifold input, will always produce manifold output: solid, watertight, correct. It enables robust [CSG (Constructive Solid Geometry) operations](https://en.wikipedia.org/wiki/Constructive_solid_geometry) on 3D models.
 
-This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/f6005ffa83832b845c4c7e3b32fc4358cd0f7248).
+This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/37125da09072a63329dade2191eafc3f8ace858a) (v3.5.0).
 
 ### Example:
 
@@ -33,7 +33,7 @@ In its **current state**, meshbool is utter chaos:
 - It was done as quickly as possible without attempting to understand it, and likely contains glaring typos and translation errors
 - No parallelization, so single core performance only for now
 - Because the line by line strategy was prioritized over anything else, it likely performs worse than single-threaded Manifold due to borrow checker fighting and bounds checking. No benchmarking has been performed yet.
-- The test suite has not even been ported yet. **No guarantees it's even working properly!**
+- The test suite is in progress. **No guarantees it's even working properly!**
 
 However, it **unlocks new doors:**
 
@@ -48,7 +48,7 @@ I'm aware of the **[manifold-rs crate](https://github.com/WilstonOreo/manifold-r
 
 **Roadmap priorities:**
 
-- Port the test suite
+- Make the tests pass
 - Standard stuff: CI, code formatting, publish on crates.io
 - Port parallelization (Rayon?)
 - General cleanup/idiomatic refactor: I'm most looking forward to removing all classes that make up the algorithm's pipeline. Pure functional, chronological order

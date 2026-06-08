@@ -1,0 +1,3 @@
+[submodule "test/manifold"]
+	path = test/manifold
+	url = https://github.com/BorgerLand/manifold

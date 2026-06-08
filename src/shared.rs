@@ -1,7 +1,8 @@
 use crate::common::AABB;
 use crate::utils::{K_PRECISION, mat3, next3_usize};
+use crate::vec::{vec_resize, vec_resize_nofill, vec_uninit};
 use core::f64;
-use nalgebra::{Matrix2x3, Matrix3, Matrix3x4, Point3, Vector3, Vector4};
+use nalgebra::{Matrix2x3, Matrix3, Matrix3x4, Point3, Vector2, Vector3, Vector4};
 use std::ops::MulAssign;
 
 #[inline]
@@ -21,12 +22,8 @@ pub fn max_epsilon(min_epsilon: f64, bbox: &AABB) -> f64 {
 }
 
 #[inline]
-pub fn next_halfedge(mut current: i32) -> i32 {
-	current += 1;
-	if current % 3 == 0 {
-		current -= 3;
-	}
-	current
+pub fn next_halfedge(current: i32) -> i32 {
+	current + (if current % 3 == 2 { -2 } else { 1 })
 }
 
 pub fn normal_transform(transform: &Matrix3x4<f64>) -> Matrix3<f64> {
@@ -34,6 +31,53 @@ pub fn normal_transform(transform: &Matrix3x4<f64>) -> Matrix3<f64> {
 		.transpose()
 		.try_inverse()
 		.unwrap_or_else(|| Matrix3::from_element(f64::NAN))
+}
+
+pub fn inverse_normal_transform(transform: &Matrix3x4<f64>) -> Matrix3<f64> {
+	mat3(transform)
+		.try_inverse()
+		.unwrap_or_else(|| Matrix3::from_element(f64::NAN))
+		.transpose()
+		.try_inverse()
+		.unwrap_or_else(|| Matrix3::from_element(f64::NAN))
+}
+
+///Symbolic perturbation primitives shared by Boolean3 and Boolean2.
+///Carefully designed to minimize FP rounding error and eliminate it at edge
+///cases.
+#[inline]
+pub fn with_sign(pos: bool, v: f64) -> f64 {
+	if pos { v } else { -v }
+}
+
+///Interpolate the (y, z) of segment aL-aR at the given x. The choice of
+///(x - aL) vs (x - aR) is the smaller in magnitude, which keeps FP error
+///low near either endpoint. Domain check via DEBUG_ASSERT.
+#[inline]
+pub fn interpolate(a_l: Point3<f64>, a_r: Point3<f64>, x: f64) -> Vector2<f64> {
+	let dx_l = x - a_l.x;
+	let dx_r = x - a_r.x;
+	debug_assert!(dx_l * dx_r <= 0.0, "Boolean manifold error: not in domain");
+
+	let use_l = dx_l.abs() < dx_r.abs();
+	let d_lr = a_r - a_l;
+	let lambda = (if use_l { dx_l } else { dx_r }) / d_lr.x;
+	if !lambda.is_finite() || !d_lr.y.is_finite() || !d_lr.z.is_finite() {
+		return Vector2::new(a_l.y, a_l.z);
+	}
+
+	let mut yz = Vector2::default();
+	yz[0] = lambda * d_lr.y + (if use_l { a_l.y } else { a_r.y });
+	yz[1] = lambda * d_lr.z + (if use_l { a_l.z } else { a_r.z });
+	return yz;
+}
+
+///`p < q` with symbolic perturbation: when `p == q` exactly, `dir < 0`
+///acts as the tiebreaker. Used to give consistent strict-ordering answers
+///regardless of which side of an FP equality we land on.
+#[inline]
+pub fn shadows(p: f64, q: f64, dir: f64) -> bool {
+	if p == q { dir < 0.0 } else { p < q }
 }
 
 ///By using the closest axis-aligned projection to the normal instead of a
@@ -128,8 +172,8 @@ pub fn get_barycentric(v: &Point3<f64>, tri_pos: &Matrix3<f64>, tolerance: f64) 
 	}
 }
 
-///The fundamental component of the halfedge data structure used for storing and
-///operating on the Manifold.
+///Temporary or value-style halfedge record. Persistent Manifold storage uses
+///Halfedges below, which derives endVert from the next halfedge in each face.
 #[derive(Default, Clone, Copy, Debug)]
 pub struct Halfedge {
 	pub start_vert: i32,
@@ -144,16 +188,106 @@ impl Halfedge {
 	}
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct Halfedges {
+	start: Vec<i32>,
+	paired: Vec<i32>,
+	prop_vert: Vec<i32>,
+}
+
+impl Halfedges {
+	pub fn len(&self) -> usize {
+		self.start.len()
+	}
+
+	pub fn is_empty(&self) -> bool {
+		self.start.is_empty()
+	}
+
+	pub fn start(&self, idx: i32) -> i32 {
+		self.start[idx as usize]
+	}
+
+	pub fn end(&self, idx: i32) -> i32 {
+		self.start[next_halfedge(idx) as usize]
+	}
+
+	pub fn pair(&self, idx: i32) -> i32 {
+		self.paired[idx as usize]
+	}
+
+	pub fn prop(&self, idx: i32) -> i32 {
+		self.prop_vert[idx as usize]
+	}
+
+	pub fn set_start(&mut self, idx: i32, vert: i32) {
+		self.start[idx as usize] = vert;
+	}
+
+	pub fn set_end(&mut self, idx: i32, vert: i32) {
+		self.start[next_halfedge(idx) as usize] = vert;
+	}
+
+	pub fn set_pair(&mut self, idx: i32, pair: i32) {
+		self.paired[idx as usize] = pair;
+	}
+
+	pub fn set_prop(&mut self, idx: i32, prop: i32) {
+		self.prop_vert[idx as usize] = prop;
+	}
+
+	pub fn is_forward(&self, idx: i32) -> bool {
+		self.start(idx) < self.end(idx)
+	}
+
+	pub fn get(&self, idx: i32) -> Halfedge {
+		Halfedge {
+			start_vert: self.start(idx),
+			end_vert: self.end(idx),
+			paired_halfedge: self.pair(idx),
+			prop_vert: self.prop(idx),
+		}
+	}
+
+	pub fn set(&mut self, idx: i32, start_vert: i32, paired_halfedge: i32, prop_vert: i32) {
+		self.set_start(idx, start_vert);
+		self.set_pair(idx, paired_halfedge);
+		self.set_prop(idx, prop_vert);
+	}
+
+	pub fn push(&mut self, start_vert: i32, paired_halfedge: i32, prop_vert: i32) {
+		self.start.push(start_vert);
+		self.paired.push(paired_halfedge);
+		self.prop_vert.push(prop_vert);
+	}
+
+	pub fn resize(&mut self, new_size: usize) {
+		vec_resize(&mut self.start, new_size, -1);
+		vec_resize(&mut self.paired, new_size, -1);
+		vec_resize(&mut self.prop_vert, new_size, -1);
+	}
+
+	pub unsafe fn resize_nofill(&mut self, new_size: usize) {
+		unsafe {
+			vec_resize_nofill(&mut self.start, new_size);
+			vec_resize_nofill(&mut self.paired, new_size);
+			vec_resize_nofill(&mut self.prop_vert, new_size);
+		}
+	}
+
+	pub fn to_data(&self) -> Vec<Halfedge> {
+		let mut data = unsafe { vec_uninit(self.len()) };
+		for idx in 0..self.len() {
+			data[idx] = self.get(idx as i32);
+		}
+		data
+	}
+}
+
 #[derive(Default, Clone)]
 pub struct Barycentric {
 	pub tri: i32,
 	pub uvw: Vector4<f64>,
-}
-
-impl Barycentric {
-	pub fn new(tri: i32, uvw: Vector4<f64>) -> Self {
-		Self { tri, uvw }
-	}
 }
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -165,10 +299,13 @@ pub struct TriRef {
 	/// The OriginalID of the mesh this triangle came from. This ID is ideal for
 	/// reapplying properties like UV coordinates to the output mesh.
 	pub original_id: i32,
-	/// Probably the triangle index of the original triangle this was part of:
-	/// Mesh.triVerts[tri], but it's an input, so just pass it along unchanged.
+	/// If set as an input of MeshGL, it is passed along unchanged. This is how
+	/// the user can tell us not to collapse certain edges: those that divide
+	/// difference faceIDs. If not set, this is always -1.
 	pub face_id: i32,
-	/// Triangles with the same coplanar ID are coplanar.
+	/// Triangles with the same coplanar ID are coplanar. Starts as a canonical
+	/// triangle index, but after boolean operations it may refer to a triangle
+	/// that is no longer present in this mesh.
 	pub coplanar_id: i32,
 }
 
@@ -199,29 +336,17 @@ impl TmpEdge {
 	}
 }
 
-// impl Ord for TmpEdge {
-// 	// bool operator<(const TmpEdge& other) const {
-// 	// }
-// 	fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-// 		if self.first == other.first {
-// 			self.second.cmp(&other.second)
-// 		} else {
-// 			self.first.cmp(&other.first)
-// 		}
-// 	}
-// }
-
 #[inline]
-pub fn create_tmp_edges(halfedge: &[Halfedge]) -> Vec<TmpEdge> {
+pub fn create_tmp_edges(halfedge: &Halfedges) -> Vec<TmpEdge> {
 	let edges: Vec<TmpEdge>;
 	edges = (0..halfedge.len())
 		.into_iter()
 		.map(|idx| {
-			let half = &halfedge[idx];
+			let idx = idx as i32;
 			TmpEdge::new(
-				half.start_vert,
-				half.end_vert,
-				if half.is_forward() { idx as i32 } else { -1 },
+				halfedge.start(idx),
+				halfedge.end(idx),
+				if halfedge.is_forward(idx) { idx } else { -1 },
 			)
 		})
 		.collect();

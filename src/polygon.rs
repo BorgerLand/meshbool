@@ -1,11 +1,11 @@
 use crate::common::Polygons;
-use crate::common::{OrderedF64, Rect};
+use crate::common::Rect;
+use crate::multiset::Handle;
+use crate::multiset::MultiSet;
+use crate::polygon_internal::HalfedgeTriangulation;
 use crate::tree2d::{build_2d_tree, query_2d_tree};
 use crate::utils::{K_PRECISION, ccw};
-use crate::vec::InsertSorted;
 use nalgebra::{Matrix2, Point2, Vector2, Vector3};
-use std::cmp::Reverse;
-use std::collections::VecDeque;
 use std::ops::Range;
 use std::{collections::BTreeMap, ptr};
 
@@ -59,6 +59,33 @@ fn is_convex(polys: &PolygonsIdx, epsilon: f64) -> bool {
 	true
 }
 
+///Triangulates a set of convex polygons by alternating instead of a fan, to
+///avoid creating high-degree vertices.
+fn triangulate_convex(polys: &PolygonsIdx) -> HalfedgeTriangulation {
+	let num_tri = polys.iter().fold(0, |acc, poly| acc + poly.len() - 2);
+	let mut result = HalfedgeTriangulation::default();
+	result.add_contours(polys);
+	result.reserve_triangles(num_tri);
+	for poly in polys {
+		let mut i = 0;
+		let mut k = poly.len() - 1;
+		let mut right = true;
+		while i + 1 < k {
+			let j = if right { i + 1 } else { k - 1 };
+			result.add_triangle(poly[i].idx, poly[j].idx, poly[k].idx);
+			if right {
+				i = j;
+			} else {
+				k = j;
+			}
+
+			right = !right;
+		}
+	}
+
+	result
+}
+
 ///Ear-clipping triangulator based on David Eberly's approach from Geometric
 ///Tools, but adjusted to handle epsilon-valid polygons, and including a
 ///fallback that ensures a manifold triangulation even for overlapping polygons.
@@ -74,16 +101,15 @@ struct EarClip {
 	//Pointers to first and last verts within self.polygon
 	polygon_range: Range<usize>,
 	///The set of right-most starting points, one for each negative-area contour.
-	//originally a c++ multiset
-	holes: Vec<usize>,
+	holes: MultiSet<usize>,
 	///The set of starting points, one for each positive-area contour.
 	outers: Vec<usize>,
 	///The set of starting points, one for each simple polygon.
 	simples: Vec<usize>,
 	///Maps each hole (by way of starting point) to its bounding box.
 	hole2bbox: BTreeMap<usize, Rect>,
-	///The output triangulation.
-	triangles: Vec<Vector3<i32>>,
+	///The output triangulation, represented directly as halfedges.
+	result: HalfedgeTriangulation,
 	///Bounding box of the entire set of polygons
 	bbox: Rect,
 	///Working epsilon: max of float error and input value.
@@ -105,11 +131,11 @@ impl EarClip {
 		let mut ret = EarClip {
 			polygon,
 			polygon_range,
-			holes: Vec::new(),
+			holes: MultiSet::new(),
 			outers: Vec::new(),
 			simples: Vec::new(),
 			hole2bbox: BTreeMap::new(),
-			triangles: Vec::default(),
+			result: HalfedgeTriangulation::default(),
 			bbox: Rect::default(),
 			epsilon,
 		};
@@ -121,7 +147,7 @@ impl EarClip {
 				v,
 				&mut ret.polygon,
 				&ret.polygon_range,
-				&mut ret.triangles,
+				&mut ret.result,
 				ret.epsilon,
 			);
 		}
@@ -147,12 +173,12 @@ impl EarClip {
 	///optimization.
 	///@return std::vector<ivec3> The triangles, referencing the original
 	///polygon points in order.
-	fn triangulate(mut self) -> Vec<Vector3<i32>> {
-		for start in self.holes {
+	fn triangulate(&mut self) -> HalfedgeTriangulation {
+		for &start in self.holes.iter() {
 			Self::cut_keyhole(
 				start,
 				&mut self.simples,
-				&mut self.triangles,
+				&mut self.result,
 				&mut self.polygon,
 				&self.polygon_range,
 				&self.outers,
@@ -161,20 +187,21 @@ impl EarClip {
 			);
 		}
 
-		drop(self.outers);
-		drop(self.hole2bbox);
-
-		for start in self.simples {
+		for &start in &self.simples {
 			Self::triangulate_poly(
 				start,
 				&mut self.polygon,
 				&self.polygon_range,
-				&mut self.triangles,
+				&mut self.result,
 				self.epsilon,
 			);
 		}
 
-		self.triangles
+		self.result.clone()
+	}
+
+	fn get_precision(&self) -> f64 {
+		self.epsilon
 	}
 
 	fn safe_normalize(v: Vector2<f64>) -> Vector2<f64> {
@@ -244,7 +271,7 @@ impl EarClip {
 		ear: usize,
 		polygon: &mut Vec<Vert>,
 		polygon_range: &Range<usize>,
-		triangles: &mut Vec<Vector3<i32>>,
+		result: &mut HalfedgeTriangulation,
 	) {
 		let ear_ref = &polygon[ear];
 		let left_i = ear_ref.left().ptr2index(polygon_range);
@@ -259,7 +286,7 @@ impl EarClip {
 		if left_mesh != self_mesh && self_mesh != right_mesh && right_mesh != left_mesh {
 			// Filter out topological degenerates, which can form in bad
 			// triangulations of polygons with holes, due to vert duplication.
-			triangles.push(Vector3::new(left_mesh, self_mesh, right_mesh));
+			result.add_triangle(left_mesh, self_mesh, right_mesh);
 		}
 		//else Topological degenerate!
 	}
@@ -271,7 +298,7 @@ impl EarClip {
 		ear: usize,
 		polygon: &mut Vec<Vert>,
 		polygon_range: &Range<usize>,
-		triangles: &mut Vec<Vector3<i32>>,
+		result: &mut HalfedgeTriangulation,
 		epsilon: f64,
 	) {
 		let ear_ref = &polygon[ear];
@@ -293,12 +320,12 @@ impl EarClip {
 				.dot(&(ear_ref.right().pos - ear_ref.pos))
 				> 0.0)
 		{
-			Self::clip_ear(ear, polygon, polygon_range, triangles);
+			Self::clip_ear(ear, polygon, polygon_range, result);
 			let ear_ref = &polygon[ear];
 			let left = ear_ref.left().ptr2index(polygon_range);
 			let right = ear_ref.right().ptr2index(polygon_range);
-			Self::clip_if_degenerate(left, polygon, polygon_range, triangles, epsilon);
-			Self::clip_if_degenerate(right, polygon, polygon_range, triangles, epsilon);
+			Self::clip_if_degenerate(left, polygon, polygon_range, result, epsilon);
+			Self::clip_if_degenerate(right, polygon, polygon_range, result, epsilon);
 		}
 	}
 
@@ -310,7 +337,7 @@ impl EarClip {
 			self.polygon.push(Vert {
 				mesh_idx: vert.idx,
 				cost: 0.0,
-				ear: false,
+				ear: None,
 				pos: vert.pos,
 				right_dir: Vector2::new(0.0, 0.0),
 				left: ptr::null_mut::<Vert>(),
@@ -332,7 +359,7 @@ impl EarClip {
 				self.polygon.push(Vert {
 					mesh_idx: vert.idx,
 					cost: 0.0,
-					ear: false,
+					ear: None,
 					pos: vert.pos,
 					right_dir: Vector2::new(0.0, 0.0),
 					left: ptr::null_mut::<Vert>(),
@@ -351,13 +378,18 @@ impl EarClip {
 			self.epsilon = self.bbox.scale() * K_PRECISION;
 		}
 
+		self.result.add_contours(polys);
 		// Slightly more than enough, since each hole can cause two extra triangles.
-		self.triangles = Vec::with_capacity(self.polygon.len() + 2 * starts.len());
+		self.result
+			.reserve_triangles(self.polygon.len() + 2 * starts.len());
+
 		starts
 	}
 
 	///Find the actual rightmost starts after degenerate removal. Also calculate
-	///the polygon bounding boxes.
+	///the polygon bounding boxes. Only holes need rightmost starts, and the CCW
+	///check is to handle degenerate cases for them - the other contour starts are
+	///arbitrary.
 	fn find_start(&mut self, first: usize) {
 		let origin = self.polygon[first].pos;
 
@@ -377,7 +409,7 @@ impl EarClip {
 			area_compensation += (area - t1) + area1;
 			area = t1;
 
-			if v.pos.x > max_x {
+			if v.pos.x > max_x && v.is_reflex(self.epsilon) {
 				max_x = v.pos.x;
 				start = v.ptr2index(&self.polygon_range);
 			}
@@ -393,8 +425,10 @@ impl EarClip {
 		let min_area = self.epsilon * size.x.max(size.y);
 
 		if max_x.is_finite() && area < -min_area {
-			self.holes
-				.insert_sorted_by_key(start, |&hole| Reverse(OrderedF64(self.polygon[hole].pos.x))); //descending pos.x
+			self.holes.insert(
+				|&a, &b| self.polygon[a].pos.x > self.polygon[b].pos.x,
+				start,
+			);
 			self.hole2bbox.entry(start).or_insert(bbox);
 		} else {
 			self.simples.push(start);
@@ -411,7 +445,7 @@ impl EarClip {
 	fn cut_keyhole(
 		start: usize,
 		simples: &mut Vec<usize>,
-		triangles: &mut Vec<Vector3<i32>>,
+		result: &mut HalfedgeTriangulation,
 		polygon: &mut Vec<Vert>,
 		polygon_range: &Range<usize>,
 		outers: &Vec<usize>,
@@ -471,7 +505,7 @@ impl EarClip {
 			epsilon,
 		);
 
-		Self::join_polygons(start, connector, polygon, polygon_range, triangles, epsilon);
+		Self::join_polygons(start, connector, polygon, polygon_range, result, epsilon);
 	}
 
 	///This converts the initial guess for the keyhole location into the final one
@@ -523,7 +557,7 @@ impl EarClip {
 						&& vert.pos.x < connector_ref.pos.x
 						&& vert.pos.y * above_f64 < connector_ref.pos.y * above_f64))
 				&& vert.inside_edge(edge_ref, epsilon, true)
-				&& vert.is_reflexive(epsilon)
+				&& vert.is_reflex(epsilon)
 			{
 				connector = vert.ptr2index(polygon_range);
 			}
@@ -545,7 +579,7 @@ impl EarClip {
 		connector: usize,
 		polygon: &mut Vec<Vert>,
 		polygon_range: &Range<usize>,
-		triangles: &mut Vec<Vector3<i32>>,
+		result: &mut HalfedgeTriangulation,
 		epsilon: f64,
 	) {
 		let new_start = polygon.len();
@@ -558,32 +592,31 @@ impl EarClip {
 		Self::link(start, connector, polygon, polygon_range);
 		Self::link(new_connector, new_start, polygon, polygon_range);
 
-		Self::clip_if_degenerate(start, polygon, polygon_range, triangles, epsilon);
-		Self::clip_if_degenerate(new_start, polygon, polygon_range, triangles, epsilon);
-		Self::clip_if_degenerate(connector, polygon, polygon_range, triangles, epsilon);
-		Self::clip_if_degenerate(new_connector, polygon, polygon_range, triangles, epsilon);
+		Self::clip_if_degenerate(start, polygon, polygon_range, result, epsilon);
+		Self::clip_if_degenerate(new_start, polygon, polygon_range, result, epsilon);
+		Self::clip_if_degenerate(connector, polygon, polygon_range, result, epsilon);
+		Self::clip_if_degenerate(new_connector, polygon, polygon_range, result, epsilon);
 	}
 
 	fn process_ear(
 		v: usize,
 		collider: &IdxCollider,
-		ears_queue: &mut VecDeque<usize>,
+		ears_queue: &mut MultiSet<usize>,
 		polygon: &mut Vec<Vert>,
 		epsilon: f64,
 	) {
-		if polygon[v].ear {
-			ears_queue.remove(ears_queue.iter().position(|&ball| ball == v).unwrap());
-			polygon[v].ear = false;
+		if let Some(ear_handle) = polygon[v].ear.take() {
+			unsafe {
+				ears_queue.remove(ear_handle);
+			}
 		}
 
 		if polygon[v].is_short(epsilon) {
 			polygon[v].cost = K_BEST;
-			polygon[v].ear = true;
-			ears_queue.insert_sorted_by_key(v, |&ear| OrderedF64(polygon[ear].cost)); //ascending cost
+			polygon[v].ear = Some(ears_queue.insert(|&a, &b| polygon[a].cost < polygon[b].cost, v));
 		} else if polygon[v].is_convex(2.0 * epsilon) {
 			polygon[v].cost = polygon[v].ear_cost(epsilon, collider, polygon);
-			polygon[v].ear = true;
-			ears_queue.insert_sorted_by_key(v, |&ear| OrderedF64(polygon[ear].cost)); //ascending cost
+			polygon[v].ear = Some(ears_queue.insert(|&a, &b| polygon[a].cost < polygon[b].cost, v));
 		} else {
 			polygon[v].cost = 1.0; // not used, but marks reflex verts for debug
 		}
@@ -618,7 +651,7 @@ impl EarClip {
 		start: usize,
 		polygon: &mut Vec<Vert>,
 		polygon_range: &Range<usize>,
-		triangles: &mut Vec<Vector3<i32>>,
+		result: &mut HalfedgeTriangulation,
 		epsilon: f64,
 	) {
 		let vert_collider = Self::vert_collider(start, polygon, polygon_range);
@@ -632,8 +665,7 @@ impl EarClip {
 		let mut num_tri = -2;
 
 		// A priority queue of valid ears - the multiset allows them to be updated.
-		//c++ uses multiset here, whose big o complexity is probably more desirable here
-		let mut ears_queue = VecDeque::new();
+		let mut ears_queue = MultiSet::new();
 
 		let queue_vert = |v, polygon: &mut Vec<Vert>| {
 			Self::process_ear(v, &vert_collider, &mut ears_queue, polygon, epsilon);
@@ -647,16 +679,14 @@ impl EarClip {
 		let mut v = v.unwrap();
 
 		while num_tri > 0 {
-			let ear = ears_queue.front();
-			if let Some(&ear) = ear {
+			if let Some(ear) = ears_queue.pop_front() {
 				v = ear;
 				// Cost should always be negative, generally < -epsilon.
-				ears_queue.pop_front();
 			} else {
 				//no ear found!
 			}
 
-			Self::clip_ear(v, polygon, polygon_range, triangles);
+			Self::clip_ear(v, polygon, polygon_range, result);
 			num_tri -= 1;
 
 			let ear_left = polygon[v].left().ptr2index(polygon_range);
@@ -685,7 +715,7 @@ struct IdxCollider {
 struct Vert {
 	mesh_idx: i32,
 	cost: f64,
-	ear: bool,
+	ear: Option<Handle<usize>>,
 	pos: Point2<f64>,
 	right_dir: Vector2<f64>,
 	left: *mut Vert,
@@ -717,13 +747,13 @@ impl Vert {
 	//only be dereferenced through the accessor methods in order to let the
 	//borrow checker do its job
 	fn index2ptr(index: usize, polygon_range: &Range<usize>) -> *mut Vert {
-		assert!(index < polygon_range.len());
+		debug_assert!(index < polygon_range.len() / size_of::<Vert>());
 		(polygon_range.start + index * size_of::<Vert>()) as *mut Vert
 	}
 
 	fn ptr2index(&self, polygon_range: &Range<usize>) -> usize {
 		let address = self as *const Vert as usize;
-		assert!(address >= polygon_range.start && address < polygon_range.end);
+		debug_assert!(address >= polygon_range.start && address < polygon_range.end);
 
 		(address - polygon_range.start) / size_of::<Vert>()
 	}
@@ -821,7 +851,7 @@ impl Vert {
 	///Subtly different from !IsConvex because IsConvex will return true for
 	///colinear non-folded verts, while IsReflex will always check until actual
 	///certainty is determined.
-	fn is_reflexive(&self, epsilon: f64) -> bool {
+	fn is_reflex(&self, epsilon: f64) -> bool {
 		let left = self.left();
 		!left.inside_edge(left.right(), epsilon, true)
 	}
@@ -946,31 +976,6 @@ impl Vert {
 	}
 }
 
-///Triangulates a set of convex polygons by alternating instead of a fan, to
-///avoid creating high-degree vertices.
-fn triangulate_convex(polys: &PolygonsIdx) -> Vec<Vector3<i32>> {
-	let num_tri = polys.iter().fold(0, |acc, poly| acc + poly.len() - 2);
-	let mut triangles = Vec::with_capacity(num_tri);
-	for poly in polys {
-		let mut i = 0;
-		let mut k = poly.len() - 1;
-		let mut right = true;
-		while i + 1 < k {
-			let j = if right { i + 1 } else { k - 1 };
-			triangles.push(Vector3::new(poly[i].idx, poly[j].idx, poly[k].idx));
-			if right {
-				i = j;
-			} else {
-				k = j;
-			}
-
-			right = !right;
-		}
-	}
-
-	triangles
-}
-
 ///@brief Triangulates a set of &epsilon;-valid polygons. If the input is not
 ///&epsilon;-valid, the triangulation may overlap, but will always return a
 ///manifold result that matches the input edge directions.
@@ -984,17 +989,32 @@ fn triangulate_convex(polys: &PolygonsIdx) -> Vec<Vector3<i32>> {
 ///triangulation if the input is convex, falling back to ear-clipping if not.
 ///The triangle quality may be lower, so set to false to disable this
 ///optimization.
-///@return std::vector<ivec3> The triangles, referencing the original
-///vertex indicies.
-pub fn triangulate_idx(polys: &PolygonsIdx, epsilon: f64, allow_convex: bool) -> Vec<Vector3<i32>> {
+///@return HalfedgeTriangulation The contour and triangle halfedges,
+///referencing the original vertex indicies.
+pub fn triangulate_idx_halfedges(
+	polys: &PolygonsIdx,
+	epsilon: f64,
+	allow_convex: bool,
+) -> HalfedgeTriangulation {
+	let mut result;
+	let mut updated_epsilon = epsilon;
 	if allow_convex && is_convex(polys, epsilon)
 	//fast path
 	{
-		triangulate_convex(polys)
+		result = triangulate_convex(polys)
 	} else {
-		let triangulator = EarClip::new(polys, epsilon);
-		triangulator.triangulate()
-	}
+		let mut triangulator = EarClip::new(polys, epsilon);
+		result = triangulator.triangulate();
+		updated_epsilon = triangulator.get_precision();
+	};
+	result.epsilon = updated_epsilon;
+	result.finalize();
+	result
+}
+
+pub fn triangulate_idx(polys: &PolygonsIdx, epsilon: f64, allow_convex: bool) -> Vec<Vector3<i32>> {
+	let result = triangulate_idx_halfedges(polys, epsilon, allow_convex);
+	result.triangles()
 }
 
 ///@brief Triangulates a set of &epsilon;-valid polygons. If the input is not
