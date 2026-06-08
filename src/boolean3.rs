@@ -1,12 +1,11 @@
 use crate::collider::{Recorder, SimpleRecorder};
-use crate::common::{AABB, AABBOverlap, OpType};
+use crate::common::{AABB, AABBOverlap, DeterministicSet, OpType};
 use crate::disjoint_sets::DisjointSets;
 use crate::meshboolimpl::MeshBoolImpl;
 use crate::shared::{Halfedges, interpolate, shadows, with_sign};
 use crate::utils::{next3_i32, permute};
 use core::f64;
 use nalgebra::{Point3, Vector2, Vector4};
-use std::collections::HashSet;
 use std::mem;
 use std::ops::DerefMut;
 
@@ -523,7 +522,7 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 	}
 
 	// find components, the hope is the number of components should be small
-	let mut components = HashSet::new();
+	let mut components = DeterministicSet::new();
 	for v in 0..a.vert_pos.len() {
 		components.insert(u_a.find(v));
 	}

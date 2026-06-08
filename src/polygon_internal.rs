@@ -1,7 +1,7 @@
+use crate::common::DeterministicMap;
 use crate::polygon::PolygonsIdx;
 use crate::shared::Halfedge;
 use nalgebra::Vector3;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 #[derive(Clone)]
@@ -9,7 +9,7 @@ pub struct HalfedgeTriangulation {
 	pub halfedges: Vec<Halfedge>,
 	pub contour_end: usize,
 	pub epsilon: f64,
-	edge2halfedge: HashMap<u64, Vec<i32>>,
+	edge2halfedge: DeterministicMap<u64, Vec<i32>>,
 }
 
 impl Default for HalfedgeTriangulation {
@@ -18,7 +18,7 @@ impl Default for HalfedgeTriangulation {
 			halfedges: Vec::default(),
 			contour_end: 0,
 			epsilon: -1.0,
-			edge2halfedge: HashMap::default(),
+			edge2halfedge: DeterministicMap::default(),
 		}
 	}
 }
@@ -73,7 +73,7 @@ impl HalfedgeTriangulation {
 	}
 
 	pub fn finalize(&mut self) {
-		self.edge2halfedge = HashMap::new();
+		self.edge2halfedge = DeterministicMap::new();
 	}
 
 	fn edge_key(start: i32, end: i32) -> u64 {

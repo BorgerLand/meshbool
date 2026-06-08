@@ -1,8 +1,8 @@
+use crate::common::DeterministicMap;
 use crate::meshboolimpl::MeshBoolImpl;
 use crate::shared::{get_axis_aligned_projection, next_halfedge};
 use crate::utils::ccw;
 use nalgebra::{Point2, Point3, Vector3, distance};
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 fn tri_of(edge: i32) -> Vector3<i32> {
@@ -844,7 +844,7 @@ impl MeshBoolImpl {
 					// repetitive processing. Note that it only approximates the processed
 					// halfedges because it is thread local.
 					let mut end_verts: Vec<(i32, i32)> = Vec::new();
-					let mut end_vert_set: HashMap<i32, i32> = HashMap::new();
+					let mut end_vert_set: DeterministicMap<i32, i32> = DeterministicMap::new();
 					for i in start..end {
 						if local[i] {
 							continue;

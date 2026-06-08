@@ -1,17 +1,16 @@
 use crate::MeshBoolImpl;
-use crate::common::lerp;
+use crate::common::{DeterministicMap, lerp};
 use crate::meshboolimpl::BaryIndices;
 use crate::parallel::exclusive_scan_iter;
 use crate::shared::{Barycentric, TmpEdge, create_tmp_edges, next_halfedge};
 use crate::utils::next3_i32;
 use crate::vec::{vec_resize_nofill, vec_uninit};
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3, Vector4};
-use std::collections::HashMap;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
-static PARTITION_CACHE: LazyLock<Mutex<HashMap<Vector4<i32>, Partition>>> =
-	LazyLock::new(|| Mutex::new(HashMap::new()));
+static PARTITION_CACHE: LazyLock<Mutex<DeterministicMap<Vector4<i32>, Partition>>> =
+	LazyLock::new(|| Mutex::new(DeterministicMap::new()));
 
 #[derive(Default, Clone)]
 pub struct Partition {

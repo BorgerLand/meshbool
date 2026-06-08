@@ -1,6 +1,6 @@
 use crate::MeshBoolError;
 use crate::collider::Collider;
-use crate::common::{AABB, LossyFrom};
+use crate::common::{AABB, DeterministicMap, LossyFrom};
 use crate::disjoint_sets::DisjointSets;
 use crate::mesh::MeshGLP;
 use crate::mesh_fixes::{FlipTris, transform_normal};
@@ -14,7 +14,7 @@ use crate::vec::{vec_resize, vec_resize_nofill, vec_uninit};
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector2, Vector3, Vector4};
 use std::any::TypeId;
 use std::cmp::Ordering as CmpOrdering;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering as AtomicOrdering};
 use std::{array, f64, mem};
 
@@ -1509,7 +1509,7 @@ impl MeshBoolImpl {
 	pub fn increment_mesh_ids(&mut self) {
 		//in c++ this uses a custom hashtable class
 		let mut mesh_id_old2new =
-			HashMap::with_capacity(self.mesh_relation.mesh_id_transform.len() * 2);
+			DeterministicMap::with_capacity(self.mesh_relation.mesh_id_transform.len() * 2);
 		let old_transforms = mem::take(&mut self.mesh_relation.mesh_id_transform);
 		let num_mesh_ids = old_transforms.len();
 		let mut next_mesh_id = MeshBoolImpl::reserve_ids(num_mesh_ids) as i32;

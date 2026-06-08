@@ -1,8 +1,7 @@
-use std::collections::HashMap;
+use crate::common::DeterministicMap;
+use crate::vec::vec_resize_nofill;
 use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
-
-use crate::vec::vec_resize_nofill;
 
 ///from https://github.com/wjakob/dset, changed to add connected component
 ///computation
@@ -80,7 +79,7 @@ impl DisjointSets {
 	pub fn connected_components(&self, components: &mut Vec<i32>) -> i32 {
 		unsafe { vec_resize_nofill(components, self.m_data.len()) };
 		let mut lonely_nodes = 0;
-		let mut to_label: HashMap<u32, i32> = HashMap::new();
+		let mut to_label: DeterministicMap<u32, i32> = DeterministicMap::new();
 		for i in 0..self.m_data.len() {
 			// we optimize for connected component of size 1
 			// no need to put them into the hashmap

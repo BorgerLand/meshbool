@@ -2,7 +2,9 @@ use crate::mesh::MeshGLP;
 use core::f64;
 use nalgebra::{Matrix3x4, Point2, Point3, Vector2, Vector3};
 use std::cmp::Ordering;
-use std::ops::Div;
+use std::collections::{HashMap, HashSet};
+use std::hash::{BuildHasherDefault, DefaultHasher};
+use std::ops::{Deref, DerefMut, Div};
 
 pub type MeshGL32 = MeshGLP<f32, u32>;
 pub type MeshGL64 = MeshGLP<f64, u64>;
@@ -295,4 +297,72 @@ pub fn sind(mut x: f64) -> f64 {
 #[inline]
 pub fn cosd(x: f64) -> f64 {
 	sind(x + 90.0)
+}
+
+//wrappers around hashmap/hashset to remove the nondeterministic hasher
+#[derive(Clone)]
+pub struct DeterministicMap<K, V>(HashMap<K, V, BuildHasherDefault<DefaultHasher>>);
+
+impl<K, V> Deref for DeterministicMap<K, V> {
+	type Target = HashMap<K, V, BuildHasherDefault<DefaultHasher>>;
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl<K, V> DerefMut for DeterministicMap<K, V> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.0
+	}
+}
+
+impl<K, V> Default for DeterministicMap<K, V> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl<K, V> DeterministicMap<K, V> {
+	pub fn new() -> Self {
+		Self(HashMap::with_hasher(BuildHasherDefault::default()))
+	}
+
+	pub fn with_capacity(capacity: usize) -> Self {
+		Self(HashMap::with_capacity_and_hasher(
+			capacity,
+			BuildHasherDefault::default(),
+		))
+	}
+}
+
+#[derive(Clone)]
+pub struct DeterministicSet<K>(HashSet<K, BuildHasherDefault<DefaultHasher>>);
+
+impl<K> Deref for DeterministicSet<K> {
+	type Target = HashSet<K, BuildHasherDefault<DefaultHasher>>;
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl<K> DerefMut for DeterministicSet<K> {
+	fn deref_mut(&mut self) -> &mut Self::Target {
+		&mut self.0
+	}
+}
+
+impl<K> Default for DeterministicSet<K> {
+	fn default() -> Self {
+		Self::new()
+	}
+}
+
+impl<K> DeterministicSet<K> {
+	pub fn new() -> Self {
+		Self(HashSet::with_hasher(BuildHasherDefault::default()))
+	}
+
+	pub fn into_iter(self) -> impl Iterator<Item = K> {
+		self.0.into_iter()
+	}
 }

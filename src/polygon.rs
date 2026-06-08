@@ -1,12 +1,11 @@
 use crate::common::Polygons;
-use crate::common::{OrderedF64, Rect};
+use crate::common::Rect;
+use crate::multimap::Handle;
+use crate::multimap::MultiSet;
 use crate::polygon_internal::HalfedgeTriangulation;
 use crate::tree2d::{build_2d_tree, query_2d_tree};
 use crate::utils::{K_PRECISION, ccw};
-use crate::vec::InsertSorted;
 use nalgebra::{Matrix2, Point2, Vector2, Vector3};
-use std::cmp::Reverse;
-use std::collections::VecDeque;
 use std::ops::Range;
 use std::{collections::BTreeMap, ptr};
 
@@ -102,8 +101,7 @@ struct EarClip {
 	//Pointers to first and last verts within self.polygon
 	polygon_range: Range<usize>,
 	///The set of right-most starting points, one for each negative-area contour.
-	//originally a c++ multiset
-	holes: Vec<usize>,
+	holes: MultiSet<usize>,
 	///The set of starting points, one for each positive-area contour.
 	outers: Vec<usize>,
 	///The set of starting points, one for each simple polygon.
@@ -133,7 +131,7 @@ impl EarClip {
 		let mut ret = EarClip {
 			polygon,
 			polygon_range,
-			holes: Vec::new(),
+			holes: MultiSet::new(),
 			outers: Vec::new(),
 			simples: Vec::new(),
 			hole2bbox: BTreeMap::new(),
@@ -176,7 +174,7 @@ impl EarClip {
 	///@return std::vector<ivec3> The triangles, referencing the original
 	///polygon points in order.
 	fn triangulate(&mut self) -> HalfedgeTriangulation {
-		for &start in &self.holes {
+		for &start in self.holes.iter() {
 			Self::cut_keyhole(
 				start,
 				&mut self.simples,
@@ -339,7 +337,7 @@ impl EarClip {
 			self.polygon.push(Vert {
 				mesh_idx: vert.idx,
 				cost: 0.0,
-				ear: false,
+				ear: None,
 				pos: vert.pos,
 				right_dir: Vector2::new(0.0, 0.0),
 				left: ptr::null_mut::<Vert>(),
@@ -361,7 +359,7 @@ impl EarClip {
 				self.polygon.push(Vert {
 					mesh_idx: vert.idx,
 					cost: 0.0,
-					ear: false,
+					ear: None,
 					pos: vert.pos,
 					right_dir: Vector2::new(0.0, 0.0),
 					left: ptr::null_mut::<Vert>(),
@@ -427,8 +425,10 @@ impl EarClip {
 		let min_area = self.epsilon * size.x.max(size.y);
 
 		if max_x.is_finite() && area < -min_area {
-			self.holes
-				.insert_sorted_by_key(start, |&hole| Reverse(OrderedF64(self.polygon[hole].pos.x))); //descending pos.x
+			self.holes.insert(
+				|&a, &b| self.polygon[a].pos.x > self.polygon[b].pos.x,
+				start,
+			);
 			self.hole2bbox.entry(start).or_insert(bbox);
 		} else {
 			self.simples.push(start);
@@ -601,23 +601,22 @@ impl EarClip {
 	fn process_ear(
 		v: usize,
 		collider: &IdxCollider,
-		ears_queue: &mut VecDeque<usize>,
+		ears_queue: &mut MultiSet<usize>,
 		polygon: &mut Vec<Vert>,
 		epsilon: f64,
 	) {
-		if polygon[v].ear {
-			ears_queue.remove(ears_queue.iter().position(|&ball| ball == v).unwrap());
-			polygon[v].ear = false;
+		if let Some(ear_handle) = polygon[v].ear.take() {
+			unsafe {
+				ears_queue.remove(ear_handle);
+			}
 		}
 
 		if polygon[v].is_short(epsilon) {
 			polygon[v].cost = K_BEST;
-			polygon[v].ear = true;
-			ears_queue.insert_sorted_by_key(v, |&ear| OrderedF64(polygon[ear].cost)); //ascending cost
+			polygon[v].ear = Some(ears_queue.insert(|&a, &b| polygon[a].cost < polygon[b].cost, v));
 		} else if polygon[v].is_convex(2.0 * epsilon) {
 			polygon[v].cost = polygon[v].ear_cost(epsilon, collider, polygon);
-			polygon[v].ear = true;
-			ears_queue.insert_sorted_by_key(v, |&ear| OrderedF64(polygon[ear].cost)); //ascending cost
+			polygon[v].ear = Some(ears_queue.insert(|&a, &b| polygon[a].cost < polygon[b].cost, v));
 		} else {
 			polygon[v].cost = 1.0; // not used, but marks reflex verts for debug
 		}
@@ -666,8 +665,7 @@ impl EarClip {
 		let mut num_tri = -2;
 
 		// A priority queue of valid ears - the multiset allows them to be updated.
-		//c++ uses multiset here, whose big o complexity is probably more desirable here
-		let mut ears_queue = VecDeque::new();
+		let mut ears_queue = MultiSet::new();
 
 		let queue_vert = |v, polygon: &mut Vec<Vert>| {
 			Self::process_ear(v, &vert_collider, &mut ears_queue, polygon, epsilon);
@@ -681,11 +679,9 @@ impl EarClip {
 		let mut v = v.unwrap();
 
 		while num_tri > 0 {
-			let ear = ears_queue.front();
-			if let Some(&ear) = ear {
+			if let Some(ear) = ears_queue.pop_front() {
 				v = ear;
 				// Cost should always be negative, generally < -epsilon.
-				ears_queue.pop_front();
 			} else {
 				//no ear found!
 			}
@@ -719,7 +715,7 @@ struct IdxCollider {
 struct Vert {
 	mesh_idx: i32,
 	cost: f64,
-	ear: bool,
+	ear: Option<Handle<usize>>,
 	pos: Point2<f64>,
 	right_dir: Vector2<f64>,
 	left: *mut Vert,

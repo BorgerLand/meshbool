@@ -1,15 +1,16 @@
 use crate::AABB;
 use crate::collider::SimpleRecorder;
-use crate::common::{Polygons, SimplePolygon};
+use crate::common::{DeterministicMap, DeterministicSet, Polygons, SimplePolygon};
 use crate::meshboolimpl::MeshBoolImpl;
 use crate::parallel::exclusive_scan_in_place;
 use crate::polygon::{PolyVert, PolygonsIdx, SimplePolygonIdx, triangulate_idx_halfedges};
 use crate::polygon_internal::HalfedgeTriangulation;
 use crate::shared::{Halfedge, Halfedges, TriRef, get_axis_aligned_projection};
 use crate::utils::{ccw, next3_i32, next3_usize};
-use crate::vec::{InsertSorted, vec_resize, vec_uninit};
+use crate::vec::{vec_resize, vec_uninit};
 use nalgebra::{Matrix2x3, Matrix3x2, Point3, Vector3};
-use std::collections::{HashMap, HashSet};
+use std::collections::VecDeque;
+use std::collections::hash_map::Entry;
 use std::mem;
 use std::ops::DerefMut;
 
@@ -19,10 +20,12 @@ use std::ops::DerefMut;
 ///vertex indices into the returned polygons structure, it will use the halfedge
 ///indices instead.
 fn assemble_halfedges(edges: &[Halfedge], start_halfedge_idx: i32) -> Vec<Vec<i32>> {
-	//originally a c++ multimap. tuple is (k, v). sort by key, and if keys are equal, sort by insertion order within the key
-	let mut vert_edge = Vec::new();
+	let mut vert_edge: DeterministicMap<i32, VecDeque<i32>> = DeterministicMap::new(); //originally a c++ multimap
 	for (i, edge) in edges.iter().enumerate() {
-		vert_edge.insert_sorted_by_key((edge.start_vert, i as i32), |&(vert, _)| vert);
+		vert_edge
+			.entry(edge.start_vert)
+			.or_default()
+			.push_back(i as i32);
 	}
 
 	let mut polys = Vec::new();
@@ -33,7 +36,7 @@ fn assemble_halfedges(edges: &[Halfedge], start_halfedge_idx: i32) -> Vec<Vec<i3
 			if vert_edge.is_empty() {
 				break;
 			}
-			start_edge = vert_edge[0].1;
+			start_edge = vert_edge.values().next().unwrap()[0];
 			this_edge = start_edge;
 			polys.push(Vec::new());
 		}
@@ -42,10 +45,14 @@ fn assemble_halfedges(edges: &[Halfedge], start_halfedge_idx: i32) -> Vec<Vec<i3
 			.last_mut()
 			.unwrap()
 			.push(start_halfedge_idx + this_edge);
-		let result =
-			vert_edge.binary_search_by_key(&edges[this_edge as usize].end_vert, |&(vert, _)| vert);
-		let result = vert_edge.remove(result.expect("non-manifold edge"));
-		this_edge = result.1;
+		let Entry::Occupied(mut result) = vert_edge.entry(edges[this_edge as usize].end_vert)
+		else {
+			panic!("non-manifold edge");
+		};
+		this_edge = result.get_mut().pop_front().expect("non-manifold edge");
+		if result.get().is_empty() {
+			result.remove();
+		}
 	}
 
 	polys
@@ -213,7 +220,7 @@ impl MeshBoolImpl {
 		let mut tri_offset: Vec<usize> = unsafe { vec_uninit(face_edge.len()) };
 		*tri_offset.last_mut().unwrap() = 0;
 
-		let mut results: HashMap<i32, HalfedgeTriangulation> = HashMap::new();
+		let mut results: DeterministicMap<i32, HalfedgeTriangulation> = DeterministicMap::new();
 		for face in 0..face_edge.len() - 1 {
 			let num_edge = face_edge[face + 1] - face_edge[face];
 			if num_edge == 0 {
@@ -404,7 +411,7 @@ impl MeshBoolImpl {
 		let mut query: Vec<AABB> = vec![];
 		query.push(plane);
 
-		let mut tris = HashSet::<i32>::new();
+		let mut tris = DeterministicSet::<i32>::new();
 		let mut record_collision = |_, tri: i32| {
 			let mut min: f64 = core::f64::INFINITY;
 			let mut max: f64 = core::f64::NEG_INFINITY;

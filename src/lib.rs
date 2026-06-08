@@ -19,6 +19,7 @@ mod face_op;
 mod mesh;
 mod mesh_fixes;
 mod meshboolimpl;
+mod multiset;
 mod parallel;
 mod polygon;
 mod polygon_internal;
