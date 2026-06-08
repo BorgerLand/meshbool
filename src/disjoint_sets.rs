@@ -11,7 +11,7 @@ pub struct DisjointSets {
 
 impl DisjointSets {
 	pub fn new(size: usize) -> Self {
-		assert!(size <= u32::MAX as usize);
+		debug_assert!(size <= u32::MAX as usize);
 		Self {
 			m_data: (0..size).map(|i| AtomicU64::new(i as u64)).collect(),
 		}
@@ -101,7 +101,7 @@ impl DisjointSets {
 	}
 
 	fn to_index(id: usize) -> u32 {
-		assert!(id <= u32::MAX as usize);
+		debug_assert!(id <= u32::MAX as usize);
 		id as u32
 	}
 

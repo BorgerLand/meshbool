@@ -41,10 +41,7 @@ git submodule update --init --recursive
 
 ```bash
 mkdir -p test/manifold/build && cd test/manifold/build
-#SLOW MODE:
-cmake .. -DCMAKE_BUILD_TYPE=Debug -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
-#FAST MODE:
-cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_CBIND=OFF && make manifold_test -j$(nproc)
+cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
 ```
 
 ### 3. Run the tests
@@ -58,12 +55,12 @@ cd test #from inside test/manifold/build
 
 ## Disabled tests
 
-A few upstream tests exercise features not yet implemented in the MeshBool
-backend. Two are wrapped in `#if 0` in the test files, and one entire file is
-excluded from the build in `test/CMakeLists.txt`:
+There are a few upstream tests that prevent other tests from running due to features not yet implemented in MeshBool. Tests that are currently failing gracefully without interfering with other tests are kept enabled.
 
-| Feature                                | Disabled                                                                              |
-| -------------------------------------- | ------------------------------------------------------------------------------------- |
-| `ExecutionContext` / `WithContext`     | Entire `context_test.cpp`; `DeepChainDoesNotOverflowNumLeaves` in `manifold_test.cpp` |
-| `halfedgeTangents` / `InvalidTangents` | `InvalidTangents` in `smooth_test.cpp`                                                |
-| C Bindings (`MANIFOLD_CBIND`)          | Entire `manifoldc_test.cpp`                                                           |
+| Disabled test                                | Reason           | Method                         |
+| -------------------------------------------- | ---------------- | ------------------------------ |
+| `Manifold.DeepChainDoesNotOverflowNumLeaves` | Does not compile | `#if 0`                        |
+| All of `context_test.cpp`                    | Does not compile | `manifold/test/CMakeLists.txt` |
+| All of `manifoldc_test.cpp`                  | Does not compile | CMake flag                     |
+| `Manifold.MeshRelationRefinePrecision`       | Crashes          | `#if 0`                        |
+| `Smooth.Manual`                              | Crashes          | `#if 0`                        |

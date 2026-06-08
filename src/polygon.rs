@@ -747,13 +747,13 @@ impl Vert {
 	//only be dereferenced through the accessor methods in order to let the
 	//borrow checker do its job
 	fn index2ptr(index: usize, polygon_range: &Range<usize>) -> *mut Vert {
-		assert!(index < polygon_range.len() / size_of::<Vert>());
+		debug_assert!(index < polygon_range.len() / size_of::<Vert>());
 		(polygon_range.start + index * size_of::<Vert>()) as *mut Vert
 	}
 
 	fn ptr2index(&self, polygon_range: &Range<usize>) -> usize {
 		let address = self as *const Vert as usize;
-		assert!(address >= polygon_range.start && address < polygon_range.end);
+		debug_assert!(address >= polygon_range.start && address < polygon_range.end);
 
 		(address - polygon_range.start) / size_of::<Vert>()
 	}
