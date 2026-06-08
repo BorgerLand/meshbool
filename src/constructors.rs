@@ -449,6 +449,7 @@ impl MeshBool {
 		}
 
 		meshbool_impl.create_halfedges(tri_verts_dh, vec![]);
+		meshbool_impl.initialize_original();
 		meshbool_impl.calculate_bbox();
 		meshbool_impl.set_epsilon(-1.0, false);
 		meshbool_impl.sort_geometry();
