@@ -1,13 +1,8 @@
 # Manifold Test Suite
 
-This directory bridges the [MeshBool](https://github.com/JaminKoke/meshbool)
-Rust crate to the upstream
-[Manifold](https://github.com/BorgerLand/manifold/tree/meshbool-test) C++ test
-suite. The C++ wrapper headers translate the Manifold API surface to calls into
-MeshBool via [Zngur](https://github.com/HKalbasi/zngur)-generated FFI bindings.
+This directory bridges the MeshBool Rust crate to the upstream Manifold C++ test suite. The C++ headers translate the Manifold API surface to calls into MeshBool via [Zngur](https://hkalbasi.github.io/zngur/)-generated FFI bindings.
 
-> **Note:** These bindings are for testing only and are not optimized for
-> general use. They are not the main focus of the project.
+> **Note:** These bindings are for testing only and are not optimized for general use. They are not the main focus of the project.
 
 ---
 
