@@ -658,10 +658,8 @@ impl MeshBool {
 }
 
 impl From<MeshBoolImpl> for MeshBool {
-	fn from(value: MeshBoolImpl) -> Self {
-		Self {
-			meshbool_impl: value,
-		}
+	fn from(meshbool_impl: MeshBoolImpl) -> Self {
+		Self { meshbool_impl }
 	}
 }
 
