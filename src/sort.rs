@@ -395,7 +395,7 @@ impl MeshBoolImpl {
 		let mut reindex_face = ReindexFace {
 			halfedge: &mut self.halfedge,
 			old_halfedge: &old_halfedge,
-			face_new2old: &face_new2old,
+			face_new2old,
 			face_old2new: &face_old2new,
 		};
 		for new_face in 0..num_tri {

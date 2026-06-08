@@ -305,7 +305,7 @@ impl MeshBool {
 
 			let mut vert_new2old: Vec<i32> = vec![0; num_vert];
 			let n_vert = copy_if(0..num_vert as i32, &mut vert_new2old, |v| {
-				vert_label[v as usize] == i as i32
+				vert_label[v as usize] == i
 			});
 			meshbool_impl.vert_pos.resize(n_vert, Default::default());
 			meshbool_impl.vert_normal.resize(n_vert, Default::default());
@@ -336,6 +336,6 @@ impl MeshBool {
 
 			meshes.push(Self::from(meshbool_impl));
 		}
-		return meshes;
+		meshes
 	}
 }
