@@ -50,6 +50,12 @@ mod crate
 			f64,
 			::nalgebra::Vector2<f64>,
 		) -> MeshBool;
+		fn revolve
+		(
+			&::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>,
+			i32,
+			f64,
+		) -> MeshBool;
 		fn as_original(&self) -> MeshBool;
 		fn reserve_ids(u32) -> u32;
 		fn matches_tri_normals(&self) -> bool;
