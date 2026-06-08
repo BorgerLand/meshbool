@@ -209,7 +209,7 @@ impl MeshBool {
 			meshbool_impl.tolerance = meshbool_impl.epsilon.max(tolerance);
 		}
 
-		MeshBool { meshbool_impl }
+		Self::from(meshbool_impl)
 	}
 
 	///Return a copy of the manifold simplified to the given tolerance, but with its

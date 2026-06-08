@@ -3,7 +3,8 @@ use crate::collider::Collider;
 use crate::common::{AABB, LossyFrom};
 use crate::disjoint_sets::DisjointSets;
 use crate::meshboolimpl::MeshBoolImpl;
-use crate::parallel::{inclusive_scan, scatter};
+use crate::parallel::{gather, inclusive_scan, scatter};
+use crate::shared::Halfedges;
 use crate::utils::{K_PRECISION, permute};
 use crate::vec::{vec_resize, vec_resize_nofill, vec_uninit};
 use nalgebra::{Point3, Vector3};
@@ -21,6 +22,33 @@ fn morton_code(position: Point3<f64>, bbox: AABB) -> u32 {
 		K_NO_CODE
 	} else {
 		Collider::morton_code(position, bbox)
+	}
+}
+
+struct ReindexFace<'a> {
+	halfedge: &'a mut Halfedges,
+	old_halfedge: &'a Halfedges,
+	face_new2old: &'a [i32],
+	face_old2new: &'a [i32],
+}
+
+impl ReindexFace<'_> {
+	fn call(&mut self, new_face: i32) {
+		let old_face = self.face_new2old[new_face as usize];
+		for i in 0..3 {
+			let old_edge = 3 * old_face + i;
+			let mut edge = self.old_halfedge.get(old_edge);
+			let paired_face = edge.paired_halfedge / 3;
+			let offset = edge.paired_halfedge - 3 * paired_face;
+			edge.paired_halfedge = 3 * self.face_old2new[paired_face as usize] + offset;
+			let new_edge = 3 * new_face + i;
+			self.halfedge.set(
+				new_edge,
+				edge.start_vert,
+				edge.paired_halfedge,
+				edge.prop_vert,
+			);
+		}
 	}
 }
 
@@ -231,7 +259,7 @@ impl MeshBoolImpl {
 	///Updates the halfedges to point to new vert indices based on a mapping,
 	///vertNew2Old. This may be a subset, so the total number of original verts is
 	///also given.
-	fn reindex_verts(&mut self, vert_new2old: &[i32], old_num_vert: usize) {
+	pub fn reindex_verts(&mut self, vert_new2old: &[i32], old_num_vert: usize) {
 		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
 		// keep partial output from feeding unconditional downstream consumers.
 		let mut vert_old2new: Vec<i32> = unsafe { vec_uninit(old_num_vert) };
@@ -364,24 +392,63 @@ impl MeshBoolImpl {
 		let mut face_old2new = unsafe { vec_uninit(old_halfedge.len() / 3) };
 		scatter(0..num_tri as i32, face_new2old, &mut face_old2new);
 
+		let mut reindex_face = ReindexFace {
+			halfedge: &mut self.halfedge,
+			old_halfedge: &old_halfedge,
+			face_new2old,
+			face_old2new: &face_old2new,
+		};
 		for new_face in 0..num_tri {
-			//struct ReindexFace is inlined here
-			let new_face = new_face as i32;
-			let old_face = face_new2old[new_face as usize];
-			for i in 0..3 {
-				let old_edge = 3 * old_face + i;
-				let mut edge = old_halfedge.get(old_edge);
-				let paired_face = edge.paired_halfedge / 3;
-				let offset = edge.paired_halfedge - 3 * paired_face;
-				edge.paired_halfedge = 3 * face_old2new[paired_face as usize] + offset;
-				let new_edge = 3 * new_face + i;
-				self.halfedge.set(
-					new_edge,
-					edge.start_vert,
-					edge.paired_halfedge,
-					edge.prop_vert,
-				);
+			reindex_face.call(new_face as i32);
+		}
+	}
+
+	pub fn gather_faces_from_old(&mut self, old: &MeshBoolImpl, face_new2old: &[i32]) {
+		// Invariant: every ctx-passing parallel op is followed by IsCancelled to
+		// keep partial output from feeding unconditional downstream consumers.
+		let num_tri = face_new2old.len();
+
+		unsafe {
+			vec_resize_nofill(&mut self.mesh_relation.tri_ref, num_tri);
+		}
+		gather(
+			face_new2old,
+			&old.mesh_relation.tri_ref,
+			&mut self.mesh_relation.tri_ref,
+		);
+
+		self.mesh_relation
+			.mesh_id_transform
+			.extend(&old.mesh_relation.mesh_id_transform);
+
+		if old.num_prop() > 0 {
+			self.num_prop = old.num_prop;
+			self.properties = old.properties.clone();
+		}
+
+		if old.face_normal.len() == old.num_tri() {
+			unsafe {
+				vec_resize_nofill(&mut self.face_normal, num_tri);
 			}
+			gather(face_new2old, &old.face_normal, &mut self.face_normal);
+		}
+
+		let mut face_old2new = unsafe { vec_uninit(old.num_tri()) };
+		scatter(0..num_tri as i32, face_new2old, &mut face_old2new);
+
+		unsafe {
+			self.halfedge.resize_nofill(3 * num_tri);
+		}
+		let mut reindex_face = ReindexFace {
+			halfedge: &mut self.halfedge,
+			// halfedge_tangent: &mut self.halfedge_tangent,
+			old_halfedge: &old.halfedge,
+			// old_halfedge_tangent: &old_halfedge_tangent,
+			face_new2old: &face_new2old,
+			face_old2new: &face_old2new,
+		};
+		for new_face in 0..num_tri {
+			reindex_face.call(new_face as i32);
 		}
 	}
 

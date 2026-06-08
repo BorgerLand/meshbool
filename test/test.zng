@@ -70,6 +70,7 @@ mod crate
 		fn calculate_curvature(&self, i32, i32) -> MeshBool;
 		fn calculate_normals(&self, i32, f64) -> MeshBool;
 		fn boolean(&self, &MeshBool, OpType) -> MeshBool;
+		fn decompose(&self) -> ::std::vec::Vec<MeshBool>;
 		fn split(&self, &MeshBool) -> (MeshBool, MeshBool);
 		fn split_by_plane(&self, ::nalgebra::Vector3<f64>, f64) -> (MeshBool, MeshBool);
 		fn trim_by_plane(&self, ::nalgebra::Vector3<f64>, f64) -> MeshBool;
@@ -345,6 +346,15 @@ mod ::core
 			fn unwrap(self) -> &::std::vec::Vec<::nalgebra::Point2<f64>>;
 		}
 		
+		type Option<&crate::MeshBool>
+		{
+			#layout(size = 8, align = 8);
+			
+			wellknown_traits(Copy);
+			
+			fn unwrap(self) -> &crate::MeshBool;
+		}
+		
 		type Option<Box<dyn FnMut(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>>
 		{
 			#layout(size = 16, align = 8);
@@ -451,6 +461,14 @@ mod ::std
 			
 			fn new() -> Vec<Vec<crate::polygon::PolyVert>>;
 			fn push(&mut self, Vec<crate::polygon::PolyVert>);
+		}
+		
+		type Vec<crate::MeshBool>
+		{
+			#layout(size = 24, align = 8);
+			
+			fn len(&self) -> usize;
+			fn get(&self, usize) -> ::core::option::Option<&crate::MeshBool> deref [crate::MeshBool];
 		}
 	}
 }
