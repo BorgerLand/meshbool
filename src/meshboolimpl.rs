@@ -1047,8 +1047,8 @@ impl MeshBoolImpl {
 	///to map the propVert indices to vert indices.
 	pub fn create_halfedges(&mut self, tri_prop: Vec<Vector3<i32>>, tri_vert: Vec<Vector3<i32>>) {
 		let num_tri = tri_prop.len();
-		let num_halfedge = (3 * num_tri) as i32;
-		let mut halfedge = unsafe { vec_uninit(num_halfedge as usize) };
+		let num_halfedge = 3 * num_tri;
+		let mut halfedge = unsafe { vec_uninit(num_halfedge) };
 
 		let vert_count = self.vert_pos.len() as i32;
 
@@ -1056,7 +1056,7 @@ impl MeshBoolImpl {
 		let mut ids = {
 			let ids = if vert_count < (1 << 18) {
 				// For small vertex count, it is faster to just do sorting
-				let mut edge: Vec<u64> = unsafe { vec_uninit(num_halfedge as usize) };
+				let mut edge: Vec<u64> = unsafe { vec_uninit(num_halfedge) };
 				let mut set_edge = |e: i32, v0: i32, v1: i32| {
 					edge[e as usize] = (if v0 < v1 { 1 } else { 0 }) << 63
 						| (v0.min(v1) as u64) << 32
@@ -1089,7 +1089,7 @@ impl MeshBoolImpl {
 					}
 				}
 
-				let mut ids: Vec<i32> = (0..num_halfedge).collect();
+				let mut ids: Vec<i32> = (0..num_halfedge as i32).collect();
 				ids.sort_by_key(|&i| edge[i as usize]);
 				ids
 			} else {
@@ -1098,7 +1098,7 @@ impl MeshBoolImpl {
 				// We first copy them there (as HalfedgePairData), and then do sorting
 				// locally for each slice.
 				// This helps with memory locality, and is faster for larger meshes.
-				let mut entries = unsafe { vec_uninit(num_halfedge as usize) };
+				let mut entries = unsafe { vec_uninit(num_halfedge) };
 				let mut offsets: Vec<i32> = vec![0; (vert_count * 2) as usize];
 				let mut set_offset = |_e: i32, v0: i32, v1: i32| {
 					let offset = if v0 > v1 { 0 } else { vert_count };
@@ -1154,7 +1154,7 @@ impl MeshBoolImpl {
 					}
 				}
 
-				let mut ids: Vec<i32> = unsafe { vec_uninit(num_halfedge as usize) };
+				let mut ids: Vec<i32> = unsafe { vec_uninit(num_halfedge) };
 				for v in 0..offsets.len() {
 					let start = if v == 0 { 0 } else { offsets[v - 1] };
 					let end = offsets[v];
@@ -1183,8 +1183,8 @@ impl MeshBoolImpl {
 
 		// Mark opposed triangles for removal - this may strand unreferenced verts
 		// which are removed later by self.remove_unreferenced_verts() and self.finish().
-		let num_edge = num_halfedge / 2;
-		let mut removed = vec![false; num_halfedge as usize];
+		let num_edge = (num_halfedge / 2) as i32;
+		let mut removed = vec![false; num_halfedge];
 
 		let mut consecutive_start = 0;
 		for i in 0..num_edge {
@@ -1262,7 +1262,7 @@ impl MeshBoolImpl {
 
 		self.halfedge = Halfedges::default();
 		unsafe {
-			self.halfedge.resize_nofill(num_halfedge as usize);
+			self.halfedge.resize_nofill(num_halfedge);
 		}
 		for i in 0..num_edge {
 			let pair0 = ids[i as usize];
@@ -1285,6 +1285,17 @@ impl MeshBoolImpl {
 				self.halfedge.set_start(pair1, -1);
 				self.halfedge.set_prop(pair1, 0);
 				self.halfedge.set_pair(pair1, -1);
+			}
+		}
+
+		#[cfg(feature = "test")]
+		for edge in 0..num_halfedge {
+			let next = next_halfedge(edge as i32) as usize;
+			if !removed[edge] && !removed[next] {
+				debug_assert!(
+					halfedge[edge].end_vert == halfedge[next].start_vert,
+					"CreateHalfedges requires triangle-ordered edges!"
+				);
 			}
 		}
 	}

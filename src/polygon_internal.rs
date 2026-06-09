@@ -58,7 +58,7 @@ impl HalfedgeTriangulation {
 		(self.halfedges.len() - self.contour_end) / 3
 	}
 
-	pub fn triangles(self) -> Vec<Vector3<i32>> {
+	pub fn triangles(&self) -> Vec<Vector3<i32>> {
 		let mut triangles = Vec::with_capacity(self.num_tri());
 		let mut edge = self.contour_end;
 		while edge < self.halfedges.len() {
@@ -73,6 +73,29 @@ impl HalfedgeTriangulation {
 	}
 
 	pub fn finalize(&mut self) {
+		#[cfg(feature = "test")]
+		{
+			debug_assert!(
+				self.edge2halfedge.is_empty(),
+				"triangulation has unpaired halfedges"
+			);
+			for i in 0..self.halfedges.len() {
+				let pair = self.halfedges[i].paired_halfedge;
+				debug_assert!(
+					pair >= 0 && pair < self.halfedges.len() as i32,
+					"invalid paired halfedge"
+				);
+				debug_assert!(
+					self.halfedges[pair as usize].paired_halfedge == i as i32,
+					"halfedge pair is not reciprocal"
+				);
+				debug_assert!(
+					self.halfedges[i].start_vert == self.halfedges[pair as usize].end_vert
+						&& self.halfedges[i].end_vert == self.halfedges[pair as usize].start_vert,
+					"halfedge pair endpoints do not match"
+				);
+			}
+		}
 		self.edge2halfedge = DeterministicMap::new();
 	}
 

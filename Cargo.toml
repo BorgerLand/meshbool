@@ -10,6 +10,11 @@ crate-type = ["staticlib"]
 [features]
 test = ["dep:zngur", "dep:build-rs"]
 
+#in original manifold, assertions are only used for tests.
+#the test suite cmake file forces debug assertions back on
+[profile.dev.package.meshbool]
+debug-assertions = false
+
 [dependencies]
 libm = { version = "0.2", default-features = false }
 nalgebra = { version = "0.34", default-features = false, features = ["std", "libm-force"] }

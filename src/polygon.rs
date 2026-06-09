@@ -9,7 +9,96 @@ use nalgebra::{Matrix2, Point2, Vector2, Vector3};
 use std::ops::Range;
 use std::{collections::BTreeMap, ptr};
 
+#[cfg(feature = "test")]
+use {
+	crate::common::DeterministicMap,
+	crate::common::{INTERMEDIATE_CHECKS, PROCESS_OVERLAPS},
+	std::mem,
+	std::sync::atomic::Ordering,
+};
+
 const K_BEST: f64 = f64::NEG_INFINITY;
+
+#[cfg(feature = "test")]
+#[derive(Clone)]
+struct PolyEdge {
+	start_vert: i32,
+	end_vert: i32,
+}
+
+#[cfg(feature = "test")]
+fn halfedges2edges(result: &HalfedgeTriangulation) -> Vec<PolyEdge> {
+	let mut halfedges = Vec::with_capacity(result.halfedges.len());
+	for edge in &result.halfedges {
+		halfedges.push(PolyEdge {
+			start_vert: edge.start_vert,
+			end_vert: edge.end_vert,
+		});
+	}
+	halfedges
+}
+
+#[cfg(feature = "test")]
+fn check_topology(halfedges: &[PolyEdge]) {
+	debug_assert!(halfedges.len() % 2 == 0, "Odd number of halfedges.");
+	let n_edges = halfedges.len() / 2;
+	let mut forward = Vec::with_capacity(n_edges);
+	let mut backward = Vec::with_capacity(n_edges);
+
+	forward.extend(
+		halfedges
+			.iter()
+			.cloned()
+			.filter(|e| e.end_vert > e.start_vert),
+	);
+	debug_assert!(
+		forward.len() == n_edges,
+		"Half of halfedges should be forward."
+	);
+
+	backward.extend(
+		halfedges
+			.iter()
+			.cloned()
+			.filter(|e| e.end_vert < e.start_vert),
+	);
+	debug_assert!(
+		backward.len() == n_edges,
+		"Half of halfedges should be backward."
+	);
+
+	for e in backward.iter_mut() {
+		mem::swap(&mut e.start_vert, &mut e.end_vert);
+	}
+	forward.sort_by_key(|edge| (edge.start_vert, edge.end_vert));
+	backward.sort_by_key(|edge| (edge.start_vert, edge.end_vert));
+	for i in 0..n_edges {
+		debug_assert!(
+			forward[i].start_vert == backward[i].start_vert
+				&& forward[i].end_vert == backward[i].end_vert,
+			"Not manifold."
+		);
+	}
+}
+
+#[cfg(feature = "test")]
+fn check_geometry(triangles: &[Vector3<i32>], polys: &PolygonsIdx, epsilon: f64) {
+	let mut vert_pos: DeterministicMap<i32, Point2<f64>> = DeterministicMap::new();
+	for poly in polys {
+		for i in 0..poly.len() {
+			vert_pos.insert(poly[i].idx, poly[i].pos);
+		}
+	}
+	debug_assert!(
+		triangles.iter().all(|tri| ccw(
+			vert_pos[&tri[0]],
+			vert_pos[&tri[1]],
+			vert_pos[&tri[2]],
+			epsilon
+		) >= 0),
+		"triangulation is not entirely CCW!"
+	);
+}
 
 ///Polygon vertex.
 #[derive(Debug)]
@@ -1008,6 +1097,13 @@ pub fn triangulate_idx_halfedges(
 		updated_epsilon = triangulator.get_precision();
 	};
 	result.epsilon = updated_epsilon;
+	#[cfg(feature = "test")]
+	if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+		check_topology(&halfedges2edges(&result));
+		if PROCESS_OVERLAPS.load(Ordering::Relaxed) {
+			check_geometry(&result.triangles(), polys, 2.0 * updated_epsilon);
+		}
+	}
 	result.finalize();
 	result
 }

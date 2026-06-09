@@ -6,6 +6,9 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{BuildHasherDefault, DefaultHasher};
 use std::ops::{Deref, DerefMut, Div};
 
+#[cfg(feature = "test")]
+use std::sync::atomic::AtomicBool;
+
 pub type MeshGL32 = MeshGLP<f32, u32>;
 pub type MeshGL64 = MeshGLP<f64, u64>;
 
@@ -298,6 +301,19 @@ pub fn sind(mut x: f64) -> f64 {
 pub fn cosd(x: f64) -> f64 {
 	sind(x + 90.0)
 }
+
+/// Perform extra sanity checks and assertions on the intermediate data
+/// structures.
+#[cfg(feature = "test")]
+pub static INTERMEDIATE_CHECKS: AtomicBool = AtomicBool::new(false);
+/// Perform 3D mesh self-intersection test on intermediate boolean results to
+/// test for ϵ-validity. For debug purposes only.
+#[cfg(feature = "test")]
+pub static SELF_INTERSECTION_CHECKS: AtomicBool = AtomicBool::new(false);
+/// If processOverlaps is false, a geometric check will be performed to assert
+/// all triangles are CCW.
+#[cfg(feature = "test")]
+pub static PROCESS_OVERLAPS: AtomicBool = AtomicBool::new(true);
 
 //wrappers around hashmap/hashset to remove the nondeterministic hasher
 #[derive(Clone)]

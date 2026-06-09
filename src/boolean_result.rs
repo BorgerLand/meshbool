@@ -14,6 +14,9 @@ use std::mem;
 use std::ops::Deref;
 use std::sync::atomic::Ordering;
 
+#[cfg(feature = "test")]
+use crate::common::INTERMEDIATE_CHECKS;
+
 fn abs_sum(a: i32, b: i32) -> i32 {
 	a.abs() + b.abs()
 }
@@ -1074,7 +1077,10 @@ impl<'a> Boolean3<'a> {
 
 		out_r.reorder_halfedges();
 
-		debug_assert!(out_r.is_manifold(), "triangulated mesh is not manifold!");
+		#[cfg(feature = "test")]
+		if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+			debug_assert!(out_r.is_manifold(), "triangulated mesh is not manifold!");
+		}
 
 		create_properties(&mut out_r, &self.in_p, &self.in_q, invert_q);
 
@@ -1083,7 +1089,10 @@ impl<'a> Boolean3<'a> {
 		out_r.simplify_topology(n_pv + n_qv);
 		out_r.remove_unreferenced_verts();
 
-		debug_assert!(out_r.is_2_manifold(), "simplified mesh is not 2-manifold!");
+		#[cfg(feature = "test")]
+		if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+			debug_assert!(out_r.is_2_manifold(), "simplified mesh is not 2-manifold!");
+		}
 
 		out_r.calculate_bbox();
 		out_r.sort_geometry();

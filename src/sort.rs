@@ -1,5 +1,6 @@
 use crate::MeshGLP;
 use crate::collider::Collider;
+use crate::collider::SimpleRecorder;
 use crate::common::{AABB, LossyFrom};
 use crate::disjoint_sets::DisjointSets;
 use crate::meshboolimpl::MeshBoolImpl;
@@ -11,7 +12,8 @@ use nalgebra::{Point3, Vector3};
 use std::mem;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-use crate::collider::SimpleRecorder;
+#[cfg(feature = "test")]
+use {crate::common::INTERMEDIATE_CHECKS, crate::shared::Halfedge};
 
 const K_NO_CODE: u32 = 0xFFFFFFFF;
 
@@ -221,6 +223,48 @@ impl MeshBoolImpl {
 			self.halfedge.len() % 6 == 0,
 			"Not an even number of faces after sorting faces!"
 		);
+
+		#[cfg(feature = "test")]
+		if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+			let max_or_minus = |a: i32, b: i32| {
+				if a.min(b) < 0 { -1 } else { a.max(b) }
+			};
+			let mut face = 0;
+			let mut extrema = Halfedge::default();
+			for i in 0..self.halfedge.len() as i32 {
+				let start = if self.halfedge.is_forward(i) {
+					self.halfedge.start(i)
+				} else {
+					self.halfedge.end(i)
+				};
+				let end = if self.halfedge.is_forward(i) {
+					self.halfedge.end(i)
+				} else {
+					self.halfedge.start(i)
+				};
+				extrema.start_vert = extrema.start_vert.min(start);
+				extrema.end_vert = extrema.end_vert.min(end);
+				extrema.paired_halfedge =
+					max_or_minus(extrema.paired_halfedge, self.halfedge.pair(i));
+				face = max_or_minus(face, i / 3);
+			}
+			debug_assert!(extrema.start_vert >= 0, "Vertex index is negative!");
+			debug_assert!(
+				extrema.end_vert < self.num_vert() as i32,
+				"Vertex index exceeds number of verts!"
+			);
+			debug_assert!(extrema.paired_halfedge >= 0, "Halfedge index is negative!");
+			debug_assert!(
+				extrema.paired_halfedge < 2 * self.num_edge() as i32,
+				"Halfedge index exceeds number of halfedges!"
+			);
+			debug_assert!(face >= 0, "Face index is negative!");
+			debug_assert!(
+				face < self.num_tri() as i32,
+				"Face index exceeds number of faces!"
+			);
+		}
+
 		debug_assert!(
 			self.mesh_relation.tri_ref.len() == self.num_tri()
 				|| self.mesh_relation.tri_ref.len() == 0,

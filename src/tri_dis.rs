@@ -1,4 +1,5 @@
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
+
 // From NVIDIA-Omniverse PhysX - BSD 3-Clause "New" or "Revised" License
 // https://github.com/NVIDIA-Omniverse/PhysX/blob/main/LICENSE.md
 // https://github.com/NVIDIA-Omniverse/PhysX/blob/main/physx/source/geomutils/src/sweep/GuSweepCapsuleCapsule.cpp
@@ -14,20 +15,20 @@ use nalgebra::Vector3;
 ///@param[in]  b  Other endpoint of the second line segment.
 #[inline]
 fn edge_edge_dist(
-	x: &mut Vector3<f64>,
-	y: &mut Vector3<f64>, // closest points
-	p: &Vector3<f64>,
-	a: &Vector3<f64>, // seg 1 origin, vector
-	q: &Vector3<f64>,
-	b: &Vector3<f64>,
+	x: &mut Point3<f64>,
+	y: &mut Point3<f64>, // closest points
+	p: &Point3<f64>,
+	a: &Point3<f64>, // seg 1 origin, vector
+	q: &Point3<f64>,
+	b: &Point3<f64>,
 ) // seg 2 origin, vector
 {
 	let t: Vector3<f64> = q - p;
-	let a_dot_a = a.dot(a);
-	let b_dot_b = b.dot(b);
-	let a_dot_b = a.dot(b);
-	let a_dot_t = a.dot(&t);
-	let b_dot_t = b.dot(&t);
+	let a_dot_a = a.coords.dot(&a.coords);
+	let b_dot_b = b.coords.dot(&b.coords);
+	let a_dot_b = a.coords.dot(&b.coords);
+	let a_dot_t = a.coords.dot(&t);
+	let b_dot_t = b.coords.dot(&t);
 
 	// t parameterizes ray (p, a)
 	// u parameterizes ray (q, b)
@@ -72,8 +73,8 @@ fn edge_edge_dist(
 			0.0
 		};
 	}
-	*x = p + a * t;
-	*y = q + b * u;
+	*x = (p.coords + a.coords * t).into();
+	*y = (q.coords + b.coords * u).into();
 }
 
 // From NVIDIA-Omniverse PhysX - BSD 3-Clause "New" or "Revised" License
@@ -86,10 +87,18 @@ fn edge_edge_dist(
 ///@param  p  First  triangle.
 ///@param  q  Second triangle.
 #[inline]
-pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f64>; 3]) -> f64 {
-	let s_v: [Vector3<f64>; 3] = [p[1] - p[0], p[2] - p[1], p[0] - p[2]];
+pub fn distance_triangle_triangle_squared(p: &[Point3<f64>; 3], q: &[Point3<f64>; 3]) -> f64 {
+	let s_v: [Point3<f64>; 3] = [
+		(p[1] - p[0]).into(),
+		(p[2] - p[1]).into(),
+		(p[0] - p[2]).into(),
+	];
 
-	let t_v: [Vector3<f64>; 3] = [q[1] - q[0], q[2] - q[1], q[0] - q[2]];
+	let t_v: [Point3<f64>; 3] = [
+		(q[1] - q[0]).into(),
+		(q[2] - q[1]).into(),
+		(q[0] - q[2]).into(),
+	];
 
 	let mut shown_disjoint = false;
 
@@ -97,10 +106,10 @@ pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f6
 
 	for i in 0..3 {
 		for j in 0..3 {
-			let mut cp: Vector3<f64> = Default::default();
-			let mut cq: Vector3<f64> = Default::default();
+			let mut cp = Default::default();
+			let mut cq = Default::default();
 			edge_edge_dist(&mut cp, &mut cq, &p[i], &s_v[i], &q[j], &t_v[j]);
-			let v: Vector3<f64> = cq - cp;
+			let v = cq - cp;
 			let dd = v.dot(&v);
 
 			if dd <= mindd {
@@ -110,7 +119,7 @@ pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f6
 				if id >= 3 {
 					id -= 3;
 				}
-				let mut z: Vector3<f64> = p[id] - cp;
+				let mut z = p[id] - cp;
 				let mut a = z.dot(&v);
 				id = j + 2;
 				if id >= 3 {
@@ -136,7 +145,7 @@ pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f6
 		}
 	}
 
-	let s_n: Vector3<f64> = s_v[0].cross(&s_v[1]);
+	let s_n: Vector3<f64> = s_v[0].coords.cross(&s_v[1].coords);
 	let s_nl = s_n.dot(&s_n);
 
 	if s_nl > 1e-15 {
@@ -162,19 +171,19 @@ pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f6
 		if index >= 0 {
 			shown_disjoint = true;
 
-			let q_index: &Vector3<f64> = &q[index as usize];
+			let q_index = &q[index as usize];
 
 			let mut v: Vector3<f64> = q_index - p[0];
-			let mut z: Vector3<f64> = s_n.cross(&s_v[0]);
+			let mut z: Vector3<f64> = s_n.cross(&s_v[0].coords);
 			if v.dot(&z) > 0.0 {
 				v = q_index - p[1];
-				z = s_n.cross(&s_v[1]);
+				z = s_n.cross(&s_v[1].coords);
 				if v.dot(&z) > 0.0 {
 					v = q_index - p[2];
-					z = s_n.cross(&s_v[2]);
+					z = s_n.cross(&s_v[2].coords);
 					if v.dot(&z) > 0.0 {
-						let cp: Vector3<f64> = q_index + s_n * t_p[index as usize] / s_nl;
-						let cq: Vector3<f64> = *q_index;
+						let cp = q_index + s_n * t_p[index as usize] / s_nl;
+						let cq = q_index;
 						return (cp - cq).dot(&(cp - cq));
 					}
 				}
@@ -182,7 +191,7 @@ pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f6
 		}
 	}
 
-	let t_n: Vector3<f64> = t_v[0].cross(&t_v[1]);
+	let t_n = t_v[0].coords.cross(&t_v[1].coords);
 	let t_nl = t_n.dot(&t_n);
 
 	if t_nl > 1e-15 {
@@ -210,17 +219,17 @@ pub fn distance_triangle_triangle_squared(p: &[Vector3<f64>; 3], q: &[Vector3<f6
 
 			let p_index = &p[index as usize];
 
-			let mut v: Vector3<f64> = p_index - q[0];
-			let mut z: Vector3<f64> = t_n.cross(&t_v[0]);
+			let mut v = p_index - q[0];
+			let mut z = t_n.cross(&t_v[0].coords);
 			if v.dot(&z) > 0.0 {
 				v = p_index - q[1];
-				z = t_n.cross(&t_v[1]);
+				z = t_n.cross(&t_v[1].coords);
 				if v.dot(&z) > 0.0 {
 					v = p_index - q[2];
-					z = t_n.cross(&t_v[2]);
+					z = t_n.cross(&t_v[2].coords);
 					if v.dot(&z) > 0.0 {
-						let cp: Vector3<f64> = *p_index;
-						let cq: Vector3<f64> = p_index + t_n * s_p[index as usize] / t_nl;
+						let cp = p_index;
+						let cq = p_index + t_n * s_p[index as usize] / t_nl;
 						return (cp - cq).dot(&(cp - cq));
 					}
 				}

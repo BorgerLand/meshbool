@@ -5,6 +5,9 @@ use crate::meshboolimpl::MeshBoolImpl;
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3};
 use std::ops::{Add, AddAssign, BitXor, BitXorAssign, Sub, SubAssign};
 
+#[cfg(feature = "test")]
+use {crate::common::SELF_INTERSECTION_CHECKS, std::sync::atomic::Ordering};
+
 pub use crate::common::{AABB, MeshGL32, MeshGL64, OpType};
 pub use crate::polygon::triangulate;
 
@@ -581,7 +584,17 @@ impl MeshBool {
 	///	@param second The other Manifold.
 	///	@param op The type of operation to perform.
 	pub fn boolean(&self, other: &Self, op: OpType) -> Self {
-		Self::from(Boolean3::new(&self.meshbool_impl, &other.meshbool_impl, op).result(op))
+		let meshbool =
+			Self::from(Boolean3::new(&self.meshbool_impl, &other.meshbool_impl, op).result(op));
+
+		#[cfg(feature = "test")]
+		if SELF_INTERSECTION_CHECKS.load(Ordering::Relaxed)
+			&& meshbool.meshbool_impl.is_self_intersecting()
+		{
+			panic!("self intersection detected");
+		}
+
+		meshbool
 	}
 
 	///Split cuts this manifold in two using the cutter manifold. The first result
