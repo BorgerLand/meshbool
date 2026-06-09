@@ -5,7 +5,7 @@ use crate::meshboolimpl::MeshBoolImpl;
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3};
 use std::ops::{Add, AddAssign, BitXor, BitXorAssign, Sub, SubAssign};
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_thoroughly")]
 use crate::test::get_self_intersection_checks;
 
 pub use crate::common::{AABB, MeshGL32, MeshGL64, OpType};
@@ -587,7 +587,7 @@ impl MeshBool {
 		let meshbool =
 			Self::from(Boolean3::new(&self.meshbool_impl, &other.meshbool_impl, op).result(op));
 
-		#[cfg(feature = "test")]
+		#[cfg(feature = "test_thoroughly")]
 		if get_self_intersection_checks() && meshbool.meshbool_impl.is_self_intersecting() {
 			panic!("self intersection detected");
 		}

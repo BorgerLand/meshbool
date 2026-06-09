@@ -195,7 +195,7 @@ impl MeshBoolImpl {
 					return;
 				}
 
-				#[cfg(feature = "test")]
+				#[cfg(feature = "test_thoroughly")]
 				intersecting.store(true, Ordering::SeqCst);
 			}
 		};

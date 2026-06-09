@@ -9,7 +9,7 @@ use nalgebra::{Matrix2, Point2, Vector2, Vector3};
 use std::ops::Range;
 use std::{collections::BTreeMap, ptr};
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_thoroughly")]
 use {
 	crate::common::DeterministicMap,
 	crate::test::{get_intermediate_checks, get_process_overlaps},
@@ -18,14 +18,14 @@ use {
 
 const K_BEST: f64 = f64::NEG_INFINITY;
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_thoroughly")]
 #[derive(Clone)]
 struct PolyEdge {
 	start_vert: i32,
 	end_vert: i32,
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_thoroughly")]
 fn halfedges2edges(result: &HalfedgeTriangulation) -> Vec<PolyEdge> {
 	let mut halfedges = Vec::with_capacity(result.halfedges.len());
 	for edge in &result.halfedges {
@@ -37,7 +37,7 @@ fn halfedges2edges(result: &HalfedgeTriangulation) -> Vec<PolyEdge> {
 	halfedges
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_thoroughly")]
 fn check_topology(halfedges: &[PolyEdge]) {
 	debug_assert!(halfedges.len() % 2 == 0, "Odd number of halfedges.");
 	let n_edges = halfedges.len() / 2;
@@ -80,7 +80,7 @@ fn check_topology(halfedges: &[PolyEdge]) {
 	}
 }
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_thoroughly")]
 fn check_geometry(triangles: &[Vector3<i32>], polys: &PolygonsIdx, epsilon: f64) {
 	let mut vert_pos: DeterministicMap<i32, Point2<f64>> = DeterministicMap::new();
 	for poly in polys {
@@ -1096,7 +1096,7 @@ pub fn triangulate_idx_halfedges(
 		updated_epsilon = triangulator.get_precision();
 	};
 	result.epsilon = updated_epsilon;
-	#[cfg(feature = "test")]
+	#[cfg(feature = "test_thoroughly")]
 	if get_intermediate_checks() {
 		check_topology(&halfedges2edges(&result));
 		if get_process_overlaps() {

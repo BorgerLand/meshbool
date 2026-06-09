@@ -21,6 +21,11 @@ pub fn get_intermediate_checks() -> bool {
 }
 
 pub fn set_intermediate_checks(value: bool) {
+	#[cfg(not(feature = "test_thoroughly"))]
+	println!(
+		"set_self_intersection_checks is ignored because test_thoroughly feature flag is disabled"
+	);
+
 	INTERMEDIATE_CHECKS.store(value, Ordering::Relaxed);
 }
 
@@ -29,6 +34,11 @@ pub fn get_self_intersection_checks() -> bool {
 }
 
 pub fn set_self_intersection_checks(value: bool) {
+	#[cfg(not(feature = "test_thoroughly"))]
+	println!(
+		"set_self_intersection_checks is ignored because test_thoroughly feature flag is disabled"
+	);
+
 	SELF_INTERSECTION_CHECKS.store(value, Ordering::Relaxed);
 }
 
@@ -37,6 +47,11 @@ pub fn get_process_overlaps() -> bool {
 }
 
 pub fn set_process_overlaps(value: bool) {
+	#[cfg(not(feature = "test_thoroughly"))]
+	println!(
+		"set_self_intersection_checks is ignored because test_thoroughly feature flag is disabled"
+	);
+
 	PROCESS_OVERLAPS.store(value, Ordering::Relaxed);
 }
 

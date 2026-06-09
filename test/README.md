@@ -36,7 +36,10 @@ git submodule update --init --recursive
 
 ```bash
 mkdir -p test/manifold/build && cd test/manifold/build
+#THOROUGH MODE:
 cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
+#BENCH MODE (you can use this same command on the upstream manifold repo to bench against the c++ implementation):
+cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=OFF -DMANIFOLD_ASSERT=OFF && make manifold_test -j$(nproc)
 ```
 
 ### 3. Run the tests

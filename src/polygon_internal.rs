@@ -73,7 +73,7 @@ impl HalfedgeTriangulation {
 	}
 
 	pub fn finalize(&mut self) {
-		#[cfg(feature = "test")]
+		#[cfg(feature = "test_thoroughly")]
 		{
 			debug_assert!(
 				self.edge2halfedge.is_empty(),

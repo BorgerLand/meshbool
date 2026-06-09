@@ -1288,7 +1288,7 @@ impl MeshBoolImpl {
 			}
 		}
 
-		#[cfg(feature = "test")]
+		#[cfg(feature = "test_thoroughly")]
 		for edge in 0..num_halfedge {
 			let next = next_halfedge(edge as i32) as usize;
 			if !removed[edge] && !removed[next] {

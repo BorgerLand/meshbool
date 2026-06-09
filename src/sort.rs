@@ -12,7 +12,7 @@ use nalgebra::{Point3, Vector3};
 use std::mem;
 use std::sync::atomic::{AtomicI32, Ordering};
 
-#[cfg(feature = "test")]
+#[cfg(feature = "test_thoroughly")]
 use {crate::shared::Halfedge, crate::test::get_intermediate_checks};
 
 const K_NO_CODE: u32 = 0xFFFFFFFF;
@@ -224,7 +224,7 @@ impl MeshBoolImpl {
 			"Not an even number of faces after sorting faces!"
 		);
 
-		#[cfg(feature = "test")]
+		#[cfg(feature = "test_thoroughly")]
 		if get_intermediate_checks() {
 			let max_or_minus = |a: i32, b: i32| {
 				if a.min(b) < 0 { -1 } else { a.max(b) }

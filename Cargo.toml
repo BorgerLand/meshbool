@@ -1,6 +1,6 @@
 [package]
 name = "meshbool"
-version = "0.0.0"
+version = "3.5.0"
 edition = "2024"
 rust-version = "1.91"
 
@@ -9,6 +9,7 @@ crate-type = ["staticlib"]
 
 [features]
 test = ["dep:zngur", "dep:build-rs"]
+test_thoroughly = ["test"]
 
 #in original manifold, assertions are only used for tests.
 #the test suite cmake file forces debug assertions back on
