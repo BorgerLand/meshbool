@@ -22,4 +22,4 @@ intrusive-collections = { git = "https://github.com/BorgerLand/vandalized-intrus
 
 [build-dependencies]
 zngur = { version = "0.10", optional = true }
-build-rs = { version = "0.3.2", optional = true}
+build-rs = { version = "0.3", optional = true}
