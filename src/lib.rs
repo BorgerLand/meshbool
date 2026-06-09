@@ -6,7 +6,7 @@ use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3};
 use std::ops::{Add, AddAssign, BitXor, BitXorAssign, Sub, SubAssign};
 
 #[cfg(feature = "test")]
-use {crate::common::SELF_INTERSECTION_CHECKS, std::sync::atomic::Ordering};
+use crate::test::get_self_intersection_checks;
 
 pub use crate::common::{AABB, MeshGL32, MeshGL64, OpType};
 pub use crate::polygon::triangulate;
@@ -588,9 +588,7 @@ impl MeshBool {
 			Self::from(Boolean3::new(&self.meshbool_impl, &other.meshbool_impl, op).result(op));
 
 		#[cfg(feature = "test")]
-		if SELF_INTERSECTION_CHECKS.load(Ordering::Relaxed)
-			&& meshbool.meshbool_impl.is_self_intersecting()
-		{
+		if get_self_intersection_checks() && meshbool.meshbool_impl.is_self_intersecting() {
 			panic!("self intersection detected");
 		}
 

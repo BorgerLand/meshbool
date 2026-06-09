@@ -13,7 +13,7 @@ use std::mem;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 #[cfg(feature = "test")]
-use {crate::common::INTERMEDIATE_CHECKS, crate::shared::Halfedge};
+use {crate::shared::Halfedge, crate::test::get_intermediate_checks};
 
 const K_NO_CODE: u32 = 0xFFFFFFFF;
 
@@ -225,7 +225,7 @@ impl MeshBoolImpl {
 		);
 
 		#[cfg(feature = "test")]
-		if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+		if get_intermediate_checks() {
 			let max_or_minus = |a: i32, b: i32| {
 				if a.min(b) < 0 { -1 } else { a.max(b) }
 			};

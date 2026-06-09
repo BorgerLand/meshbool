@@ -2,8 +2,43 @@
 
 use crate::MeshBoolError;
 use nalgebra::{Point2, Point3, Vector3};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 include!(concat!(env!("OUT_DIR"), "/test.rs"));
+
+/// Perform extra sanity checks and assertions on the intermediate data
+/// structures.
+static INTERMEDIATE_CHECKS: AtomicBool = AtomicBool::new(false);
+/// Perform 3D mesh self-intersection test on intermediate boolean results to
+/// test for ϵ-validity. For debug purposes only.
+static SELF_INTERSECTION_CHECKS: AtomicBool = AtomicBool::new(false);
+/// If processOverlaps is false, a geometric check will be performed to assert
+/// all triangles are CCW.
+static PROCESS_OVERLAPS: AtomicBool = AtomicBool::new(true);
+
+pub fn get_intermediate_checks() -> bool {
+	INTERMEDIATE_CHECKS.load(Ordering::Relaxed)
+}
+
+pub fn set_intermediate_checks(value: bool) {
+	INTERMEDIATE_CHECKS.store(value, Ordering::Relaxed);
+}
+
+pub fn get_self_intersection_checks() -> bool {
+	SELF_INTERSECTION_CHECKS.load(Ordering::Relaxed)
+}
+
+pub fn set_self_intersection_checks(value: bool) {
+	SELF_INTERSECTION_CHECKS.store(value, Ordering::Relaxed);
+}
+
+pub fn get_process_overlaps() -> bool {
+	PROCESS_OVERLAPS.load(Ordering::Relaxed)
+}
+
+pub fn set_process_overlaps(value: bool) {
+	PROCESS_OVERLAPS.store(value, Ordering::Relaxed);
+}
 
 impl MeshBoolError {
 	pub fn is_no_error(&self) -> bool {

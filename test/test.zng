@@ -28,7 +28,6 @@ mod crate
 	
 	type MeshBool
 	{
-		// BorgerLand master as of 9889b05
 		#layout(size = 368, align = 8);
 		
 		fn default() -> MeshBool;
@@ -201,6 +200,16 @@ mod crate
 			
 			fn get_circular_segments(f64) -> u32;
 		}
+	}
+	
+	mod test
+	{
+		fn get_intermediate_checks() -> bool;
+		fn set_intermediate_checks(bool);
+		fn get_self_intersection_checks() -> bool;
+		fn set_self_intersection_checks(bool);
+		fn get_process_overlaps() -> bool;
+		fn set_process_overlaps(bool);
 	}
 }
 

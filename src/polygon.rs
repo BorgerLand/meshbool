@@ -12,9 +12,8 @@ use std::{collections::BTreeMap, ptr};
 #[cfg(feature = "test")]
 use {
 	crate::common::DeterministicMap,
-	crate::common::{INTERMEDIATE_CHECKS, PROCESS_OVERLAPS},
+	crate::test::{get_intermediate_checks, get_process_overlaps},
 	std::mem,
-	std::sync::atomic::Ordering,
 };
 
 const K_BEST: f64 = f64::NEG_INFINITY;
@@ -1098,9 +1097,9 @@ pub fn triangulate_idx_halfedges(
 	};
 	result.epsilon = updated_epsilon;
 	#[cfg(feature = "test")]
-	if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+	if get_intermediate_checks() {
 		check_topology(&halfedges2edges(&result));
-		if PROCESS_OVERLAPS.load(Ordering::Relaxed) {
+		if get_process_overlaps() {
 			check_geometry(&result.triangles(), polys, 2.0 * updated_epsilon);
 		}
 	}

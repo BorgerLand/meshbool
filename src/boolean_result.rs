@@ -15,7 +15,7 @@ use std::ops::Deref;
 use std::sync::atomic::Ordering;
 
 #[cfg(feature = "test")]
-use crate::common::INTERMEDIATE_CHECKS;
+use crate::test::get_intermediate_checks;
 
 fn abs_sum(a: i32, b: i32) -> i32 {
 	a.abs() + b.abs()
@@ -1078,7 +1078,7 @@ impl<'a> Boolean3<'a> {
 		out_r.reorder_halfedges();
 
 		#[cfg(feature = "test")]
-		if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+		if get_intermediate_checks() {
 			debug_assert!(out_r.is_manifold(), "triangulated mesh is not manifold!");
 		}
 
@@ -1090,7 +1090,7 @@ impl<'a> Boolean3<'a> {
 		out_r.remove_unreferenced_verts();
 
 		#[cfg(feature = "test")]
-		if INTERMEDIATE_CHECKS.load(Ordering::Relaxed) {
+		if get_intermediate_checks() {
 			debug_assert!(out_r.is_2_manifold(), "simplified mesh is not 2-manifold!");
 		}
 

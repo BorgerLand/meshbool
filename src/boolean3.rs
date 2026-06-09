@@ -581,7 +581,6 @@ pub struct Boolean3<'a> {
 
 impl<'a> Boolean3<'a> {
 	pub fn new(in_p: &'a MeshBoolImpl, in_q: &'a MeshBoolImpl, op: OpType) -> Self {
-		debug_assert!(false);
 		let expand_p = op == OpType::Add;
 
 		// Symbolic perturbation:
