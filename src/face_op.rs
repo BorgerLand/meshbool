@@ -199,8 +199,6 @@ impl MeshBoolImpl {
 		halfedge_ref: &[TriRef],
 		allow_convex: bool,
 	) {
-		let mut contour2tri = vec![-1; face_halfedge.len()];
-
 		let general_triangulation = Some(|face| {
 			let normal = self.face_normal[face];
 			let projection = get_axis_aligned_projection(normal);
@@ -244,6 +242,7 @@ impl MeshBoolImpl {
 		let mut tri_normal = vec![Vector3::default(); tri_offset_back];
 		let tri_ref = &mut self.mesh_relation.tri_ref;
 		*tri_ref = vec![TriRef::default(); tri_offset_back];
+		let mut contour2tri = vec![-1; face_halfedge.len()];
 
 		for face in 0..(face_edge.len() - 1) {
 			let result_ptr = results.get(&(face as i32));

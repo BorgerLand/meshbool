@@ -106,8 +106,7 @@ impl MeshBoolImpl {
 		self.calculate_vert_normals();
 	}
 
-	pub fn remove_degenerates(&mut self, first_new_vert: Option<i32>) {
-		let first_new_vert = first_new_vert.unwrap_or(0);
+	pub fn remove_degenerates(&mut self, first_new_vert: i32) {
 		if self.halfedge.is_empty() {
 			return;
 		}

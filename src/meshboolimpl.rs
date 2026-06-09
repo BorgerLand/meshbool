@@ -473,7 +473,7 @@ impl MeshBoolImpl {
 		manifold.cleanup_topology();
 		manifold.dedupe_prop_verts();
 		manifold.set_normals_and_coplanar();
-		manifold.remove_degenerates(None);
+		manifold.remove_degenerates(0);
 		manifold.remove_unreferenced_verts();
 		manifold.sort_geometry();
 
