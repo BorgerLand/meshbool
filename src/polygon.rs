@@ -1099,7 +1099,7 @@ pub fn triangulate_idx_halfedges(
 	#[cfg(feature = "test_thoroughly")]
 	if get_intermediate_checks() {
 		check_topology(&halfedges2edges(&result));
-		if get_process_overlaps() {
+		if !get_process_overlaps() {
 			check_geometry(&result.triangles(), polys, 2.0 * updated_epsilon);
 		}
 	}
