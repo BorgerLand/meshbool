@@ -1,5 +1,3 @@
-//#convert_panic_to_exception
-
 mod crate
 {
 	mod polygon
@@ -117,7 +115,7 @@ mod crate
 		fn num_vert(&self) -> u32;
 		fn num_tri(&self) -> u32;
 		
-		field num_prop      (offset = 216, type = u32);
+		field num_prop        (offset = 216, type = u32);
 		field vert_properties (offset = 0,   type = ::std::vec::Vec<f32>);
 		field tri_verts       (offset = 24,  type = ::std::vec::Vec<u32>);
 		field merge_from_vert (offset = 48,  type = ::std::vec::Vec<u32>);
