@@ -51,7 +51,7 @@ cd test #from inside test/manifold/build
 
 ## Disabled tests
 
-There are a few upstream tests that prevent other tests from running due to features not yet implemented in MeshBool. Tests that are currently failing gracefully without interfering with other tests are kept enabled.
+There are a few upstream tests that prevent other tests from running due to features not yet implemented in Meshbool. Additionally, some suites are entirely built around unimplemented features.
 
 | Disabled test                                | Reason           | Method                         |
 | -------------------------------------------- | ---------------- | ------------------------------ |
