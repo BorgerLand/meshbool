@@ -72,6 +72,40 @@ pub fn interpolate(a_l: Point3<f64>, a_r: Point3<f64>, x: f64) -> Vector2<f64> {
 	return yz;
 }
 
+///Intersect two projected segments aL-aR and bL-bR. The segments are ordered
+///over the same x interval, and their y gaps must bracket zero. The returned
+///value is (x, y, a.z, b.z) at the crossing.
+pub fn intersect(
+	a_l: &Point3<f64>,
+	a_r: &Point3<f64>,
+	b_l: &Point3<f64>,
+	b_r: &Point3<f64>,
+) -> Vector4<f64> {
+	let dyl = b_l.y - a_l.y;
+	let dyr = b_r.y - a_r.y;
+	debug_assert!(dyl * dyr <= 0.0, "Boolean manifold error: no intersection");
+	let use_l = dyl.abs() < dyr.abs();
+	let dx = a_r.x - a_l.x;
+	let mut lambda = (if use_l { dyl } else { dyr }) / (dyl - dyr);
+	if !lambda.is_finite() {
+		lambda = 0.0;
+	}
+	let mut xyzz = Vector4::default();
+	xyzz.x = lambda * dx + (if use_l { a_l.x } else { a_r.x });
+	let a_dy = a_r.y - a_l.y;
+	let b_dy = b_r.y - b_l.y;
+	let use_a = a_dy.abs() < b_dy.abs();
+	xyzz.y = lambda * (if use_a { a_dy } else { b_dy })
+		+ (if use_l {
+			if use_a { a_l.y } else { b_l.y }
+		} else {
+			if use_a { a_r.y } else { b_r.y }
+		});
+	xyzz.z = lambda * (a_r.z - a_l.z) + (if use_l { a_l.z } else { a_r.z });
+	xyzz.w = lambda * (b_r.z - b_l.z) + (if use_l { b_l.z } else { b_r.z });
+	return xyzz;
+}
+
 ///`p < q` with symbolic perturbation: when `p == q` exactly, `dir < 0`
 ///acts as the tiebreaker. Used to give consistent strict-ordering answers
 ///regardless of which side of an FP equality we land on.

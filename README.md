@@ -4,7 +4,7 @@
 
 Meshbool is a pure-Rust implementation/port of Manifold's state of the art **mesh boolean algorithm**, known for its guarantee that, given manifold input, will always produce manifold output: solid, watertight, correct. It enables robust [CSG (Constructive Solid Geometry) operations](https://en.wikipedia.org/wiki/Constructive_solid_geometry) on 3D models.
 
-This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/37125da09072a63329dade2191eafc3f8ace858a) (v3.5.0).
+This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/db042ab153bf8e5dbef2eb00990e8024c2f272ec) (v3.5.1).
 
 ### Example:
 

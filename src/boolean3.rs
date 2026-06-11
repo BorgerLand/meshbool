@@ -2,7 +2,7 @@ use crate::collider::{Recorder, SimpleRecorder};
 use crate::common::{AABB, AABBOverlap, DeterministicSet, OpType};
 use crate::disjoint_sets::DisjointSets;
 use crate::meshboolimpl::MeshBoolImpl;
-use crate::shared::{Halfedges, interpolate, shadows, with_sign};
+use crate::shared::{Halfedges, interpolate, intersect, shadows, with_sign};
 use crate::utils::{next3_i32, permute};
 use core::f64;
 use nalgebra::{Point3, Vector2, Vector4};
@@ -28,37 +28,6 @@ use std::ops::DerefMut;
  * function is forwards, but it may include a Boolean "reverse" that indicates P
  * and Q have been swapped.
  */
-
-fn intersect(
-	a_l: &Point3<f64>,
-	a_r: &Point3<f64>,
-	b_l: &Point3<f64>,
-	b_r: &Point3<f64>,
-) -> Vector4<f64> {
-	let dyl = b_l.y - a_l.y;
-	let dyr = b_r.y - a_r.y;
-	debug_assert!(dyl * dyr <= 0.0, "Boolean manifold error: no intersection");
-	let use_l = dyl.abs() < dyr.abs();
-	let dx = a_r.x - a_l.x;
-	let mut lambda = (if use_l { dyl } else { dyr }) / (dyl - dyr);
-	if !lambda.is_finite() {
-		lambda = 0.0;
-	}
-	let mut xyzz = Vector4::default();
-	xyzz.x = lambda * dx + (if use_l { a_l.x } else { a_r.x });
-	let a_dy = a_r.y - a_l.y;
-	let b_dy = b_r.y - b_l.y;
-	let use_a = a_dy.abs() < b_dy.abs();
-	xyzz.y = lambda * (if use_a { a_dy } else { b_dy })
-		+ (if use_l {
-			if use_a { a_l.y } else { b_l.y }
-		} else {
-			if use_a { a_r.y } else { b_r.y }
-		});
-	xyzz.z = lambda * (a_r.z - a_l.z) + (if use_l { a_l.z } else { a_r.z });
-	xyzz.w = lambda * (b_r.z - b_l.z) + (if use_l { b_l.z } else { b_r.z });
-	return xyzz;
-}
 
 #[derive(Default, Copy, Clone)]
 struct FaceEdge {

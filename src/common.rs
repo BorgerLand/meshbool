@@ -195,9 +195,11 @@ impl Quality {
 		if Self::CIRCULAR_SEGMENTS > 0 {
 			return Self::CIRCULAR_SEGMENTS;
 		}
-		let n_seg_a = (360.0 / Self::CIRCULAR_ANGLE) as u32;
-		let n_seg_l = (2.0 * radius * f64::consts::PI / Self::CIRCULAR_EDGE_LENGTH) as u32;
-		let mut n_seg = n_seg_a.min(n_seg_l) + 3;
+		let n_seg_a = 360.0 / Self::CIRCULAR_ANGLE;
+		// Keep nSegL a double so the truncating cast happens after fmin bounds it by
+		// nSegA; a raw int cast is undefined for non-finite or huge radius.
+		let n_seg_l = 2.0 * radius.abs() * f64::consts::PI / Self::CIRCULAR_EDGE_LENGTH;
+		let mut n_seg = (n_seg_a.min(n_seg_l) + 3.0) as u32;
 		n_seg -= n_seg % 4;
 		n_seg.max(4)
 	}
