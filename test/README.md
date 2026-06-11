@@ -59,6 +59,7 @@ There are a few upstream tests that prevent other tests from running due to feat
 | -------------------------------------------- | ---------------- | ------------------------------ |
 | `Manifold.DeepChainDoesNotOverflowNumLeaves` | Does not compile | `#if 0`                        |
 | All of `context_test.cpp`                    | Does not compile | `manifold/test/CMakeLists.txt` |
+| All of `cross_section_test.cpp`              | Does not compile | `manifold/test/CMakeLists.txt` |
 | All of `manifoldc_test.cpp`                  | Does not compile | CMake flag                     |
 | `Manifold.MeshRelationRefinePrecision`       | Crashes          | `#if 0`                        |
 | `Smooth.Manual`                              | Crashes          | `#if 0`                        |
