@@ -275,7 +275,7 @@ pub fn lerp(a: f64, b: f64, t: f64) -> f64 {
 ///Sine function where multiples of 90 degrees come out exact.
 ///
 ///@param x Angle in degrees.
-#[inline]
+#[inline(always)]
 pub fn sind(mut x: f64) -> f64 {
 	if !x.is_finite() {
 		return f64::NAN;
@@ -298,7 +298,7 @@ pub fn sind(mut x: f64) -> f64 {
 ///Cosine function where multiples of 90 degrees come out exact.
 ///
 ///@param x Angle in degrees.
-#[inline]
+#[inline(always)]
 pub fn cosd(x: f64) -> f64 {
 	sind(x + 90.0)
 }

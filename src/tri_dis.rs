@@ -13,7 +13,7 @@ use nalgebra::{Point3, Vector3};
 ///@param[in]  a  Other endpoint of the first line segment.
 ///@param[in]  p  One endpoint of the second line segment.
 ///@param[in]  b  Other endpoint of the second line segment.
-#[inline]
+#[inline(always)]
 fn edge_edge_dist(
 	x: &mut Point3<f64>,
 	y: &mut Point3<f64>, // closest points
@@ -86,7 +86,7 @@ fn edge_edge_dist(
 ///
 ///@param  p  First  triangle.
 ///@param  q  Second triangle.
-#[inline]
+#[inline(always)]
 pub fn distance_triangle_triangle_squared(p: &[Point3<f64>; 3], q: &[Point3<f64>; 3]) -> f64 {
 	let s_v: [Point3<f64>; 3] = [
 		(p[1] - p[0]).into(),

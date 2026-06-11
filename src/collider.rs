@@ -12,27 +12,27 @@ const K_LENGTH_MULTIPLE: i32 = 4;
 // Fundamental constants
 const K_ROOT: i32 = 1;
 
-#[inline]
+#[inline(always)]
 const fn is_leaf(node: i32) -> bool {
 	node % 2 == 0
 }
-#[inline]
+#[inline(always)]
 const fn is_internal(node: i32) -> bool {
 	node % 2 == 1
 }
-#[inline]
+#[inline(always)]
 const fn node2internal(node: i32) -> i32 {
 	(node - 1) / 2
 }
-#[inline]
+#[inline(always)]
 const fn internal2node(internal: i32) -> i32 {
 	internal * 2 + 1
 }
-#[inline]
+#[inline(always)]
 const fn node2leaf(node: i32) -> i32 {
 	node / 2
 }
-#[inline]
+#[inline(always)]
 const fn leaf2node(leaf: i32) -> i32 {
 	leaf * 2
 }
@@ -165,7 +165,7 @@ where
 	RecorderT: Recorder,
 	AABB: AABBOverlap<AABBOverlapT>,
 {
-	#[inline]
+	#[inline(always)]
 	fn record_collision(&mut self, query: &AABBOverlapT, node: i32, query_idx: i32) -> bool {
 		let bbox = self.node_bbox[node as usize];
 		let overlaps = bbox.does_overlap(query);
@@ -248,7 +248,7 @@ impl<'a> BuildInternalBoxes<'a> {
 	}
 }
 
-#[inline]
+#[inline(always)]
 const fn spread_bits3(mut v: u32) -> u32 {
 	v = 0xFF0000FF & (v.wrapping_mul(0x00010001));
 	v = 0x0F00F00F & (v.wrapping_mul(0x00000101));

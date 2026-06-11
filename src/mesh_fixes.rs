@@ -2,7 +2,7 @@ use crate::shared::Halfedges;
 use nalgebra::{Matrix3, Vector3};
 use std::mem;
 
-#[inline]
+#[inline(always)]
 fn flip_halfedge(halfedge: i32) -> i32 {
 	let tri = halfedge / 3;
 	let vert = 2 - (halfedge - 3 * tri);

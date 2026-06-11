@@ -5,7 +5,7 @@ use core::f64;
 use nalgebra::{Matrix2x3, Matrix3, Matrix3x4, Point3, Vector2, Vector3, Vector4};
 use std::ops::MulAssign;
 
-#[inline]
+#[inline(always)]
 pub fn safe_normalize(mut v: Vector3<f64>) -> Vector3<f64> {
 	v = v.normalize();
 	if v.x.is_finite() {
@@ -15,13 +15,13 @@ pub fn safe_normalize(mut v: Vector3<f64>) -> Vector3<f64> {
 	}
 }
 
-#[inline]
+#[inline(always)]
 pub fn max_epsilon(min_epsilon: f64, bbox: &AABB) -> f64 {
 	let epsilon = min_epsilon.max(K_PRECISION * bbox.scale());
 	if epsilon.is_finite() { epsilon } else { -1.0 }
 }
 
-#[inline]
+#[inline(always)]
 pub fn next_halfedge(current: i32) -> i32 {
 	current + (if current % 3 == 2 { -2 } else { 1 })
 }
@@ -45,7 +45,7 @@ pub fn inverse_normal_transform(transform: &Matrix3x4<f64>) -> Matrix3<f64> {
 ///Symbolic perturbation primitives shared by Boolean3 and Boolean2.
 ///Carefully designed to minimize FP rounding error and eliminate it at edge
 ///cases.
-#[inline]
+#[inline(always)]
 pub fn with_sign(pos: bool, v: f64) -> f64 {
 	if pos { v } else { -v }
 }
@@ -53,7 +53,7 @@ pub fn with_sign(pos: bool, v: f64) -> f64 {
 ///Interpolate the (y, z) of segment aL-aR at the given x. The choice of
 ///(x - aL) vs (x - aR) is the smaller in magnitude, which keeps FP error
 ///low near either endpoint. Domain check via DEBUG_ASSERT.
-#[inline]
+#[inline(always)]
 pub fn interpolate(a_l: Point3<f64>, a_r: Point3<f64>, x: f64) -> Vector2<f64> {
 	let dx_l = x - a_l.x;
 	let dx_r = x - a_r.x;
@@ -109,14 +109,14 @@ pub fn intersect(
 ///`p < q` with symbolic perturbation: when `p == q` exactly, `dir < 0`
 ///acts as the tiebreaker. Used to give consistent strict-ordering answers
 ///regardless of which side of an FP equality we land on.
-#[inline]
+#[inline(always)]
 pub fn shadows(p: f64, q: f64, dir: f64) -> bool {
 	if p == q { dir < 0.0 } else { p < q }
 }
 
 ///By using the closest axis-aligned projection to the normal instead of a
 ///projection along the normal, we avoid introducing any rounding error.
-#[inline]
+#[inline(always)]
 pub fn get_axis_aligned_projection(normal: Vector3<f64>) -> Matrix2x3<f64> {
 	let abs_normal = normal.abs();
 	let (xyz_max, mut projection) = if abs_normal.z > abs_normal.x && abs_normal.z > abs_normal.y {
@@ -133,7 +133,7 @@ pub fn get_axis_aligned_projection(normal: Vector3<f64>) -> Matrix2x3<f64> {
 	projection
 }
 
-#[inline]
+#[inline(always)]
 pub fn get_barycentric(v: &Point3<f64>, tri_pos: &Matrix3<f64>, tolerance: f64) -> Vector3<f64> {
 	let edges = Matrix3::from_columns(&[
 		tri_pos.column(2) - tri_pos.column(1),
@@ -370,7 +370,7 @@ impl TmpEdge {
 	}
 }
 
-#[inline]
+#[inline(always)]
 pub fn create_tmp_edges(halfedge: &Halfedges) -> Vec<TmpEdge> {
 	let edges: Vec<TmpEdge>;
 	edges = (0..halfedge.len())

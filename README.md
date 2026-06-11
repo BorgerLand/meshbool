@@ -52,11 +52,11 @@ let mesh = union.get_mesh_gl(0);
 
 | Test                                  | C++ (ms) | Rust (ms) |
 | ------------------------------------- | -------- | --------- |
-| Properties.MingapAfterTransformations | 2916     | 2747      |
+| Properties.MingapAfterTransformations | 2916     | 2760      |
 | Properties.ToleranceSphere            | 18649    | 18009     |
-| Boolean.CreatePropertiesSlow          | 2038     | 2049      |
-| Samples.CondensedMatter16             | 4384     | 8718      |
-| Samples.CondensedMatter64             | 71583    | 141745    |
-| BooleanComplex.Close                  | 2708     | 3763      |
-| Polygon.Zebra                         | 1617     | 1820      |
-| Polygon.Zebra3                        | 1687     | 1908      |
+| Boolean.CreatePropertiesSlow          | 2038     | 2092      |
+| Samples.CondensedMatter16             | 4384     | 8337      |
+| Samples.CondensedMatter64             | 71583    | 127387    |
+| BooleanComplex.Close                  | 2708     | 3242      |
+| Polygon.Zebra                         | 1617     | 1835      |
+| Polygon.Zebra3                        | 1687     | 1917      |

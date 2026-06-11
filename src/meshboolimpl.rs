@@ -489,7 +489,7 @@ impl MeshBoolImpl {
 		manifold
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub fn get_mesh_gl_impl<Precision, I>(&self, normal_idx: i32) -> MeshGLP<Precision, I>
 	where
 		Precision: LossyFrom<f64> + Copy + 'static,
@@ -1540,7 +1540,7 @@ impl MeshBoolImpl {
 		}
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub fn for_vert(&self, halfedge: i32, mut func: impl FnMut(i32)) {
 		let mut current = halfedge;
 		loop {
@@ -1552,7 +1552,7 @@ impl MeshBoolImpl {
 		}
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub fn for_vert_mut(&mut self, halfedge: i32, mut func: impl FnMut(&mut Self, i32)) {
 		let mut current = halfedge;
 		loop {
@@ -1564,7 +1564,7 @@ impl MeshBoolImpl {
 		}
 	}
 
-	#[inline]
+	#[inline(always)]
 	pub fn for_vert_fn<T>(
 		&self,
 		halfedge: i32,

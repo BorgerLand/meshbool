@@ -29,17 +29,17 @@ macro_rules! prev3 {
 	};
 }
 
-#[inline]
+#[inline(always)]
 pub const fn next3_i32(i: i32) -> i32 {
 	next3!(i)
 }
 
-#[inline]
+#[inline(always)]
 pub const fn next3_usize(i: usize) -> usize {
 	next3!(i)
 }
 
-#[inline]
+#[inline(always)]
 pub const fn prev3_i32(i: i32) -> i32 {
 	prev3!(i)
 }
@@ -79,7 +79,7 @@ pub unsafe fn atomic_add_f64(target: &mut f64, add: f64) -> f64 {
 ///@param tol Tolerance value for colinearity
 ///@return int, like Signum, this returns 1 for CCW, -1 for CW, and 0 if within
 ///tol of colinear.
-#[inline]
+#[inline(always)]
 pub fn ccw(p0: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, tol: f64) -> i32 {
 	let v1 = p1 - p0;
 	let v2 = p2 - p0;
@@ -94,14 +94,14 @@ pub fn ccw(p0: Point2<f64>, p1: Point2<f64>, p2: Point2<f64>, tol: f64) -> i32 {
 	}
 }
 
-#[inline]
+#[inline(always)]
 pub fn mat4(a: &Matrix3x4<f64>) -> Matrix4<f64> {
 	let mut result = Matrix4::identity();
 	result.fixed_view_mut::<3, 4>(0, 0).copy_from(&a);
 	result
 }
 
-#[inline]
+#[inline(always)]
 pub fn mat3(a: &Matrix3x4<f64>) -> Matrix3<f64> {
 	a.fixed_columns::<3>(0).into_owned()
 }

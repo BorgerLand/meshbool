@@ -37,7 +37,7 @@ struct FaceEdge {
 	is_forward: bool,
 }
 
-#[inline]
+#[inline(always)]
 fn load_face_edges(halfedges: &Halfedges, tri: i32) -> [FaceEdge; 3] {
 	let mut edge = [FaceEdge::default(); 3];
 	for i in 0..3 {
@@ -64,7 +64,7 @@ fn load_face_edges(halfedges: &Halfedges, tri: i32) -> [FaceEdge; 3] {
 	edge
 }
 
-#[inline]
+#[inline(always)]
 fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
 	a0: i32,
 	b1: i32,
