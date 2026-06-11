@@ -88,15 +88,15 @@ fn write_local_triangles(
 	first_tri: usize,
 	triangles: &[i32],
 ) {
-	let triangles_len = triangles.len() / 3;
 	debug_assert!(
-		triangles_len <= 2,
+		triangles.len() == 3 || triangles.len() == 6,
 		"local face path only handles tris/quads"
 	);
+	let num_tri = triangles.len() / 3;
 	let mut local_edges = [Vector3::default(); 6];
 	let first_out = 3 * first_tri;
 	let mut num_edge = 0;
-	for tri in 0..triangles_len {
+	for tri in 0..num_tri {
 		for i in 0..3 {
 			let out = (first_out + num_edge) as i32;
 			let start = triangles[tri * 3 + i];

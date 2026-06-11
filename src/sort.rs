@@ -9,6 +9,7 @@ use crate::shared::Halfedges;
 use crate::utils::{K_PRECISION, permute};
 use crate::vec::{vec_resize, vec_resize_nofill, vec_uninit};
 use nalgebra::{Point3, Vector3};
+use std::any::TypeId;
 use std::mem;
 use std::sync::atomic::{AtomicI32, Ordering};
 
@@ -56,7 +57,7 @@ impl ReindexFace<'_> {
 
 fn merge_mesh_glp<Precision, I>(mesh: &mut MeshGLP<Precision, I>) -> bool
 where
-	Precision: LossyFrom<f64> + Copy,
+	Precision: LossyFrom<f64> + Copy + 'static,
 	I: LossyFrom<usize> + Copy,
 	usize: LossyFrom<I>,
 	u64: LossyFrom<I>,
@@ -102,7 +103,7 @@ where
 	}
 
 	let vert_prop_d: Vec<Precision> = mesh.vert_properties.clone();
-	let mut b_box: AABB = Default::default();
+	let mut b_box = AABB::default();
 	for i in [0, 1, 2] {
 		let min_max = vert_prop_d[i..vert_prop_d.len()]
 			.iter()
@@ -115,9 +116,8 @@ where
 		b_box.max[i] = min_max.1;
 	}
 
-	// TODO: if Precision == f32
-	let tolerance: f64 = f64::lossy_from(mesh.tolerance).max(
-		(if true {
+	let tolerance = f64::lossy_from(mesh.tolerance).max(
+		(if TypeId::of::<Precision>() == TypeId::of::<f32>() {
 			core::f32::EPSILON as f64
 		} else {
 			K_PRECISION
@@ -125,7 +125,7 @@ where
 	);
 
 	// let mut policy = autoPolicy(numOpenVert, 1e5);
-	let mut vert_box: Vec<AABB> = vec![Default::default(); num_open_vert];
+	let mut vert_box: Vec<AABB> = vec![AABB::default(); num_open_vert];
 	let mut vert_morton: Vec<u32> = vec![0; num_open_vert];
 
 	(0..num_open_vert).for_each(|i| {
@@ -561,15 +561,15 @@ impl MeshBoolImpl {
 ///multi-material MeshGL was produced, but its merge vectors were lost due to
 ///a round-trip through a file format. Constructing a Manifold from the result
 ///will report an error status if it is not manifold.
-impl<F, I> MeshGLP<F, I>
+impl<Precision, I> MeshGLP<Precision, I>
 where
-	F: LossyFrom<f64> + Copy,
+	Precision: LossyFrom<f64> + Copy + 'static,
 	I: LossyFrom<usize> + Copy,
 	usize: LossyFrom<I>,
 	u64: LossyFrom<I>,
 	u32: LossyFrom<I>,
 	i32: LossyFrom<I>,
-	f64: LossyFrom<F>,
+	f64: LossyFrom<Precision>,
 {
 	pub fn merge(&mut self) -> bool {
 		merge_mesh_glp(self)

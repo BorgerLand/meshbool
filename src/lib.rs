@@ -118,10 +118,10 @@ impl MeshBool {
 		self.meshbool_impl.get_mesh_gl_impl(normal_idx)
 	}
 
-	pub fn from_meshgl<F, I>(mesh_gl: &MeshGLP<F, I>) -> Self
+	pub fn from_meshgl<Precision, I>(mesh_gl: &MeshGLP<Precision, I>) -> Self
 	where
-		F: LossyFrom<f64> + Copy,
-		f64: From<F>,
+		Precision: LossyFrom<f64> + Copy + 'static,
+		f64: From<Precision>,
 		I: LossyFrom<usize> + Copy,
 		usize: LossyFrom<I>,
 	{
@@ -587,6 +587,7 @@ impl MeshBool {
 		let meshbool =
 			Self::from(Boolean3::new(&self.meshbool_impl, &other.meshbool_impl, op).result(op));
 
+		//pulled from csg_tree.cpp
 		#[cfg(feature = "test_thoroughly")]
 		if get_self_intersection_checks() && meshbool.meshbool_impl.is_self_intersecting() {
 			panic!("self intersection detected");

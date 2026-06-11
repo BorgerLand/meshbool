@@ -232,10 +232,10 @@ impl MeshBoolImpl {
 		it.map(|it| it.has_normals).unwrap_or(false)
 	}
 
-	pub fn from_meshgl<F, I>(mesh_gl: &MeshGLP<F, I>) -> Self
+	pub fn from_meshgl<Precision, I>(mesh_gl: &MeshGLP<Precision, I>) -> Self
 	where
-		F: LossyFrom<f64> + Copy,
-		f64: From<F>,
+		Precision: LossyFrom<f64> + Copy + 'static,
+		f64: From<Precision>,
 		I: LossyFrom<usize> + Copy,
 		usize: LossyFrom<I>,
 	{
@@ -466,7 +466,7 @@ impl MeshBoolImpl {
 		}
 
 		manifold.calculate_bbox();
-		manifold.set_epsilon(-1.0f64, false); // TODO: if Precision == float
+		manifold.set_epsilon(-1.0, TypeId::of::<Precision>() == TypeId::of::<f32>());
 
 		// we need to split pinched verts before calculating vertex normals, because
 		// the algorithm doesn't work with pinched verts
