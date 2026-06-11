@@ -2,7 +2,7 @@
 
 Meshbool is a pure-Rust implementation/port of Manifold's state of the art **mesh boolean algorithm**, known for its guarantee that, given manifold input, will always produce manifold output: solid, watertight, correct. It enables robust [CSG (Constructive Solid Geometry) operations](https://en.wikipedia.org/wiki/Constructive_solid_geometry) on 3D models.
 
-Note that many features are currently unimplemented, and completeness is not the goal. I will accept PR's to port more features, especially those that increase the number of passing tests, but the main focus of this crate is the boolean algorithm.
+Note that many features are currently unimplemented, and completeness is not the primary goal. I will accept PR's to port more features, especially those that increase the number of passing tests, but the main focus of this crate is the boolean algorithm.
 
 This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/db042ab153bf8e5dbef2eb00990e8024c2f272ec) (v3.5.1) and passes 245 tests when [linked to the original C++ test suite](/test/README.md). I consider what is here to be reliably complete.
 
@@ -15,7 +15,7 @@ If you're just looking to use Manifold in Rust, you have probably better options
 
 So why bother?
 
-- I would be pleased to never see a line of C++ again. This cannot be understated.
+- I would be pleased to never see a line of C++ again. This cannot be overstated.
 - `wasm-bindgen` ecosystem - Rust and C++ in the same WASM binary requires 2 runtimes, 2 standard libraries, emscripten, wasm bindgen, mixed ABI, yay!
 - I plan to continue researching [symbolic perturbation](https://github.com/elalish/manifold/issues/1430) improvements, refactoring into more idiomatic Rust, and optimizing for my specific use case.
 
