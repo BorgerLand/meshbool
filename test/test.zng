@@ -114,6 +114,7 @@ mod crate
 		
 		fn num_vert(&self) -> u32;
 		fn num_tri(&self) -> u32;
+		fn merge_glp(&mut self) -> bool;
 		
 		field num_prop        (offset = 216, type = u32);
 		field vert_properties (offset = 0,   type = ::std::vec::Vec<f32>);
@@ -137,6 +138,7 @@ mod crate
 		
 		fn num_vert(&self) -> u64;
 		fn num_tri(&self) -> u64;
+		fn merge_glp(&mut self) -> bool;
 		
 		field num_prop        (offset = 216, type = u64);
 		field vert_properties (offset = 0,   type = ::std::vec::Vec<f64>);

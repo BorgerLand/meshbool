@@ -237,10 +237,12 @@ macro_rules! lossy_from {
 }
 
 lossy_from!([i32, u32, u64, usize], usize);
-lossy_from!([usize], u64);
-lossy_from!([usize], u32);
-lossy_from!([f64], f64);
+lossy_from!([u32, usize], u64);
+lossy_from!([u32, u64, usize], u32);
+lossy_from!([f32, f64], f64);
 lossy_from!([f64], f32);
+lossy_from!([u32, u64], i32);
+lossy_from!([u64], u64);
 
 pub struct OrderedF64(pub f64);
 

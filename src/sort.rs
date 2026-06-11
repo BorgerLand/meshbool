@@ -571,7 +571,8 @@ where
 	i32: LossyFrom<I>,
 	f64: LossyFrom<Precision>,
 {
-	pub fn merge(&mut self) -> bool {
+	//"merge" is a reserved keyword in zngur
+	pub fn merge_glp(&mut self) -> bool {
 		merge_mesh_glp(self)
 	}
 }
