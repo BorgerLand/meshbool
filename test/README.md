@@ -66,5 +66,5 @@ There are a few upstream tests that prevent other tests from running due to feat
 
 Known failures, treating them as potential bugs in Manifold/its test suite's expectations:
 
-- Boolean.Precision: CsgLeafNode::Compose optimization is not implemented, and the unoptimized full boolean path calls simplify_topology with nonzero first_new_vert, causing the tiny cube to not run through degenerate removal
-- Boolean.BatchBoolean: Output looks visually correct, again error may be due to unimplemented CsgLeafNode::Compose optimization, though it's weird that they don't produce the same number of triangles out
+- Boolean.Precision: `CsgLeafNode::Compose` optimization is not implemented, and the unoptimized full boolean path calls simplify_topology with nonzero first_new_vert, causing the tiny cube to not run through degenerate removal
+- Boolean.BatchBoolean: Output looks visually correct, again error may be due to unimplemented `CsgLeafNode::Compose` optimization, though it's weird that they don't produce the same number of triangles out

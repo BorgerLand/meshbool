@@ -1,4 +1,9 @@
-use crate::common::{LossyFrom, LossyInto};
+pub use crate::meshgl::input::MeshGLError;
+
+use crate::util::num_convert::{LossyFrom, LossyInto};
+
+mod input; //from meshgl to meshbool, input to this library
+mod output; //from meshbool to meshgl, output of this library
 
 ///@brief Mesh input/output suitable for pushing directly into graphics
 ///libraries.
@@ -71,14 +76,10 @@ use crate::common::{LossyFrom, LossyInto};
 //
 // MeshGLP / MeshGL / MeshGL64 are forward-declared in common.h; the
 // default `I = uint32_t` lives on the forward decl.
-#[derive(Debug, Clone)]
-pub struct MeshGLP<F, I>
-where
-	F: LossyFrom<f64>,
-	I: LossyFrom<usize>,
-{
+#[derive(Debug, Clone, Default)]
+pub struct MeshGL<F, I> {
 	/// Number of properties per vertex, always >= 3.
-	pub num_prop: I,
+	pub prop_stride: I,
 	/// Flat, GL-style interleaved list of all vertex properties: propVal =
 	/// vertProperties[vert * numProp + propIdx]. The first three properties are
 	/// always the position x, y, z. The stride of the array is numProp.
@@ -129,35 +130,13 @@ where
 	pub tolerance: F,
 }
 
-impl<F, I> Default for MeshGLP<F, I>
-where
-	F: LossyFrom<f64>,
-	I: LossyFrom<usize>,
-{
-	fn default() -> Self {
-		Self {
-			num_prop: I::lossy_from(3),
-			tolerance: F::lossy_from(0.0),
-			vert_properties: Vec::default(),
-			tri_verts: Vec::default(),
-			merge_from_vert: Vec::default(),
-			merge_to_vert: Vec::default(),
-			run_index: Vec::default(),
-			run_original_id: Vec::default(),
-			run_transform: Vec::default(),
-			run_flags: Vec::default(),
-			face_id: Vec::default(),
-		}
-	}
-}
-
-impl<F, I> MeshGLP<F, I>
+impl<F, I> MeshGL<F, I>
 where
 	F: LossyFrom<f64>,
 	I: LossyFrom<usize> + Copy,
 {
 	pub fn num_vert(&self) -> I {
-		I::lossy_from(self.vert_properties.len()) / self.num_prop
+		I::lossy_from(self.vert_properties.len()) / self.prop_stride
 	}
 
 	pub fn num_tri(&self) -> I {
@@ -174,7 +153,7 @@ where
 	///world-frame values regardless of this bit.
 	///
 	///@param run The index of the triangle run (0 <= run < runFlags.size()).
-	pub fn backside(&self, run: usize) -> bool {
+	pub fn back_side(&self, run: usize) -> bool {
 		run < self.run_flags.len() && (self.run_flags[run] & 1) != 0
 	}
 

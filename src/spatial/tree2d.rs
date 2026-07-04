@@ -1,11 +1,20 @@
-use crate::common::{OrderedF64, Rect};
-use crate::polygon::PolyVert;
+use crate::triangulation::PolyVert;
+use crate::spatial::aabb::Box2D;
+use crate::util::num_convert::OrderedF64;
 use nalgebra::Point2;
 
 ///Not really a proper KD-tree, but a kd tree with k = 2 and alternating x/y
 ///partition.
 ///Recursive sorting is not the most efficient, but simple and guaranteed to
 ///result in a balanced tree.
+pub fn build_2d_tree(points: &mut [PolyVert]) {
+	// don't even bother...
+	if points.len() <= 8 {
+		return;
+	}
+	build_2d_tree_impl(points, true);
+}
+
 fn build_2d_tree_impl(points: &mut [PolyVert], sort_x: bool) {
 	if sort_x {
 		points.sort_by_key(|vert| OrderedF64(vert.pos.x));
@@ -21,15 +30,7 @@ fn build_2d_tree_impl(points: &mut [PolyVert], sort_x: bool) {
 	build_2d_tree_impl(&mut points[len / 2 + 1..], !sort_x);
 }
 
-pub fn build_2d_tree(points: &mut [PolyVert]) {
-	// don't even bother...
-	if points.len() <= 8 {
-		return;
-	}
-	build_2d_tree_impl(points, true);
-}
-
-pub fn query_2d_tree(points: &[PolyVert], r: Rect, mut f: impl FnMut(&PolyVert)) {
+pub fn query_2d_tree(points: &[PolyVert], r: Box2D, mut f: impl FnMut(&PolyVert)) {
 	if points.len() <= 8 {
 		for p in points {
 			if r.contains(&p.pos) {
@@ -40,13 +41,13 @@ pub fn query_2d_tree(points: &[PolyVert], r: Rect, mut f: impl FnMut(&PolyVert))
 		return;
 	}
 
-	let mut current = Rect::default();
+	let mut current = Box2D::default();
 	current.min = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
 	current.max = Point2::new(f64::INFINITY, f64::INFINITY);
 
 	let mut level = 0;
 	let mut current_view = points;
-	let mut rect_stack = [Rect::default(); 64];
+	let mut rect_stack = [Box2D::default(); 64];
 	let mut view_stack: [&[PolyVert]; 64] = [&[]; 64];
 	let mut level_stack = [0; 64];
 	let mut stack_pointer = 0;

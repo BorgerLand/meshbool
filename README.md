@@ -30,7 +30,6 @@ meshbool = { git = "https://github.com/BorgerLand/meshbool.git" }
 ### Example
 
 ```Rust
-//note you currently need the nalgebra crate to construct these linear algebra objects
 let cube1 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), true);
 let cube2 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), false);
 

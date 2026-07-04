@@ -1,19 +1,19 @@
-use crate::common::DeterministicMap;
-use crate::vec::vec_resize_nofill;
+use crate::util::hash_table::DeterministicMap;
+use crate::util::vec_ext;
 use std::mem;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 ///from https://github.com/wjakob/dset, changed to add connected component
 ///computation
 pub struct DisjointSets {
-	m_data: Vec<AtomicU64>,
+	data: Vec<AtomicU64>,
 }
 
 impl DisjointSets {
 	pub fn new(size: usize) -> Self {
 		debug_assert!(size <= u32::MAX as usize);
 		Self {
-			m_data: (0..size).map(|i| AtomicU64::new(i as u64)).collect(),
+			data: (0..size).map(|i| AtomicU64::new(i as u64)).collect(),
 		}
 	}
 
@@ -43,7 +43,7 @@ impl DisjointSets {
 			let mut old_entry = ((r1 as u64) << 32) | (id1 as u64);
 			let mut new_entry = ((r1 as u64) << 32) | (id2 as u64);
 
-			if self.m_data[id1 as usize]
+			if self.data[id1 as usize]
 				.compare_exchange(old_entry, new_entry, Ordering::SeqCst, Ordering::SeqCst)
 				.is_err()
 			{
@@ -54,7 +54,7 @@ impl DisjointSets {
 				old_entry = ((r2 as u64) << 32) | (id2 as u64);
 				new_entry = (((r2 as u64) + 1) << 32) | (id2 as u64);
 				/* Try to update the rank (may fail, retry if rank = 0) */
-				if self.m_data[id2 as usize]
+				if self.data[id2 as usize]
 					.compare_exchange(old_entry, new_entry, Ordering::SeqCst, Ordering::SeqCst)
 					.is_err() && r2 == 0
 				{
@@ -68,24 +68,16 @@ impl DisjointSets {
 		id2 as usize
 	}
 
-	fn rank(&self, id: u32) -> u32 {
-		((self.m_data[id as usize].load(Ordering::SeqCst) >> 32) as u32) & 0x7FFFFFFF
-	}
-
-	fn parent(&self, id: u32) -> u32 {
-		self.m_data[id as usize].load(Ordering::SeqCst) as u32
-	}
-
-	pub fn connected_components(&self, components: &mut Vec<i32>) -> i32 {
-		unsafe { vec_resize_nofill(components, self.m_data.len()) };
+	pub fn connected_components(&self) -> (Vec<i32>, usize) {
+		let mut components = unsafe { vec_ext::uninit(self.data.len()) };
 		let mut lonely_nodes = 0;
 		let mut to_label: DeterministicMap<u32, i32> = DeterministicMap::new();
-		for i in 0..self.m_data.len() {
+		for i in 0..self.data.len() {
 			// we optimize for connected component of size 1
 			// no need to put them into the hashmap
 			let i_parent = self.find_impl(DisjointSets::to_index(i as usize));
 			if self.rank(i_parent) == 0 {
-				components[i] = to_label.len() as i32 + lonely_nodes;
+				components[i] = to_label.len() as i32 + lonely_nodes as i32;
 				lonely_nodes += 1;
 				continue;
 			}
@@ -97,7 +89,15 @@ impl DisjointSets {
 				components[i] = s as i32;
 			}
 		}
-		return to_label.len() as i32 + lonely_nodes;
+		return (components, to_label.len() + lonely_nodes);
+	}
+
+	fn rank(&self, id: u32) -> u32 {
+		((self.data[id as usize].load(Ordering::SeqCst) >> 32) as u32) & 0x7FFFFFFF
+	}
+
+	fn parent(&self, id: u32) -> u32 {
+		self.data[id as usize].load(Ordering::SeqCst) as u32
 	}
 
 	fn to_index(id: usize) -> u32 {
@@ -107,13 +107,13 @@ impl DisjointSets {
 
 	fn find_impl(&self, mut id: u32) -> u32 {
 		while id != self.parent(id) {
-			let value = self.m_data[id as usize].load(Ordering::SeqCst);
+			let value = self.data[id as usize].load(Ordering::SeqCst);
 			let new_parent = self.parent(value as u32);
 			let new_value = (value & 0xFFFFFFFF00000000) | (new_parent as u64);
 			if value != new_value {
 				/* Try to update parent (may fail, that's ok) */
 				#[allow(unused_must_use)]
-				self.m_data[id as usize].compare_exchange_weak(
+				self.data[id as usize].compare_exchange_weak(
 					value,
 					new_value,
 					Ordering::SeqCst,

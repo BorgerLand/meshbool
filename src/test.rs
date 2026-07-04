@@ -1,6 +1,8 @@
-//anything that can't be cleanly expressed in test.zng can go here
-
-use crate::MeshBoolError;
+use crate::MeshBool;
+use crate::meshgl::MeshGLError;
+use crate::postprocessing::sort::get_tri_box_morton;
+use crate::spatial::bvh_collider::SimpleRecorder;
+use crate::util::tri_dst::distance_triangle_triangle_squared;
 use nalgebra::{Point2, Point3, Vector3};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -40,42 +42,39 @@ pub fn set_process_overlaps(value: bool) {
 	PROCESS_OVERLAPS.store(value, Ordering::Relaxed);
 }
 
-impl MeshBoolError {
-	pub fn is_no_error(&self) -> bool {
-		*self == MeshBoolError::NoError
-	}
+impl MeshGLError {
 	pub fn is_non_finite_vertex(&self) -> bool {
-		*self == MeshBoolError::NonFiniteVertex
+		*self == MeshGLError::NonFiniteVertex
 	}
 	pub fn is_invalid_construction(&self) -> bool {
-		*self == MeshBoolError::InvalidConstruction
+		*self == MeshGLError::InvalidConstruction
 	}
 	pub fn is_result_too_large(&self) -> bool {
-		*self == MeshBoolError::ResultTooLarge
+		*self == MeshGLError::ResultTooLarge
 	}
 	pub fn is_not_manifold(&self) -> bool {
-		*self == MeshBoolError::NotManifold
+		*self == MeshGLError::NotManifold
 	}
 	pub fn is_missing_position_properties(&self) -> bool {
-		*self == MeshBoolError::MissingPositionProperties
+		*self == MeshGLError::MissingPositionProperties
 	}
 	pub fn is_merge_vectors_different_lengths(&self) -> bool {
-		*self == MeshBoolError::MergeVectorsDifferentLengths
+		*self == MeshGLError::MergeVectorsDifferentLengths
 	}
 	pub fn is_transform_wrong_length(&self) -> bool {
-		*self == MeshBoolError::TransformWrongLength
+		*self == MeshGLError::TransformWrongLength
 	}
 	pub fn is_run_index_wrong_length(&self) -> bool {
-		*self == MeshBoolError::RunIndexWrongLength
+		*self == MeshGLError::RunIndexWrongLength
 	}
 	pub fn is_face_id_wrong_length(&self) -> bool {
-		*self == MeshBoolError::FaceIDWrongLength
+		*self == MeshGLError::FaceIDWrongLength
 	}
 	pub fn is_merge_index_out_of_bounds(&self) -> bool {
-		*self == MeshBoolError::MergeIndexOutOfBounds
+		*self == MeshGLError::MergeIndexOutOfBounds
 	}
 	pub fn is_vertex_out_of_bounds(&self) -> bool {
-		*self == MeshBoolError::VertexOutOfBounds
+		*self == MeshGLError::VertexOutOfBounds
 	}
 }
 
@@ -126,5 +125,77 @@ impl Point3f64Coords for Point3<f64> {
 	}
 	fn get_z(&self) -> f64 {
 		self.z
+	}
+}
+
+impl MeshBool {
+	///Returns true if this manifold is self-intersecting.
+	///Note that this is not checking for epsilon-validity.
+	pub fn is_self_intersecting(&self) -> bool {
+		let ep = 2.0 * self.precision.epsilon;
+		let epsilon_sq = ep * ep;
+		let (tri_box, _) = get_tri_box_morton(&self.tri.halfedge, &self.vert_pos, None);
+
+		let intersecting = AtomicBool::new(false);
+
+		let mut f = |tri0: i32, tri1: i32| {
+			let mut tri_verts0: [Point3<f64>; 3] = [Point3::default(); 3];
+			let mut tri_verts1: [Point3<f64>; 3] = [Point3::default(); 3];
+			for i in 0..3 {
+				tri_verts0[i as usize] =
+					self.vert_pos[self.tri.halfedge.start(3 * tri0 + i) as usize];
+				tri_verts1[i as usize] =
+					self.vert_pos[self.tri.halfedge.start(3 * tri1 + i) as usize];
+			}
+			// if triangles tri0 and tri1 share a vertex, return true to skip the
+			// check. we relax the sharing criteria a bit to allow for at most
+			// distance epsilon squared
+			for i in 0..3 {
+				for j in 0..3 {
+					if (tri_verts1[j] - tri_verts0[i]).magnitude_squared() <= epsilon_sq {
+						return;
+					}
+				}
+			}
+
+			if distance_triangle_triangle_squared(&tri_verts0, &tri_verts1) == 0.0 {
+				// try to move the triangles around the normal of the other face
+				let mut tmp0: [Point3<f64>; 3] = [Point3::default(); 3];
+				let mut tmp1: [Point3<f64>; 3] = [Point3::default(); 3];
+				for i in 0..3 {
+					tmp0[i] = tri_verts0[i] + ep * self.tri.normal[tri1 as usize];
+				}
+				if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
+					return;
+				}
+				for i in 0..3 {
+					tmp0[i] = tri_verts0[i] - ep * self.tri.normal[tri1 as usize];
+				}
+				if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
+					return;
+				}
+				for i in 0..3 {
+					tmp1[i] = tri_verts1[i] + ep * self.tri.normal[tri0 as usize];
+				}
+				if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
+					return;
+				}
+				for i in 0..3 {
+					tmp1[i] = tri_verts1[i] - ep * self.tri.normal[tri0 as usize];
+				}
+				if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
+					return;
+				}
+
+				#[cfg(feature = "test_thoroughly")]
+				intersecting.store(true, Ordering::SeqCst);
+			}
+		};
+
+		let mut recorder = SimpleRecorder::new(&mut f);
+		self.collider
+			.collisions_from_slice::<true, _>(&mut recorder, &tri_box, true);
+
+		intersecting.load(Ordering::SeqCst)
 	}
 }

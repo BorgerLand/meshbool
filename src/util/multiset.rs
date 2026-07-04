@@ -27,17 +27,17 @@ impl<K> Clone for Handle<K> {
 	}
 }
 
-///A multiset with C++ `std::multiset` semantics: duplicate keys are allowed and
-///kept in sorted order, with equal keys retained in insertion order. For duplicate
-///keys, equal elements are currently traversed in insertion order (a newly
-///inserted equal key is placed to the right of existing equal keys, and in-order
-///traversal is stable across rebalancing). This is a property of the current
-///implementation, not a documented guarantee of the crate, but this property is
-///necessary for matching the behavior of the C++ standard. Updating the crate
-///should be met with scrutiny for this reason.
+///A multiset backed by red-black tree with C++ `std::multiset` semantics: duplicate
+///keys are allowed and kept in sorted order, with equal keys retained in insertion
+///order. For duplicate keys, equal elements are currently traversed in insertion
+///order (a newly inserted equal key is placed to the right of existing equal keys,
+///and in-order traversal is stable across rebalancing). This is a property of the
+///current implementation, not a documented guarantee of the crate, but this
+///property is necessary for matching the behavior of the C++ standard. Updating the
+///crate should be met with scrutiny for this reason.
 ///
-///I am not 100% sure this is a good idea for performance due to lack of cache
-///locality. The previous commit was using a manually sorted vec, which was
+///I am not 100% sure this is a good idea for performance due to inherent lack of
+///cache locality. The previous commit was using a manually sorted vec, which was
 ///slightly faster, but Samples.Sponge4 was failing
 ///(Expected: (sponge.NumDegenerateTris()) <= (8), actual: 24 vs 8).
 ///Possibly the stable pointer guarantee as opposed to removing any identical key
@@ -77,8 +77,8 @@ impl<K: 'static> MultiSet<K> {
 
 	///Iterates over all `(key, value)` pairs in ascending order.
 	///For keys that compare equally, maintains insertion order.
-	pub fn iter(&self) -> impl Iterator<Item = &K> {
-		self.tree.iter().map(|n| &n.key)
+	pub fn into_iter(self) -> impl Iterator<Item = K> {
+		self.tree.into_iter().map(|n| n.key)
 	}
 
 	///Removes and returns the smallest-key and oldest-inserted element, or

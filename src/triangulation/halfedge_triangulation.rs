@@ -1,6 +1,6 @@
-use crate::common::DeterministicMap;
-use crate::polygon::PolygonsIdx;
-use crate::shared::Halfedge;
+use crate::halfedge::Halfedge;
+use crate::triangulation::PolygonsIdx;
+use crate::util::hash_table::DeterministicMap;
 use nalgebra::Vector3;
 use std::collections::hash_map::Entry;
 
@@ -8,23 +8,23 @@ use std::collections::hash_map::Entry;
 pub struct HalfedgeTriangulation {
 	pub halfedges: Vec<Halfedge>,
 	pub contour_end: usize,
-	pub epsilon: f64,
 	edge2halfedge: DeterministicMap<u64, Vec<i32>>,
 }
 
-impl Default for HalfedgeTriangulation {
-	fn default() -> Self {
+impl HalfedgeTriangulation {
+	pub(super) fn new() -> Self {
 		Self {
 			halfedges: Vec::default(),
 			contour_end: 0,
-			epsilon: -1.0,
 			edge2halfedge: DeterministicMap::default(),
 		}
 	}
-}
 
-impl HalfedgeTriangulation {
-	pub fn add_contours(&mut self, polys: &PolygonsIdx) {
+	pub fn num_tri(&self) -> usize {
+		(self.halfedges.len() - self.contour_end) / 3
+	}
+
+	pub(super) fn add_contours(&mut self, polys: &PolygonsIdx) {
 		let mut num_contour_edges = 0;
 		for poly in polys {
 			num_contour_edges += poly.len();
@@ -42,37 +42,19 @@ impl HalfedgeTriangulation {
 		self.contour_end = self.halfedges.len();
 	}
 
-	pub fn reserve_triangles(&mut self, num_tri: usize) {
+	pub(super) fn reserve_triangles(&mut self, num_tri: usize) {
 		self.halfedges
 			.reserve((self.contour_end + 3 * num_tri).saturating_sub(self.halfedges.len()));
 		self.edge2halfedge.reserve(num_tri);
 	}
 
-	pub fn add_triangle(&mut self, first: i32, second: i32, third: i32) {
+	pub(super) fn add_triangle(&mut self, first: i32, second: i32, third: i32) {
 		self.add_halfedge(first, second);
 		self.add_halfedge(second, third);
 		self.add_halfedge(third, first);
 	}
 
-	pub fn num_tri(&self) -> usize {
-		(self.halfedges.len() - self.contour_end) / 3
-	}
-
-	pub fn triangles(&self) -> Vec<Vector3<i32>> {
-		let mut triangles = Vec::with_capacity(self.num_tri());
-		let mut edge = self.contour_end;
-		while edge < self.halfedges.len() {
-			triangles.push(Vector3::new(
-				self.halfedges[edge].start_vert,
-				self.halfedges[edge + 1].start_vert,
-				self.halfedges[edge + 2].start_vert,
-			));
-			edge += 3;
-		}
-		triangles
-	}
-
-	pub fn finalize(&mut self) {
+	pub(super) fn finalize(&mut self) {
 		#[cfg(feature = "test_thoroughly")]
 		{
 			debug_assert!(
@@ -97,6 +79,20 @@ impl HalfedgeTriangulation {
 			}
 		}
 		self.edge2halfedge = DeterministicMap::new();
+	}
+
+	pub(super) fn triangles(&self) -> Vec<Vector3<i32>> {
+		let mut triangles = Vec::with_capacity(self.num_tri());
+		let mut edge = self.contour_end;
+		while edge < self.halfedges.len() {
+			triangles.push(Vector3::new(
+				self.halfedges[edge].start_vert,
+				self.halfedges[edge + 1].start_vert,
+				self.halfedges[edge + 2].start_vert,
+			));
+			edge += 3;
+		}
+		triangles
 	}
 
 	fn edge_key(start: i32, end: i32) -> u64 {

@@ -1,20 +1,40 @@
-use crate::common::{Polygons, Quality, SimplePolygon, cosd, sind};
-use crate::disjoint_sets::DisjointSets;
-use crate::meshboolimpl::{MeshBoolImpl, Shape};
-use crate::parallel::{copy_if, gather};
-use crate::polygon::{PolyVert, PolygonsIdx, SimplePolygonIdx, triangulate_idx};
-use crate::{MeshBool, MeshBoolError, triangulate};
+use crate::Triangles;
+use crate::halfedge::Halfedges;
+use crate::mesh_relations::{InstanceRelation, TriRelation, reserve_original_id};
+use crate::postprocessing as pp;
+use crate::triangulation::{
+	PolyVert, Polygons, PolygonsIdx, SimplePolygon, SimplePolygonIdx, triangulate, triangulate_idx,
+};
+use crate::util::math::{cosd, sind};
+use crate::util::segment_resolution::SegmentResolution;
+use crate::{Box3D, MeshBool, Precision, Properties, TrianglesPartial};
 use nalgebra::{Matrix2, Matrix3x4, Point2, Point3, Vector2, Vector3};
 use std::f64::consts::FRAC_PI_2;
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum ConstructorError {
+	InvalidConstruction,
+}
 
 impl MeshBool {
 	///Constructs a tetrahedron centered at the origin with one vertex at (1,1,1)
 	///and the rest at similarly symmetric points.
 	pub fn tetrahedron() -> Self {
-		return Self::from(MeshBoolImpl::from_shape(
-			Shape::Tetrahedron,
-			Matrix3x4::identity(),
-		));
+		let vert_pos = vec![
+			Point3::new(-1.0, -1.0, 1.0),
+			Point3::new(-1.0, 1.0, -1.0),
+			Point3::new(1.0, -1.0, -1.0),
+			Point3::new(1.0, 1.0, 1.0),
+		];
+
+		let tri_verts = vec![
+			Vector3::new(2, 0, 1),
+			Vector3::new(0, 3, 1),
+			Vector3::new(2, 3, 0),
+			Vector3::new(3, 2, 1),
+		];
+
+		MeshBool::from_tri_mesh(vert_pos, tri_verts, None)
 	}
 
 	///Constructs a unit cube (edge lengths all one), by default in the first
@@ -23,10 +43,36 @@ impl MeshBool {
 	///
 	///@param size The X, Y, and Z dimensions of the box.
 	///@param center Set to true to shift the center to the origin.
-	pub fn cube(size: Vector3<f64>, center: bool) -> Self {
+	pub fn cube(size: Vector3<f64>, center: bool) -> Result<Self, ConstructorError> {
 		if size.x < 0.0 || size.y < 0.0 || size.z < 0.0 || size.magnitude_squared() == 0.0 {
-			return Self::invalid();
+			return Err(ConstructorError::InvalidConstruction);
 		}
+
+		let vert_pos = vec![
+			Point3::new(0.0, 0.0, 0.0),
+			Point3::new(0.0, 0.0, 1.0),
+			Point3::new(0.0, 1.0, 0.0),
+			Point3::new(0.0, 1.0, 1.0),
+			Point3::new(1.0, 0.0, 0.0),
+			Point3::new(1.0, 0.0, 1.0),
+			Point3::new(1.0, 1.0, 0.0),
+			Point3::new(1.0, 1.0, 1.0),
+		];
+
+		let tri_verts = vec![
+			Vector3::new(1, 0, 4),
+			Vector3::new(2, 4, 0),
+			Vector3::new(1, 3, 0),
+			Vector3::new(3, 1, 5),
+			Vector3::new(3, 2, 0),
+			Vector3::new(3, 7, 2),
+			Vector3::new(5, 4, 6),
+			Vector3::new(5, 1, 4),
+			Vector3::new(6, 4, 2),
+			Vector3::new(7, 6, 2),
+			Vector3::new(7, 3, 5),
+			Vector3::new(7, 5, 6),
+		];
 
 		let m = Matrix3x4::from_columns(&[
 			Vector3::new(size.x, 0.0, 0.0),
@@ -39,7 +85,7 @@ impl MeshBool {
 			},
 		]);
 
-		Self::from(MeshBoolImpl::from_shape(Shape::Cube, m))
+		Ok(MeshBool::from_tri_mesh(vert_pos, tri_verts, Some(m)))
 	}
 
 	///A convenience constructor for the common case of extruding a circle. Can also
@@ -57,24 +103,24 @@ impl MeshBool {
 		height: f64,
 		radius_low: f64,
 		radius_high: f64,
-		circular_segments: u32,
+		quality: SegmentResolution,
 		center: bool,
-	) -> Self {
+	) -> Result<Self, ConstructorError> {
 		if height <= 0.0 || radius_low < 0.0 {
-			return Self::invalid();
+			return Err(ConstructorError::InvalidConstruction);
 		}
 		if radius_low == 0.0 {
 			if radius_high <= 0.0 {
-				return Self::invalid();
+				return Err(ConstructorError::InvalidConstruction);
 			}
 			// Cone with apex at bottom: create the centered apex-at-top version and
 			// mirror it
-			let mut cone = MeshBool::cylinder(height, radius_high, 0.0, circular_segments, true);
+			let mut cone = MeshBool::cylinder(height, radius_high, 0.0, quality, true)?;
 			cone = cone.mirror(Vector3::new(0.0, 0.0, 1.0));
 			if !center {
 				cone = cone.translate(Vector3::new(0.0, 0.0, height / 2.0));
 			}
-			return cone.as_original();
+			return Ok(cone.as_original());
 		}
 		let scale = if radius_high >= 0.0 {
 			radius_high / radius_low
@@ -82,30 +128,26 @@ impl MeshBool {
 			1.0
 		};
 		let radius = radius_low.max(radius_high);
-		let n = if circular_segments > 2 {
-			circular_segments
-		} else {
-			Quality::get_circular_segments(radius)
-		};
+		let n = quality.get_circular_segments(radius).max(3);
 
 		let mut circle: SimplePolygon = vec![Point2::default(); n as usize];
 		let d_phi = 360.0 / (n as f64);
 		for i in 0..n {
-			circle[i as usize] = Point2::<f64>::new(
+			circle[i as usize] = Point2::new(
 				radius_low * cosd(d_phi * i as f64),
 				radius_low * sind(d_phi * i as f64),
 			);
 		}
 
-		let cylinder = Self::extrude(&vec![circle], height, 0, 0.0, Vector2::new(scale, scale));
+		let cylinder = Self::extrude(&vec![circle], height, 0, 0.0, Vector2::new(scale, scale))?;
 
-		if center {
+		Ok(if center {
 			cylinder
 				.translate(Vector3::new(0.0, 0.0, -height / 2.0))
 				.as_original()
 		} else {
 			cylinder
-		}
+		})
 	}
 
 	///Constructs a geodesic sphere of a given radius.
@@ -116,18 +158,42 @@ impl MeshBool {
 	///four, as this sphere is constructed by refining an octahedron. This means
 	///there are a circle of vertices on all three of the axis planes. Default is
 	///calculated by the static Defaults.
-	pub fn sphere(radius: f64, circular_segments: i32) -> Self {
+	pub fn sphere(radius: f64, quality: SegmentResolution) -> Result<Self, ConstructorError> {
 		if radius <= 0.0 {
-			return Self::invalid();
+			return Err(ConstructorError::InvalidConstruction);
 		}
-		let n: i32 = if circular_segments > 0 {
-			(circular_segments + 3) / 4
+
+		let vert_pos = vec![
+			Point3::new(1.0, 0.0, 0.0),
+			Point3::new(-1.0, 0.0, 0.0),
+			Point3::new(0.0, 1.0, 0.0),
+			Point3::new(0.0, -1.0, 0.0),
+			Point3::new(0.0, 0.0, 1.0),
+			Point3::new(0.0, 0.0, -1.0),
+		];
+
+		let tri_verts = vec![
+			Vector3::new(0, 2, 4),
+			Vector3::new(1, 5, 3),
+			Vector3::new(2, 1, 4),
+			Vector3::new(3, 5, 0),
+			Vector3::new(1, 3, 4),
+			Vector3::new(0, 5, 2),
+			Vector3::new(3, 0, 4),
+			Vector3::new(2, 5, 1),
+		];
+
+		let octahedron = Self::from_tri_mesh(vert_pos, tri_verts, None);
+
+		let n = if quality.circular_segments > 0 {
+			quality.circular_segments + 3
 		} else {
-			(Quality::get_circular_segments(radius) / 4) as i32
-		};
-		let mut meshbool_impl = MeshBoolImpl::from_shape(Shape::Octahedron, Matrix3x4::identity());
-		meshbool_impl.subdivide(|_, _, _| n - 1, false);
-		for v in meshbool_impl.vert_pos.iter_mut() {
+			quality.get_circular_segments(radius)
+		} / 4;
+
+		let (sphere, _) = octahedron.subdivide(|_, _, _| (n - 1) as i32, false);
+		let mut vert_pos = sphere.vert_pos;
+		for v in vert_pos.iter_mut() {
 			let v_vec = Vector3::new(
 				libm::cos(FRAC_PI_2 * (1.0 - v.x)),
 				libm::cos(FRAC_PI_2 * (1.0 - v.y)),
@@ -139,13 +205,8 @@ impl MeshBool {
 				*v = Point3::default();
 			}
 		}
-		// Ignore preceding octahedron.
-		meshbool_impl.initialize_original();
-		meshbool_impl.calculate_bbox();
-		meshbool_impl.set_epsilon(-1.0, false);
-		meshbool_impl.sort_geometry();
-		meshbool_impl.set_normals_and_coplanar();
-		return Self::from(meshbool_impl);
+
+		Ok(Self::from_halfedges(vert_pos, sphere.tri.halfedge))
 	}
 
 	///Constructs a manifold from a set of polygons by extruding them along the
@@ -171,9 +232,9 @@ impl MeshBool {
 		mut n_divisions: u32,
 		twist_degrees: f64,
 		mut scale_top: Vector2<f64>,
-	) -> Self {
+	) -> Result<Self, ConstructorError> {
 		if cross_section.len() == 0 || height <= 0.0 {
-			return Self::invalid();
+			return Err(ConstructorError::InvalidConstruction);
 		}
 
 		scale_top = scale_top.sup(&Vector2::new(0.0, 0.0));
@@ -198,6 +259,10 @@ impl MeshBool {
 			}
 
 			polygons_indexed.push(simple_indexed);
+		}
+
+		if n_cross_section == 0 {
+			return Err(ConstructorError::InvalidConstruction);
 		}
 
 		for i in 1..(n_divisions + 1) {
@@ -256,18 +321,7 @@ impl MeshBool {
 			}
 		}
 
-		let mut meshbool_impl = MeshBoolImpl {
-			vert_pos,
-			..Default::default()
-		};
-
-		meshbool_impl.create_halfedges(tri_verts, Vec::new());
-		meshbool_impl.initialize_original();
-		meshbool_impl.calculate_bbox();
-		meshbool_impl.set_epsilon(-1.0, false);
-		meshbool_impl.sort_geometry();
-		meshbool_impl.set_normals_and_coplanar();
-		Self::from(meshbool_impl)
+		Ok(MeshBool::from_tri_mesh(vert_pos, tri_verts, None))
 	}
 
 	///Constructs a manifold from a set of polygons by revolving this cross-section
@@ -282,9 +336,9 @@ impl MeshBool {
 	///@param revolveDegrees Number of degrees to revolve. Default is 360 degrees.
 	pub fn revolve(
 		cross_section: &Polygons,
-		circular_segments: i32,
+		quality: SegmentResolution,
 		mut revolve_degrees: f64,
-	) -> Self {
+	) -> Result<Self, ConstructorError> {
 		let mut polygons: Polygons = vec![];
 		let mut radius: f64 = 0.0;
 		for poly in cross_section.iter() {
@@ -316,7 +370,7 @@ impl MeshBool {
 		}
 
 		if polygons.is_empty() {
-			return Self::invalid();
+			return Err(ConstructorError::InvalidConstruction);
 		}
 
 		if revolve_degrees > 360.0 {
@@ -324,31 +378,27 @@ impl MeshBool {
 		}
 		let is_full_revolution = revolve_degrees == 360.0;
 
-		let n_divisions: i32 = if circular_segments > 2 {
-			circular_segments
-		} else {
-			(Quality::get_circular_segments(radius) as f64 * revolve_degrees / 360.0) as i32
-		};
+		let n_divisions = ((quality.get_circular_segments(radius) as f64 * revolve_degrees / 360.0)
+			as u32)
+			.max(3);
 
-		let mut meshbool_impl = MeshBoolImpl::default();
-		let vert_pos = &mut meshbool_impl.vert_pos;
-		let mut tri_verts_dh: Vec<Vector3<i32>> = vec![];
-		let tri_verts = &mut tri_verts_dh;
+		let mut vert_pos = Vec::new();
+		let mut tri_verts: Vec<Vector3<i32>> = vec![];
 
 		let mut start_poses: Vec<i32> = vec![];
 		let mut end_poses: Vec<i32> = vec![];
 
 		let d_phi: f64 = revolve_degrees / n_divisions as f64;
 		// first and last slice are distinguished if not a full revolution.
-		let n_slices: i32 = if is_full_revolution {
+		let n_slices = if is_full_revolution {
 			n_divisions
 		} else {
 			n_divisions + 1
 		};
 
 		for poly in polygons.iter() {
-			let mut n_pos_verts: usize = 0;
-			let mut n_revolve_axis_verts: usize = 0;
+			let mut n_pos_verts = 0;
+			let mut n_revolve_axis_verts = 0;
 			for pt in poly.iter() {
 				if pt.x > 0.0 {
 					n_pos_verts += 1;
@@ -358,7 +408,7 @@ impl MeshBool {
 			}
 
 			for poly_vert in 0..poly.len() {
-				let start_pos_index: usize = vert_pos.len();
+				let start_pos_index = vert_pos.len() as u32;
 
 				if !is_full_revolution {
 					start_poses.push(start_pos_index as i32);
@@ -372,15 +422,15 @@ impl MeshBool {
 				}]
 				.coords;
 
-				let prev_start_pos_index: i32 = start_pos_index as i32
+				let prev_start_pos_index = start_pos_index
 					+ (if poly_vert == 0 {
-						n_revolve_axis_verts as i32 + (n_slices * n_pos_verts as i32)
+						n_revolve_axis_verts + (n_slices * n_pos_verts)
 					} else {
 						0
-					}) + (if prev_poly_vertex.x == 0.0 {
-					-1
+					}) - (if prev_poly_vertex.x == 0.0 {
+					1
 				} else {
-					-n_slices
+					n_slices
 				});
 
 				for slice in 0..n_slices {
@@ -394,30 +444,36 @@ impl MeshBool {
 					}
 
 					if is_full_revolution || slice > 0 {
-						let last_slice: i32 = (if slice == 0 { n_divisions } else { slice }) - 1;
+						let last_slice = (if slice == 0 { n_divisions } else { slice }) - 1;
 						if curr_poly_vertex.x > 0.0 {
-							tri_verts.push(Vector3::new(
-								start_pos_index as i32 + slice,
-								start_pos_index as i32 + last_slice,
-								// "Reuse" vertex of first slice if it lies on the revolve axis
-								if prev_poly_vertex.x == 0.0 {
-									prev_start_pos_index
-								} else {
-									prev_start_pos_index + last_slice
-								},
-							));
+							tri_verts.push(
+								Vector3::new(
+									start_pos_index + slice,
+									start_pos_index + last_slice,
+									// "Reuse" vertex of first slice if it lies on the revolve axis
+									if prev_poly_vertex.x == 0.0 {
+										prev_start_pos_index
+									} else {
+										prev_start_pos_index + last_slice
+									},
+								)
+								.map(|x| x as i32),
+							);
 						}
 
 						if prev_poly_vertex.x > 0.0 {
-							tri_verts.push(Vector3::new(
-								prev_start_pos_index + last_slice,
-								prev_start_pos_index + slice,
-								if curr_poly_vertex.x == 0.0 {
-									start_pos_index as i32
-								} else {
-									start_pos_index as i32 + slice
-								},
-							));
+							tri_verts.push(
+								Vector3::new(
+									prev_start_pos_index + last_slice,
+									prev_start_pos_index + slice,
+									if curr_poly_vertex.x == 0.0 {
+										start_pos_index
+									} else {
+										start_pos_index + slice
+									},
+								)
+								.map(|x| x as i32),
+							);
 						}
 					}
 				}
@@ -429,8 +485,7 @@ impl MeshBool {
 
 		// Add front and back triangles if not a full revolution.
 		if !is_full_revolution {
-			let front_triangles: Vec<Vector3<i32>> =
-				triangulate(&polygons, meshbool_impl.epsilon, true);
+			let front_triangles: Vec<Vector3<i32>> = triangulate(&polygons, -1.0, true);
 			for t in front_triangles.iter() {
 				tri_verts.push(Vector3::new(
 					start_poses[t.x as usize],
@@ -448,81 +503,68 @@ impl MeshBool {
 			}
 		}
 
-		meshbool_impl.create_halfedges(tri_verts_dh, vec![]);
-		meshbool_impl.initialize_original();
-		meshbool_impl.calculate_bbox();
-		meshbool_impl.set_epsilon(-1.0, false);
-		meshbool_impl.sort_geometry();
-		meshbool_impl.set_normals_and_coplanar();
-		return Self::from(meshbool_impl);
+		Ok(Self::from_tri_mesh(vert_pos, tri_verts, None))
 	}
 
-	// This operation returns a vector of Manifolds that are topologically
-	// disconnected. If everything is connected, the vector is length one,
-	// containing a copy of the original. It is the inverse operation of Compose().
-	pub fn decompose(&self) -> Vec<Self> {
-		let p_impl = &self.meshbool_impl;
-		if p_impl.status != MeshBoolError::NoError {
-			return vec![Self::propagate_status(p_impl.status)];
-		}
-
-		let uf = DisjointSets::new(self.num_vert());
-		for edge in 0..p_impl.halfedge.len() as i32 {
-			if p_impl.halfedge.is_forward(edge) {
-				uf.unite(
-					p_impl.halfedge.start(edge) as usize,
-					p_impl.halfedge.end(edge) as usize,
-				);
+	fn from_tri_mesh(
+		mut vert_pos: Vec<Point3<f64>>,
+		tri_vert: Vec<Vector3<i32>>,
+		m: Option<Matrix3x4<f64>>,
+	) -> Self {
+		if let Some(m) = m {
+			for v in vert_pos.iter_mut() {
+				v.coords = m * v.coords.push(1.0);
 			}
 		}
-		let mut vert_label = vec![];
-		let num_components = uf.connected_components(&mut vert_label);
 
-		if num_components == 1 {
-			return vec![self.clone()];
+		let vert_count = vert_pos.len();
+		Self::from_halfedges(
+			vert_pos,
+			Halfedges::from_tri_indices(vert_count, tri_vert, None),
+		)
+	}
+
+	fn from_halfedges(mut vert_pos: Vec<Point3<f64>>, mut halfedge: Halfedges) -> Self {
+		let original_id = reserve_original_id();
+		let bbox = Box3D::from_cloud(&vert_pos);
+		let precision = Precision::from_box(bbox);
+		let mut properties = Properties::default();
+		let collider = pp::sort_and_compact_geometry(
+			&mut vert_pos,
+			&mut properties,
+			TrianglesPartial {
+				halfedge: &mut halfedge,
+				normal: None,
+				relation: None,
+			},
+			bbox,
+		)
+		.unwrap();
+		let mut tri_rel = vec![TriRelation::default(); halfedge.num_tri()];
+		let tri_normal =
+			pp::set_normals_and_coplanar(&mut tri_rel, &halfedge, &vert_pos, precision.tolerance);
+
+		MeshBool {
+			original_id: Some(original_id),
+			precision,
+			vert_pos,
+			properties,
+			tri: Triangles {
+				halfedge,
+				normal: tri_normal,
+				relation: tri_rel,
+			},
+			instance_relation: [(
+				0_u32,
+				InstanceRelation {
+					original_id,
+					transform: Matrix3x4::identity(),
+					back_side: false,
+					has_normals: false,
+				},
+			)]
+			.into(),
+			collider,
 		}
-
-		let num_vert = self.num_vert();
-		let mut meshes: Vec<Self> = vec![];
-		for i in 0..num_components {
-			let mut meshbool_impl = MeshBoolImpl::default();
-			// inherit original object's precision
-			meshbool_impl.epsilon = p_impl.epsilon;
-			meshbool_impl.tolerance = p_impl.tolerance;
-
-			let mut vert_new2old: Vec<i32> = vec![0; num_vert];
-			let n_vert = copy_if(0..num_vert as i32, &mut vert_new2old, |v| {
-				vert_label[v as usize] == i
-			});
-			meshbool_impl.vert_pos.resize(n_vert, Default::default());
-			meshbool_impl.vert_normal.resize(n_vert, Default::default());
-			vert_new2old.resize(n_vert, Default::default());
-			gather(&vert_new2old, &p_impl.vert_pos, &mut meshbool_impl.vert_pos);
-			gather(
-				&vert_new2old,
-				&p_impl.vert_normal,
-				&mut meshbool_impl.vert_normal,
-			);
-
-			let mut face_new2old: Vec<i32> = Vec::with_capacity(self.num_tri());
-			let halfedge = &p_impl.halfedge;
-			for face in 0..self.num_tri() as i32 {
-				if vert_label[halfedge.start(3 * face) as usize] == i {
-					face_new2old.push(face);
-				}
-			}
-
-			if face_new2old.is_empty() {
-				continue;
-			}
-
-			meshbool_impl.gather_faces_from_old(p_impl, &face_new2old);
-			meshbool_impl.reindex_verts(&vert_new2old, p_impl.num_vert());
-			meshbool_impl.calculate_bbox();
-			meshbool_impl.sort_geometry();
-
-			meshes.push(Self::from(meshbool_impl));
-		}
-		meshes
 	}
 }

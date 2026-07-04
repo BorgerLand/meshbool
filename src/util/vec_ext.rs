@@ -1,5 +1,42 @@
-use crate::{common::LossyInto, vec::vec_uninit};
+use crate::util::num_convert::{LossyFrom, LossyInto};
+use crate::util::vec_ext;
+use std::mem;
 use std::ops::{Add, AddAssign};
+
+//keywords to search the c++ codebase if ever porting parallelization (ignore case):
+//manifold_par
+//tbb
+//atomic
+//transform(
+
+///safety: all elements are uninitialized
+pub unsafe fn uninit<T>(size: usize) -> Vec<T> {
+	let mut vec = Vec::with_capacity(size);
+	unsafe {
+		vec.set_len(size);
+	}
+	vec
+}
+
+///c++ std::partition
+pub fn partition<T, F>(slice: &mut [T], mut predicate: F) -> usize
+where
+	F: FnMut(&T) -> bool,
+{
+	let mut left = 0;
+	let mut right = slice.len();
+
+	while left < right {
+		if predicate(&slice[left]) {
+			left += 1;
+		} else {
+			right -= 1;
+			slice.swap(left, right);
+		}
+	}
+
+	left
+}
 
 ///Compute the inclusive prefix sum for the range `[first, last)`
 ///using the summation operator, and store the result in the range
@@ -39,7 +76,7 @@ where
 	IO: Copy,
 	F: FnMut(IO, IO) -> IO,
 {
-	let mut output = unsafe { vec_uninit(input.len()) };
+	let mut output = unsafe { vec_ext::uninit(input.len()) };
 	if input.len() == 0 {
 		return output;
 	}
@@ -76,15 +113,19 @@ where
 	}
 }
 
-pub fn exclusive_scan_iter<IO>(input: impl Iterator<Item = IO>, output: &mut [IO], init: IO)
+pub fn exclusive_scan<IO>(input: impl IntoIterator<Item = IO>, init: IO) -> Vec<IO>
 where
 	IO: Copy + AddAssign,
 {
 	let mut acc = init;
-	for (idx, i) in input.enumerate() {
-		output[idx] = acc;
-		acc += i;
-	}
+	input
+		.into_iter()
+		.map(|i| {
+			let next = acc;
+			acc += i;
+			next
+		})
+		.collect()
 }
 
 ///Copy values in the input range `[first, last)` to the output range
@@ -121,13 +162,13 @@ where
 ///result is undefined.
 ///
 ///The map range, input range and the output range must not overlap.
-pub fn scatter<IO, Map>(input: impl Iterator<Item = IO>, map: &[Map], output: &mut [IO])
+pub fn scatter<IO, Map>(map: &[Map], output: &mut [IO])
 where
-	IO: Copy,
+	IO: Copy + LossyFrom<usize>,
 	Map: Copy + LossyInto<usize>,
 {
-	for (i, input) in input.enumerate() {
-		output[map[i].lossy_into()] = input;
+	for i in 0..map.len() {
+		output[map[i].lossy_into()] = i.lossy_into();
 	}
 }
 
@@ -166,4 +207,14 @@ pub fn gather_transformed<IO, Map, F>(
 	for i in 0..map.len() {
 		output[i] = transform(input[map[i].lossy_into()]);
 	}
+}
+
+pub fn gather_in_place<IO, Map>(in_out: &mut Vec<IO>, new2old: &[Map])
+where
+	IO: Copy,
+	Map: Copy + LossyInto<usize>,
+{
+	let mut tmp = unsafe { vec_ext::uninit(new2old.len()) };
+	mem::swap(&mut tmp, in_out);
+	gather(new2old, &tmp, in_out);
 }
