@@ -7,7 +7,11 @@ use {
 fn main() {
 	#[cfg(feature = "test")]
 	{
-		let crate_dir = build_rs::input::cargo_manifest_dir();
+		build_rs::output::rerun_if_changed("Cargo.toml");
+		build_rs::output::rerun_if_changed("Cargo.lock");
+		build_rs::output::rerun_if_changed("test/test.zng");
+
+		let crate_dir: path::PathBuf = build_rs::input::cargo_manifest_dir();
 		let generated_dir = path::PathBuf::from("test/generated");
 		let out_dir = build_rs::input::out_dir();
 

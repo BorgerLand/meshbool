@@ -293,7 +293,7 @@ pub fn append_partial_edges(
 	i03: &[i32],
 	v_p2r: &[i32],
 	face_pq2r: &[i32],
-	tri_rel_p: &[TriRelation],
+	tri_rel_a: &[TriRelation],
 	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
 ) {
 	// Each edge in the map is partially retained; for each of these, look up
@@ -306,17 +306,17 @@ pub fn append_partial_edges(
 
 	// Per-iter cancel check; the caller's post-call IsCancelled discards the
 	// partial outR.
-	for (edge_p, mut edge_pos_p) in edges_a {
-		sort_edge_pos(&mut edge_pos_p);
-		let pair_p = halfedge_a.pair(edge_p);
-		whole_halfedge_a[edge_p as usize] = false;
-		whole_halfedge_a[pair_p as usize] = false;
+	for (edge_a, mut edge_pos_a) in edges_a {
+		sort_edge_pos(&mut edge_pos_a);
+		let pair_a = halfedge_a.pair(edge_a);
+		whole_halfedge_a[edge_a as usize] = false;
+		whole_halfedge_a[pair_a as usize] = false;
 
-		let v_start = halfedge_a.start(edge_p) as usize;
-		let v_end = halfedge_a.end(edge_p) as usize;
+		let v_start = halfedge_a.start(edge_a) as usize;
+		let v_end = halfedge_a.end(edge_a) as usize;
 		let edge_vec = vert_pos_a[v_end] - vert_pos_a[v_start];
 		// Fill in the edge positions of the old points.
-		for edge in edge_pos_p.iter_mut() {
+		for edge in edge_pos_a.iter_mut() {
 			edge.edge_pos = vert_pos[edge.vert as usize].coords.dot(&edge_vec);
 		}
 
@@ -329,7 +329,7 @@ pub fn append_partial_edges(
 		};
 
 		for _ in 0..inclusion.abs() {
-			edge_pos_p.push(edge_pos);
+			edge_pos_a.push(edge_pos);
 			edge_pos.vert += 1;
 		}
 
@@ -342,29 +342,29 @@ pub fn append_partial_edges(
 		};
 
 		for _ in 0..inclusion.abs() {
-			edge_pos_p.push(edge_pos);
+			edge_pos_a.push(edge_pos);
 			edge_pos.vert += 1;
 		}
 
 		// add halfedges to result
-		let face_left_p = (edge_p / 3) as usize;
-		let face_left = face_pq2r[face_left_p] as usize;
-		let face_right_p = (pair_p / 3) as usize;
-		let face_right = face_pq2r[face_right_p] as usize;
+		let face_left_a = (edge_a / 3) as usize;
+		let face_left = face_pq2r[face_left_a] as usize;
+		let face_right_a = (pair_a / 3) as usize;
+		let face_right = face_pq2r[face_right_a] as usize;
 		// Negative inclusion means the halfedges are reversed, which means our
 		// reference is now to the endVert instead of the startVert, which is one
 		// position advanced CCW. This is only valid if this is a retained vert; it
 		// will be ignored later if the vert is new.
-		let mut forward_rel = tri_rel_p[face_left_p];
+		let mut forward_rel = tri_rel_a[face_left_a];
 		forward_rel.instance_id = *instance_id_old2new
 			.get(&(true, forward_rel.instance_id))
 			.unwrap();
-		let mut backward_rel = tri_rel_p[face_right_p];
+		let mut backward_rel = tri_rel_a[face_right_a];
 		backward_rel.instance_id = *instance_id_old2new
 			.get(&(true, backward_rel.instance_id))
 			.unwrap();
 
-		pair_up(&mut edge_pos_p, |mut e| {
+		pair_up(&mut edge_pos_a, |mut e| {
 			let forward_edge = face_ptr_r[face_left];
 			face_ptr_r[face_left] += 1;
 			let backward_edge = face_ptr_r[face_right];
@@ -461,7 +461,7 @@ pub fn append_whole_edges(
 	i03: Vec<i32>,
 	v_p2r: Vec<i32>,
 	face_pq2r: &[i32],
-	tri_rel_p: &[TriRelation],
+	tri_rel_a: &[TriRelation],
 	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
 ) {
 	//(struct DuplicateHalfedges is inlined here)
@@ -488,18 +488,18 @@ pub fn append_whole_edges(
 		start_vert = v_p2r[start_vert as usize];
 		end_vert = v_p2r[end_vert as usize];
 		let pair = halfedge_a.pair(idx);
-		let face_left_p = (idx / 3) as usize;
-		let new_face = face_pq2r[face_left_p] as usize;
-		let face_right_p = (pair / 3) as usize;
-		let face_right = face_pq2r[face_right_p] as usize;
+		let face_left_a = (idx / 3) as usize;
+		let new_face = face_pq2r[face_left_a] as usize;
+		let face_right_a = (pair / 3) as usize;
+		let face_right = face_pq2r[face_right_a] as usize;
 		// Negative inclusion means the halfedges are reversed, which means our
 		// reference is now to the endVert instead of the startVert, which is one
 		// position advanced CCW.
-		let mut forward_ref = tri_rel_p[face_left_p];
+		let mut forward_ref = tri_rel_a[face_left_a];
 		forward_ref.instance_id = *instance_id_old2new
 			.get(&(true, forward_ref.instance_id))
 			.unwrap();
-		let mut backward_ref = tri_rel_p[face_right_p];
+		let mut backward_ref = tri_rel_a[face_right_a];
 		backward_ref.instance_id = *instance_id_old2new
 			.get(&(true, backward_ref.instance_id))
 			.unwrap();

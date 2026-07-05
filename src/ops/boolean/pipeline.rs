@@ -361,7 +361,7 @@ pub fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool,
 		&i30,
 		&v_q2r,
 		&face_pq2r[in_p.num_tri()..],
-		&in_p.tri.relation,
+		&in_q.tri.relation,
 		&instance_id_old2new,
 	);
 
