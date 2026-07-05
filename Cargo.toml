@@ -19,7 +19,7 @@ debug-assertions = false
 
 [dependencies]
 libm = { version = "0.2", default-features = false }
-nalgebra = { version = "0.34", default-features = false, features = ["std", "libm-force"] }
+nalgebra = { version = "0.35", default-features = false, features = ["std", "libm-force"] }
 intrusive-collections = { git = "https://github.com/BorgerLand/vandalized-intrusive-rs" }
 
 [build-dependencies]
