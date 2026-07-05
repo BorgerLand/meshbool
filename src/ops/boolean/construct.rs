@@ -1,3 +1,4 @@
+use crate::MeshBool;
 use crate::halfedge::{Halfedge, Halfedges, next_halfedge};
 use crate::mesh_relations::{TriRelation, tri_has_normals};
 use crate::spatial::aabb::Box3D;
@@ -5,7 +6,6 @@ use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{atomic_add, get_barycentric, next3_i32, prev3_i32};
 use crate::util::num_convert::OrderedF64;
 use crate::util::vec_ext;
-use crate::{MeshBool, Triangles};
 use nalgebra::{Matrix3, Point3, Vector3, Vector4};
 use std::collections::BTreeMap;
 use std::mem;
@@ -295,6 +295,7 @@ pub fn append_partial_edges(
 	face_pq2r: &[i32],
 	tri_rel_a: &[TriRelation],
 	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	forward: bool,
 ) {
 	// Each edge in the map is partially retained; for each of these, look up
 	// their original verts and include them based on their winding number (i03),
@@ -357,11 +358,11 @@ pub fn append_partial_edges(
 		// will be ignored later if the vert is new.
 		let mut forward_rel = tri_rel_a[face_left_a];
 		forward_rel.instance_id = *instance_id_old2new
-			.get(&(true, forward_rel.instance_id))
+			.get(&(forward, forward_rel.instance_id))
 			.unwrap();
 		let mut backward_rel = tri_rel_a[face_right_a];
 		backward_rel.instance_id = *instance_id_old2new
-			.get(&(true, backward_rel.instance_id))
+			.get(&(forward, backward_rel.instance_id))
 			.unwrap();
 
 		pair_up(&mut edge_pos_a, |mut e| {
@@ -463,6 +464,7 @@ pub fn append_whole_edges(
 	face_pq2r: &[i32],
 	tri_rel_a: &[TriRelation],
 	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	forward: bool,
 ) {
 	//(struct DuplicateHalfedges is inlined here)
 	for idx in 0..halfedge_a.len() as i32 {
@@ -497,11 +499,11 @@ pub fn append_whole_edges(
 		// position advanced CCW.
 		let mut forward_ref = tri_rel_a[face_left_a];
 		forward_ref.instance_id = *instance_id_old2new
-			.get(&(true, forward_ref.instance_id))
+			.get(&(forward, forward_ref.instance_id))
 			.unwrap();
 		let mut backward_ref = tri_rel_a[face_right_a];
 		backward_ref.instance_id = *instance_id_old2new
-			.get(&(true, backward_ref.instance_id))
+			.get(&(forward, backward_ref.instance_id))
 			.unwrap();
 
 		for _ in 0..inclusion.abs() {
@@ -532,7 +534,8 @@ pub fn append_whole_edges(
 
 struct Barycentric<'a> {
 	uvw: &'a mut [Vector3<f64>],
-	tris_r: &'a mut Triangles,
+	halfedge_r: &'a Halfedges,
+	tri_rel_r: &'a [TriRelation],
 	instance_id_offset_q: u32,
 	vert_pos_p: &'a [Point3<f64>],
 	vert_pos_q: &'a [Point3<f64>],
@@ -544,8 +547,8 @@ struct Barycentric<'a> {
 
 impl<'a> Barycentric<'a> {
 	fn call(&mut self, tri: i32) {
-		let ref_pq = self.tris_r.relation[tri as usize];
-		if self.tris_r.halfedge.start(3 * tri) < 0 {
+		let ref_pq = self.tri_rel_r[tri as usize];
+		if self.halfedge_r.start(3 * tri) < 0 {
 			return;
 		}
 
@@ -569,7 +572,7 @@ impl<'a> Barycentric<'a> {
 		}
 
 		for i in 0..3 {
-			let vert = self.tris_r.halfedge.start(3 * tri + i);
+			let vert = self.halfedge_r.start(3 * tri + i);
 			self.uvw[(3 * tri + i) as usize] =
 				get_barycentric(self.vert_pos_r[vert as usize], tri_pos, self.epsilon);
 		}
@@ -577,7 +580,8 @@ impl<'a> Barycentric<'a> {
 }
 
 pub fn create_properties(
-	tris_r: &mut Triangles,
+	halfedge_r: &mut Halfedges,
+	tri_rel_r: &mut [TriRelation],
 	vert_pos_r: &[Point3<f64>],
 	instance_id_offset_q: u32,
 	in_p: &MeshBool,
@@ -592,11 +596,12 @@ pub fn create_properties(
 		return vec![];
 	}
 
-	let num_tri = tris_r.halfedge.num_tri();
-	let mut bary = unsafe { vec_ext::uninit(tris_r.halfedge.len()) };
+	let num_tri = halfedge_r.num_tri();
+	let mut bary = unsafe { vec_ext::uninit(halfedge_r.len()) };
 	let mut bary_closure = Barycentric {
 		uvw: &mut bary,
-		tris_r,
+		halfedge_r,
+		tri_rel_r,
 		instance_id_offset_q,
 		vert_pos_p: &in_p.vert_pos,
 		vert_pos_q: &in_q.vert_pos,
@@ -621,11 +626,11 @@ pub fn create_properties(
 
 	for tri in 0..num_tri as i32 {
 		// Skip collapsed triangles
-		if tris_r.halfedge.start(3 * tri) < 0 {
+		if halfedge_r.start(3 * tri) < 0 {
 			continue;
 		}
 
-		let tri_rel = &mut tris_r.relation[tri as usize];
+		let tri_rel = &mut tri_rel_r[tri as usize];
 		//append_x_edges wrote a triangle id instead of a face id,
 		//purely for create_properties to consume and overwrite
 		let tri_id = tri_rel.face_id;
@@ -658,7 +663,7 @@ pub fn create_properties(
 			&& tri_has_normals(&in_q.instance_relation, in_q.tri.relation[tri_id as usize]);
 
 		for i in 0..3 {
-			let vert = tris_r.halfedge.start(3 * tri + i);
+			let vert = halfedge_r.start(3 * tri + i);
 			let uvw = &bary[(3 * tri + i) as usize];
 
 			let mut key = Vector4::new(pq as i32, id_miss_prop, -1, -1);
@@ -693,7 +698,7 @@ pub fn create_properties(
 				// only key.x/key.z matters
 				let entry = &mut prop_miss_idx[key.x as usize][key.z as usize];
 				if *entry >= 0 {
-					tris_r.halfedge.set_prop(3 * tri + i, *entry);
+					halfedge_r.set_prop(3 * tri + i, *entry);
 					continue;
 				}
 
@@ -704,7 +709,7 @@ pub fn create_properties(
 				for b in bin.iter() {
 					if b.0 == Vector3::new(key.x, key.z, key.w) {
 						b_found = true;
-						tris_r.halfedge.set_prop(3 * tri + i, b.1);
+						halfedge_r.set_prop(3 * tri + i, b.1);
 						break;
 					}
 				}
@@ -715,7 +720,7 @@ pub fn create_properties(
 				bin.push((Vector3::new(key.x, key.z, key.w), idx));
 			}
 
-			tris_r.halfedge.set_prop(3 * tri + i, idx);
+			halfedge_r.set_prop(3 * tri + i, idx);
 			idx += 1;
 			for p in 0..prop_stride {
 				let p = p as i32;

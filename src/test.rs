@@ -297,8 +297,14 @@ impl MeshBoolTestWrapper {
 		MeshBool::try_from(gl).into()
 	}
 
-	pub fn simplify(&self, tolerance: Option<f64>) -> Self {
-		self.propagate_error(|| self.mesh.simplify(tolerance))
+	pub fn simplify(&self, tolerance: f64) -> Self {
+		self.propagate_error(|| {
+			self.mesh.simplify(if tolerance == 0.0 {
+				None
+			} else {
+				Some(tolerance)
+			})
+		})
 	}
 
 	pub fn as_original(&self) -> Self {

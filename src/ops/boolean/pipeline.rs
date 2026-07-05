@@ -349,6 +349,7 @@ pub fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool,
 		&face_pq2r,
 		&in_p.tri.relation,
 		&instance_id_old2new,
+		true,
 	);
 	construct::append_partial_edges(
 		&mut vert_pos,
@@ -363,6 +364,7 @@ pub fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool,
 		&face_pq2r[in_p.num_tri()..],
 		&in_q.tri.relation,
 		&instance_id_old2new,
+		false,
 	);
 
 	construct::append_new_edges(
@@ -389,6 +391,7 @@ pub fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool,
 		&face_pq2r[..in_p.num_tri()],
 		&in_p.tri.relation,
 		&instance_id_old2new,
+		true,
 	);
 	construct::append_whole_edges(
 		&mut face_ptr_r,
@@ -401,6 +404,7 @@ pub fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool,
 		&face_pq2r[in_p.num_tri()..],
 		&in_q.tri.relation,
 		&instance_id_old2new,
+		false,
 	);
 
 	drop(face_ptr_r);
@@ -431,7 +435,8 @@ pub fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool,
 
 	let mut properties = Properties {
 		data: construct::create_properties(
-			&mut tri,
+			&mut tri.halfedge,
+			&mut tri.relation,
 			&vert_pos,
 			in_p.instance_relation.len() as u32,
 			in_p,

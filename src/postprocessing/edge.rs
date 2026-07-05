@@ -395,7 +395,7 @@ pub fn collapse(
 	true
 }
 
-pub fn collapse_tri(halfedges: &mut Halfedges, tri_edge: &Vector3<i32>) {
+fn collapse_tri(halfedges: &mut Halfedges, tri_edge: &Vector3<i32>) {
 	if halfedges.pair(tri_edge[1]) == -1 {
 		return;
 	}
@@ -410,12 +410,7 @@ pub fn collapse_tri(halfedges: &mut Halfedges, tri_edge: &Vector3<i32>) {
 ///In the event that the edge collapse would create a non-manifold edge,
 ///instead we duplicate the two verts and attach the manifolds the other way
 ///across this edge.
-pub fn form_loop(
-	halfedge: &mut Halfedges,
-	vert_pos: &mut Vec<Point3<f64>>,
-	current: i32,
-	end: i32,
-) {
+fn form_loop(halfedge: &mut Halfedges, vert_pos: &mut Vec<Point3<f64>>, current: i32, end: i32) {
 	let start_vert = vert_pos.len() as i32;
 	let end_vert = start_vert + 1;
 	vert_pos.extend([
@@ -437,7 +432,7 @@ pub fn form_loop(
 
 ///Rather than actually removing the edges, this step merely marks them for
 ///removal, by setting vertPos to NaN and halfedge to {-1, -1, -1, -1}.
-pub fn remove_if_folded(edge: i32, halfedge: &mut Halfedges, vert_pos: &mut [Point3<f64>]) {
+fn remove_if_folded(edge: i32, halfedge: &mut Halfedges, vert_pos: &mut [Point3<f64>]) {
 	let tri0_edge = tri_of(edge);
 	let tri1_edge = tri_of(halfedge.pair(edge));
 	if halfedge.pair(tri0_edge[1]) == -1 {
