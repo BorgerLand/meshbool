@@ -161,11 +161,15 @@ impl MeshBool {
 			}
 		}
 
-		let epsilon = self.precision.epsilon * mat3(transform).svd(false, false).singular_values[0];
-		let precision = Precision {
-			epsilon: self.precision.epsilon.max(epsilon),
-			tolerance: self.precision.tolerance.max(epsilon),
-		};
+		let epsilon_spectral_norm =
+			self.precision.epsilon * mat3(transform).svd(false, false).singular_values[0];
+		let mut precision = Precision::new(
+			Box3D::from_cloud(&vert_pos),
+			self.precision.tolerance,
+			false,
+		);
+		precision.epsilon = precision.epsilon.max(epsilon_spectral_norm);
+		precision.tolerance = precision.tolerance.max(epsilon_spectral_norm);
 
 		let collider = if self.is_empty() {
 			BVHCollider::default()

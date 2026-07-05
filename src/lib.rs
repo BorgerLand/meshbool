@@ -177,9 +177,9 @@ impl Precision {
 
 	///Sets epsilon based on the bounding box, and limits its minimum value
 	///by the optional input.
-	fn new(bbox: Box3D, min_tolerance: f64, use_single: bool) -> Self {
+	fn new(bbox: Box3D, min_tolerance: f64, use_f32: bool) -> Self {
 		let epsilon = K_PRECISION * bbox.scale();
-		let tolerance = min_tolerance.max(if use_single {
+		let tolerance = min_tolerance.max(if use_f32 {
 			epsilon.max(f32::EPSILON as f64 * bbox.scale())
 		} else {
 			epsilon
