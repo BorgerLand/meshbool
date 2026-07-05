@@ -12,6 +12,71 @@ use std::{f64, mem};
 const K_MIN_SHARP_ANGLE: f64 = 1e-4;
 
 impl MeshBool {
+	///Create a new copy of this manifold with updated vertex properties by
+	///supplying a function that takes the existing position and properties as
+	///input. You may specify any number of output properties, allowing creation and
+	///removal of channels. Note: undefined behavior will result if you read past
+	///the number of input properties or write past the number of output properties.
+	///
+	///If prop_func is a None, this function will just set the channel to zeroes.
+	///
+	///Any normals recording set by `CalculateNormals()` is preserved. If the new
+	///properties overwrite slot 0..2 with non-normal data, the recording becomes
+	///stale; re-call `CalculateNormals()` (or use a numProp < 3 call followed by
+	///CalculateNormals) to reset.
+	///
+	///@param prop_stride The new number of properties per vertex.
+	///@param prop_func A function that modifies the properties of a given vertex.
+	pub fn set_properties(
+		&self,
+		prop_stride: usize,
+		prop_func: Option<impl FnMut(&mut [f64], Point3<f64>, &[f64])>,
+	) -> Self {
+		let old_prop_stride = self.prop_stride();
+
+		let properties = if prop_stride == 0 {
+			Vec::new()
+		} else {
+			let mut properties = vec![0.0; prop_stride as usize * self.num_prop_vert()];
+
+			if let Some(mut prop_func) = prop_func {
+				for tri in 0..self.num_tri() {
+					for i in 0..3 {
+						let edge = (3 * tri + i) as i32;
+						let vert = self.tri.halfedge.start(edge) as usize;
+						let prop_vert = (if old_prop_stride == 0 {
+							self.tri.halfedge.prop(edge)
+						} else {
+							self.tri.halfedge.start(edge)
+						}) as usize;
+						prop_func(
+							&mut properties
+								[(prop_stride * prop_vert)..(prop_stride * (prop_vert + 1))],
+							self.vert_pos[vert],
+							&self.properties.data[(old_prop_stride * prop_vert)
+								..(old_prop_stride * (prop_vert + 1))],
+						);
+					}
+				}
+			}
+
+			properties
+		};
+
+		return Self {
+			original_id: None,
+			precision: self.precision.clone(),
+			vert_pos: self.vert_pos.clone(),
+			properties: Properties {
+				data: properties,
+				stride: prop_stride,
+			},
+			tri: self.tri.clone(),
+			instance_relation: self.instance_relation.clone(),
+			collider: self.collider.clone(),
+		};
+	}
+
 	///Fills in vertex properties for normal vectors, calculated from the mesh
 	///geometry.
 	///
@@ -87,7 +152,7 @@ impl MeshBool {
 
 		let mut halfedge = self.tri.halfedge.clone();
 		let mut old_halfedge_prop = unsafe { vec_ext::uninit(self.tri.halfedge.len()) };
-		(0..self.tri.halfedge.len()).for_each(|i| {
+		for i in 0..self.tri.halfedge.len() {
 			old_halfedge_prop[i] = if old_prop_stride > 0 {
 				self.tri.halfedge.prop(i as i32)
 			} else {
@@ -96,7 +161,7 @@ impl MeshBool {
 				self.tri.halfedge.start(i as i32)
 			};
 			halfedge.set_prop(i as i32, -1);
-		});
+		}
 
 		// Cached per-meshID inverse-normal-transform for the legacy non-zero
 		// normalIdx path. Lazily populated on first lookup; reused across all
@@ -386,7 +451,7 @@ impl MeshBool {
 			return self.clone();
 		}
 		let mut vert_mean_curvature = vec![0.0; self.num_vert()];
-		let mut vert_gaussian_curvature = vec![core::f64::consts::TAU; self.num_vert()];
+		let mut vert_gaussian_curvature = vec![f64::consts::TAU; self.num_vert()];
 		let mut vert_area = vec![0.0; self.num_vert()];
 		let mut degree = vec![0.0; self.num_vert()];
 		{
