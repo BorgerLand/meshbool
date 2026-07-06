@@ -138,6 +138,7 @@ pub fn set_normals_and_coplanar(
 	}
 	let mut tri_priority = unsafe { vec_ext::uninit(num_tri) };
 	for tri in 0..num_tri {
+		tri_rel[tri].coplanar_id = -1;
 		if halfedge.start((3 * tri) as i32) < 0 {
 			tri_priority[tri] = TriPriority {
 				area2: 0.0,

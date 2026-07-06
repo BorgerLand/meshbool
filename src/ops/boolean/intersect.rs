@@ -34,7 +34,7 @@ use std::ops::DerefMut;
 /// In forward mode, stores the intersections of edges of P with faces of Q.
 /// In reverse mode, stores the intersections of faces of P with edges of Q.
 /// In reverse, p1q2 -> p2q1, x12 -> x21, v12 -> v21.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Intersections {
 	pub p1q2: Vec<[i32; 2]>,
 	pub x12: Vec<i32>,

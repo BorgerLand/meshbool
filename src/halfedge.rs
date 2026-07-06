@@ -311,7 +311,7 @@ impl<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> PrepHalfedges<'a, USE_PR
 			self.halfedges[e as usize] = CreateHalfedge {
 				start_vert: v0,
 				end_vert: v1,
-				prop_vert: if USE_PROP { prop[i as usize] } else { -1 },
+				prop_vert: if USE_PROP { prop[i as usize] } else { 0 },
 			};
 
 			(self.f)(e, v0, v1);

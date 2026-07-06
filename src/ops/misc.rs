@@ -2,13 +2,10 @@ use crate::mesh_relations::{
 	InstanceRelation, TriRelation, all_instances_have_normals, reserve_original_id,
 };
 use crate::postprocessing as pp;
-use crate::postprocessing::sort::{gather_tris, reindex_verts};
 use crate::spatial::bvh_collider::BVHCollider;
-use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicMap;
-use crate::util::vec_ext;
 use crate::{Box3D, MeshBool, Precision, Properties, Triangles};
-use nalgebra::{Matrix3x4, Point3};
+use nalgebra::Matrix3x4;
 
 impl MeshBool {
 	///This removes all relations (originalID, faceID, transform) to ancestor meshes
@@ -48,70 +45,6 @@ impl MeshBool {
 			.into(),
 			collider: self.collider.clone(),
 		}
-	}
-
-	// This operation returns a vector of Manifolds that are topologically
-	// disconnected. If everything is connected, the vector is length one,
-	// containing a copy of the original. It is the inverse operation of Compose().
-	pub fn decompose(&self) -> Vec<Self> {
-		let uf = DisjointSets::new(self.num_vert());
-		for edge in 0..self.tri.halfedge.len() as i32 {
-			if self.tri.halfedge.is_forward(edge) {
-				uf.unite(
-					self.tri.halfedge.start(edge) as usize,
-					self.tri.halfedge.end(edge) as usize,
-				);
-			}
-		}
-
-		let (vert_label, num_components) = uf.connected_components();
-
-		if num_components == 1 {
-			return vec![self.clone()];
-		}
-
-		let num_vert = self.num_vert();
-		let mut meshes: Vec<Self> = Vec::with_capacity(num_components);
-		for i in 0..num_components as i32 {
-			let mut vert_new2old: Vec<i32> = unsafe { vec_ext::uninit(num_vert) };
-			let n_vert = vec_ext::copy_if(0..num_vert as i32, &mut vert_new2old, |v| {
-				vert_label[v as usize] == i
-			});
-			let mut vert_pos = vec![Point3::default(); n_vert];
-			vert_new2old.resize(n_vert, Default::default());
-			vec_ext::gather(&vert_new2old, &self.vert_pos, &mut vert_pos);
-
-			let mut face_new2old: Vec<i32> = Vec::with_capacity(self.num_tri());
-			let halfedge = &self.tri.halfedge;
-			for face in 0..self.num_tri() as i32 {
-				if vert_label[halfedge.start(3 * face) as usize] == i {
-					face_new2old.push(face);
-				}
-			}
-
-			if face_new2old.is_empty() {
-				continue;
-			}
-
-			let mut tri = gather_tris(&self.tri, &face_new2old);
-			reindex_verts(&mut tri.halfedge, &vert_new2old, self.num_vert());
-			let mut properties = self.properties.clone();
-			let bbox = Box3D::from_cloud(&vert_pos);
-			let collider =
-				pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
-					.unwrap();
-
-			meshes.push(Self {
-				original_id: None,
-				precision: self.precision, // inherit original object's precision
-				vert_pos,
-				properties,
-				tri,
-				instance_relation: self.instance_relation.clone(),
-				collider,
-			});
-		}
-		meshes
 	}
 
 	///Return a copy of the manifold with the set tolerance value.
