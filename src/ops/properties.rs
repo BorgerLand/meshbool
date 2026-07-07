@@ -47,6 +47,8 @@ impl MeshBool {
 						let prop_vert = (if old_prop_stride == 0 {
 							self.tri.halfedge.prop(edge)
 						} else {
+							//workaround for removal of logic here:
+							//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
 							self.tri.halfedge.start(edge)
 						}) as usize;
 						prop_func(
@@ -305,7 +307,7 @@ impl MeshBool {
 
 			let mut last_group = 0;
 			let mut last_prop = None;
-			let mut new_prop = 0;
+			let mut new_prop_vert = 0;
 			let mut idx = 0;
 			halfedge.for_vert_mut(end_edge, |halfedge, current1| {
 				let prop = old_halfedge_prop[current1 as usize] as usize;
@@ -314,19 +316,19 @@ impl MeshBool {
 				if groups[idx] != last_group && groups[idx] != 0 && Some(prop) == last_prop {
 					// split property vertex, duplicating but with an updated normal
 					last_group = groups[idx];
-					new_prop = self.num_prop_vert();
+					new_prop_vert = properties.len() / prop_stride;
 					properties.resize(properties.len() + prop_stride, 0.0);
-					properties
-						[(new_prop * prop_stride)..(new_prop * prop_stride + old_prop_stride)]
+					properties[(new_prop_vert * prop_stride)
+						..(new_prop_vert * prop_stride + old_prop_stride)]
 						.copy_from_slice(&start[..old_prop_stride]);
 					for i in 0..3 {
-						properties[new_prop * prop_stride + normal_idx + i] =
+						properties[new_prop_vert * prop_stride + normal_idx + i] =
 							normals[groups[idx] as usize][i];
 					}
 				} else if Some(prop) != last_prop {
 					// update property vertex
 					last_prop = Some(prop);
-					new_prop = prop;
+					new_prop_vert = prop;
 					properties[(prop * prop_stride)..(prop * prop_stride + old_prop_stride)]
 						.copy_from_slice(&start[..old_prop_stride]);
 					for i in 0..3 {
@@ -336,7 +338,7 @@ impl MeshBool {
 				}
 
 				// point to updated property vertex
-				halfedge.set_prop(current1, new_prop as i32);
+				halfedge.set_prop(current1, new_prop_vert as i32);
 				idx += 1;
 			});
 		}
@@ -368,7 +370,7 @@ impl MeshBool {
 		let num_vert = self.vert_pos.len();
 		let mut vert_normal = vec![Vector3::default(); num_vert];
 
-		let mut vert_halfedge_map: Vec<i32> = (0..num_vert as i32).collect();
+		let mut vert_halfedge_map = vec![i32::MAX; self.num_vert()];
 
 		let mut atomic_min = |value, vert: i32| {
 			if vert < 0 {

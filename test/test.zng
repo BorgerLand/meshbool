@@ -163,6 +163,8 @@ mod crate
 		{
 			#layout(size = 1, align = 1);
 			
+			wellknown_traits(Copy);
+			
 			fn is_no_error(self) -> bool;
 			fn is_non_finite_vertex(self) -> bool;
 			fn is_not_manifold(self) -> bool;
