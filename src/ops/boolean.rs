@@ -377,6 +377,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&face_pq2r,
 		&in_p.tri.relation,
 		&instance_id_old2new,
+		prop_stride > 0,
 		true,
 	);
 	construct::append_partial_edges(
@@ -392,6 +393,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&face_pq2r[in_p.num_tri()..],
 		&in_q.tri.relation,
 		&instance_id_old2new,
+		prop_stride > 0,
 		false,
 	);
 
@@ -406,6 +408,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&in_p.tri.relation,
 		&in_q.tri.relation,
 		&instance_id_old2new,
+		prop_stride > 0,
 	);
 
 	construct::append_whole_edges(
@@ -419,6 +422,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&face_pq2r[..in_p.num_tri()],
 		&in_p.tri.relation,
 		&instance_id_old2new,
+		prop_stride > 0,
 		true,
 	);
 	construct::append_whole_edges(
@@ -432,6 +436,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&face_pq2r[in_p.num_tri()..],
 		&in_q.tri.relation,
 		&instance_id_old2new,
+		prop_stride > 0,
 		false,
 	);
 

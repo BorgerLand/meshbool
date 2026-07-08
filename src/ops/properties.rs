@@ -34,6 +34,13 @@ impl MeshBool {
 	) -> Self {
 		let old_prop_stride = self.prop_stride();
 
+		let mut halfedge = self.tri.halfedge.clone();
+		if old_prop_stride == 0 && prop_stride > 0 {
+			//workaround for removal of logic here:
+			//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
+			halfedge.init_prop();
+		}
+
 		let properties = if prop_stride == 0 {
 			Vec::new()
 		} else {
@@ -43,14 +50,8 @@ impl MeshBool {
 				for tri in 0..self.num_tri() {
 					for i in 0..3 {
 						let edge = (3 * tri + i) as i32;
-						let vert = self.tri.halfedge.start(edge) as usize;
-						let prop_vert = (if old_prop_stride == 0 {
-							self.tri.halfedge.prop(edge)
-						} else {
-							//workaround for removal of logic here:
-							//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-							self.tri.halfedge.start(edge)
-						}) as usize;
+						let vert = halfedge.start(edge) as usize;
+						let prop_vert = halfedge.prop(edge) as usize;
 						prop_func(
 							&mut properties
 								[(prop_stride * prop_vert)..(prop_stride * (prop_vert + 1))],
@@ -73,7 +74,11 @@ impl MeshBool {
 				data: properties,
 				stride: prop_stride,
 			},
-			tri: self.tri.clone(),
+			tri: Triangles {
+				halfedge,
+				normal: self.tri.normal.clone(),
+				relation: self.tri.relation.clone(),
+			},
 			instance_relation: self.instance_relation.clone(),
 			collider: self.collider.clone(),
 		};
@@ -478,18 +483,19 @@ impl MeshBool {
 		let prop_stride = old_prop_stride.max(gaussian_idx.max(mean_idx).unwrap_or(0) + 1);
 		let mut properties = vec![0.0; prop_stride as usize * self.num_prop_vert()];
 
+		let mut halfedge = self.tri.halfedge.clone();
+		if old_prop_stride == 0 {
+			//workaround for removal of logic here:
+			//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
+			halfedge.init_prop();
+		}
+
 		let mut counters: Vec<bool> = vec![false; self.num_prop_vert()];
 		for tri in 0..self.num_tri() {
 			for i in 0..3 {
 				let edge = (3 * tri + i) as i32;
-				let vert = self.tri.halfedge.start(edge) as usize;
-				let prop_vert = if old_prop_stride == 0 {
-					self.tri.halfedge.start(edge)
-				} else {
-					//workaround for removal of logic here:
-					//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-					self.tri.halfedge.prop(edge)
-				} as usize;
+				let vert = halfedge.start(edge) as usize;
+				let prop_vert = halfedge.prop(edge) as usize;
 
 				let old = mem::replace(&mut counters[prop_vert], true);
 				if old {
@@ -519,7 +525,11 @@ impl MeshBool {
 				data: properties,
 				stride: prop_stride,
 			},
-			tri: self.tri.clone(),
+			tri: Triangles {
+				halfedge,
+				normal: self.tri.normal.clone(),
+				relation: self.tri.relation.clone(),
+			},
 			instance_relation: self.instance_relation.clone(),
 			collider: self.collider.clone(),
 		}

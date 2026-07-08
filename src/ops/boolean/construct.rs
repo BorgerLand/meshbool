@@ -295,6 +295,7 @@ pub fn append_partial_edges(
 	face_pq2r: &[i32],
 	tri_rel_a: &[TriRelation],
 	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	write_tri2face: bool,
 	forward: bool,
 ) {
 	// Each edge in the map is partially retained; for each of these, look up
@@ -348,22 +349,27 @@ pub fn append_partial_edges(
 		}
 
 		// add halfedges to result
-		let face_left_a = (edge_a / 3) as usize;
-		let face_left = face_pq2r[face_left_a] as usize;
-		let face_right_a = (pair_a / 3) as usize;
-		let face_right = face_pq2r[face_right_a] as usize;
+		let face_left_a = edge_a / 3;
+		let face_left = face_pq2r[face_left_a as usize] as usize;
+		let face_right_a = pair_a / 3;
+		let face_right = face_pq2r[face_right_a as usize] as usize;
 		// Negative inclusion means the halfedges are reversed, which means our
 		// reference is now to the endVert instead of the startVert, which is one
 		// position advanced CCW. This is only valid if this is a retained vert; it
 		// will be ignored later if the vert is new.
-		let mut forward_rel = tri_rel_a[face_left_a];
+		let mut forward_rel = tri_rel_a[face_left_a as usize];
 		forward_rel.instance_id = *instance_id_old2new
 			.get(&(forward, forward_rel.instance_id))
 			.unwrap();
-		let mut backward_rel = tri_rel_a[face_right_a];
+		let mut backward_rel = tri_rel_a[face_right_a as usize];
 		backward_rel.instance_id = *instance_id_old2new
 			.get(&(forward, backward_rel.instance_id))
 			.unwrap();
+
+		if write_tri2face {
+			forward_rel.face_id = face_left_a;
+			backward_rel.face_id = face_right_a;
+		}
 
 		pair_up(&mut edge_pos_a, |mut e| {
 			let forward_edge = face_ptr_r[face_left];
@@ -395,6 +401,7 @@ pub fn append_new_edges(
 	tri_rel_p: &[TriRelation],
 	tri_rel_q: &[TriRelation],
 	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	write_tri2face: bool,
 ) {
 	// Per-iter cancel check; the caller's post-call IsCancelled discards the
 	// partial outR.
@@ -435,6 +442,11 @@ pub fn append_new_edges(
 			.get(&(false, backward_ref.instance_id))
 			.unwrap();
 
+		if write_tri2face {
+			forward_ref.face_id = face_p as i32;
+			backward_ref.face_id = face_q as i32;
+		}
+
 		pair_up(&mut edge_pos, |mut e| {
 			let forward_edge = face_ptr_r[face_left];
 			face_ptr_r[face_left] += 1;
@@ -464,6 +476,7 @@ pub fn append_whole_edges(
 	face_pq2r: &[i32],
 	tri_rel_a: &[TriRelation],
 	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	write_tri2face: bool,
 	forward: bool,
 ) {
 	//(struct DuplicateHalfedges is inlined here)
@@ -490,21 +503,26 @@ pub fn append_whole_edges(
 		start_vert = v_p2r[start_vert as usize];
 		end_vert = v_p2r[end_vert as usize];
 		let pair = halfedge_a.pair(idx);
-		let face_left_a = (idx / 3) as usize;
-		let new_face = face_pq2r[face_left_a] as usize;
-		let face_right_a = (pair / 3) as usize;
-		let face_right = face_pq2r[face_right_a] as usize;
+		let face_left_a = idx / 3;
+		let new_face = face_pq2r[face_left_a as usize] as usize;
+		let face_right_a = pair / 3;
+		let face_right = face_pq2r[face_right_a as usize] as usize;
 		// Negative inclusion means the halfedges are reversed, which means our
 		// reference is now to the endVert instead of the startVert, which is one
 		// position advanced CCW.
-		let mut forward_ref = tri_rel_a[face_left_a];
-		forward_ref.instance_id = *instance_id_old2new
-			.get(&(forward, forward_ref.instance_id))
+		let mut forward_rel = tri_rel_a[face_left_a as usize];
+		forward_rel.instance_id = *instance_id_old2new
+			.get(&(forward, forward_rel.instance_id))
 			.unwrap();
-		let mut backward_ref = tri_rel_a[face_right_a];
-		backward_ref.instance_id = *instance_id_old2new
-			.get(&(forward, backward_ref.instance_id))
+		let mut backward_rel = tri_rel_a[face_right_a as usize];
+		backward_rel.instance_id = *instance_id_old2new
+			.get(&(forward, backward_rel.instance_id))
 			.unwrap();
+
+		if write_tri2face {
+			forward_rel.face_id = face_left_a;
+			backward_rel.face_id = face_right_a;
+		}
 
 		for _ in 0..inclusion.abs() {
 			let forward_edge = atomic_add(&mut face_ptr_r[new_face], 1);
@@ -523,8 +541,8 @@ pub fn append_whole_edges(
 				prop_vert: 0,
 			};
 
-			halfedge_rel[forward_edge as usize] = forward_ref;
-			halfedge_rel[backward_edge as usize] = backward_ref;
+			halfedge_rel[forward_edge as usize] = forward_rel;
+			halfedge_rel[backward_edge as usize] = backward_rel;
 
 			start_vert += 1;
 			end_vert += 1;
@@ -631,8 +649,8 @@ pub fn create_properties(
 		}
 
 		let tri_rel = &mut tri_rel_r[tri as usize];
-		//append_x_edges wrote a triangle id instead of a face id,
-		//purely for create_properties to consume and overwrite
+		//append_x_edges wrote a triangle id instead of a face id (write_tri2face
+		//was true), purely for create_properties to consume and overwrite
 		let tri_id = tri_rel.face_id;
 		let pq = tri_rel.instance_id < instance_id_offset_q;
 		tri_rel.face_id = if pq {

@@ -136,12 +136,12 @@ impl MeshBool {
 			}
 			let frac = 1.0 / (n + 1) as f64;
 
-			for i in 0..n {
+			for j in 0..n {
 				let mut uvw = Vector4::repeat(0.0f64);
-				uvw[indices.end4 as usize] = (i + 1) as f64 * frac;
+				uvw[indices.end4 as usize] = (j + 1) as f64 * frac;
 				uvw[indices.start4 as usize] = 1.0 - uvw[indices.end4 as usize];
-				vert_bary[(offset + i) as usize].uvw = uvw;
-				vert_bary[(offset + i) as usize].tri = indices.tri;
+				vert_bary[(offset + j) as usize].uvw = uvw;
+				vert_bary[(offset + j) as usize].tri = indices.tri;
 			}
 		}
 
@@ -167,14 +167,14 @@ impl MeshBool {
 			vert_bary.len() as i32,
 		);
 
-		let mut tri_verts = vec![
-			Vector3::default();
-			*tri_offset.last().unwrap() as usize
-				+ sub_tris.last().unwrap().tri_vert.len()
-		];
+		let mut tri_verts = unsafe {
+			vec_ext::uninit(
+				*tri_offset.last().unwrap() as usize + sub_tris.last().unwrap().tri_vert.len(),
+			)
+		};
 		vert_bary.resize(
 			(interior_offset.last().unwrap() + sub_tris.last().unwrap().num_interior()) as usize,
-			Default::default(),
+			Barycentric::default(),
 		);
 		let mut tri_rel = unsafe { vec_ext::uninit(tri_verts.len()) };
 		let mut tri_normal = unsafe { vec_ext::uninit(tri_verts.len()) };
@@ -330,7 +330,7 @@ impl MeshBool {
 				}
 			}
 
-			let mut tri_prop = vec![Vector3::default(); tri_verts.len()];
+			let mut tri_prop = unsafe { vec_ext::uninit(tri_verts.len()) };
 			for tri in 0..num_tri {
 				let halfedges = face_halfedges[tri];
 				if halfedges[0] < 0 {

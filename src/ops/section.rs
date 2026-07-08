@@ -41,7 +41,7 @@ impl MeshBool {
 				vert_label[v as usize] == i
 			});
 			let mut vert_pos = vec![Point3::default(); n_vert];
-			vert_new2old.resize(n_vert, Default::default());
+			vert_new2old.truncate(n_vert);
 			vec_ext::gather(&vert_new2old, &self.vert_pos, &mut vert_pos);
 
 			let mut face_new2old: Vec<i32> = Vec::with_capacity(self.num_tri());

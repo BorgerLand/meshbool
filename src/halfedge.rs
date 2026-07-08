@@ -63,7 +63,7 @@ impl Halfedges {
 					let mut job = PrepHalfedges::<false, _> {
 						halfedges: &mut halfedge,
 						tri_vert: &tri_vert,
-						tri_prop: &tri_vert,
+						tri_prop: &[],
 						f: &mut set_edge,
 					};
 
@@ -105,7 +105,7 @@ impl Halfedges {
 					let mut job = PrepHalfedges::<false, _> {
 						halfedges: &mut halfedge,
 						tri_vert: &tri_vert,
-						tri_prop: &tri_vert,
+						tri_prop: &[],
 						f: &mut set_offset,
 					};
 
@@ -301,12 +301,25 @@ struct PrepHalfedges<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> {
 impl<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> PrepHalfedges<'a, USE_PROP, F> {
 	fn call(&mut self, tri: i32) {
 		let vert = self.tri_vert[tri as usize];
-		let prop = self.tri_prop[tri as usize];
+		let prop = if USE_PROP {
+			self.tri_prop[tri as usize]
+		} else {
+			//should compile out
+			Vector3::default()
+		};
 		for i in 0..3 {
 			let j = next3_i32(i);
 			let e = 3 * tri + i;
-			let v0 = vert[i as usize];
-			let v1 = vert[j as usize];
+			let v0 = if USE_PROP {
+				prop[i as usize]
+			} else {
+				vert[i as usize]
+			};
+			let v1 = if USE_PROP {
+				prop[j as usize]
+			} else {
+				vert[j as usize]
+			};
 			debug_assert!(v0 != v1, "topological degeneracy");
 			self.halfedges[e as usize] = CreateHalfedge {
 				start_vert: v0,
@@ -447,6 +460,11 @@ impl Halfedges {
 	pub fn pair_up(&mut self, edge0: i32, edge1: i32) {
 		self.set_pair(edge0, edge1);
 		self.set_pair(edge1, edge0);
+	}
+
+	//use when stride increases from 0->more than 0
+	pub fn init_prop(&mut self) {
+		self.prop_vert = self.start.clone();
 	}
 
 	/// Traverses CW around startEdge.endVert from startEdge to endEdge
