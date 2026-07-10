@@ -215,19 +215,12 @@ where
 }
 
 impl MeshBoolTestWrapper {
-	fn propagate_error(&self, mesh: impl FnOnce() -> MeshBool) -> Self {
-		if self.status == MeshBoolError::NoError {
-			Self {
-				mesh: mesh(),
-				status: self.status,
-			}
-		} else {
-			eprintln!(
-				"Attempted to operate on mesh with error status ({:?}). Returning clone instead.",
-				self.status
-			);
-			self.clone()
+	fn status_error(&self) -> &Self {
+		if self.status != MeshBoolError::NoError {
+			eprintln!("ERROR STATUS ({:?}), Result will be invalid.", self.status);
 		}
+
+		self
 	}
 
 	pub fn tetrahedron() -> Self {
@@ -298,37 +291,41 @@ impl MeshBoolTestWrapper {
 	}
 
 	pub fn simplify(&self, tolerance: f64) -> Self {
-		self.propagate_error(|| {
-			self.mesh.simplify(if tolerance == 0.0 {
+		self.status_error()
+			.mesh
+			.simplify(if tolerance == 0.0 {
 				None
 			} else {
 				Some(tolerance)
 			})
-		})
+			.into()
 	}
 
 	pub fn as_original(&self) -> Self {
-		self.propagate_error(|| self.mesh.as_original())
+		self.status_error().mesh.as_original().into()
 	}
 
 	pub fn translate(&self, offset: Vector3<f64>) -> Self {
-		self.propagate_error(|| self.mesh.translate(offset))
+		self.status_error().mesh.translate(offset).into()
 	}
 
 	pub fn scale(&self, scale: Vector3<f64>) -> Self {
-		self.propagate_error(|| self.mesh.scale(scale))
+		self.status_error().mesh.scale(scale).into()
 	}
 
 	pub fn rotate(&self, x_degrees: f64, y_degrees: f64, z_degrees: f64) -> Self {
-		self.propagate_error(|| self.mesh.rotate(x_degrees, y_degrees, z_degrees))
+		self.status_error()
+			.mesh
+			.rotate(x_degrees, y_degrees, z_degrees)
+			.into()
 	}
 
 	pub fn transform(&self, transform: Matrix3x4<f64>) -> Self {
-		self.propagate_error(|| self.mesh.transform(transform))
+		self.status_error().mesh.transform(transform).into()
 	}
 
 	pub fn mirror(&self, normal: Vector3<f64>) -> Self {
-		self.propagate_error(|| self.mesh.mirror(normal))
+		self.status_error().mesh.mirror(normal).into()
 	}
 
 	pub fn set_properties(
@@ -336,15 +333,18 @@ impl MeshBoolTestWrapper {
 		prop_stride: usize,
 		prop_func: Option<Box<dyn FnMut(&mut [f64], Point3<f64>, &[f64])>>,
 	) -> Self {
-		self.propagate_error(|| self.mesh.set_properties(prop_stride, prop_func))
+		self.status_error()
+			.mesh
+			.set_properties(prop_stride, prop_func)
+			.into()
 	}
 
 	pub fn warp(&self, warp_func: Box<dyn FnMut(&mut Point3<f64>)>) -> Self {
-		self.propagate_error(|| self.mesh.warp(warp_func))
+		self.status_error().mesh.warp(warp_func).into()
 	}
 
 	pub fn warp_batch(&self, warp_func: Box<dyn FnMut(&mut [Point3<f64>])>) -> Self {
-		self.propagate_error(|| self.mesh.warp_batch(warp_func))
+		self.status_error().mesh.warp_batch(warp_func).into()
 	}
 
 	pub fn calculate_curvature(&self, gaussian_idx: i32, mean_idx: i32) -> Self {
@@ -358,31 +358,41 @@ impl MeshBoolTestWrapper {
 		} else {
 			Some(mean_idx as usize)
 		};
-		self.propagate_error(|| self.mesh.calculate_curvature(gaussian, mean))
+
+		self.status_error()
+			.mesh
+			.calculate_curvature(gaussian, mean)
+			.into()
 	}
 
 	pub fn calculate_normals(&self, normal_idx: i32, min_sharp_angle: f64) -> Self {
-		self.propagate_error(|| {
-			self.mesh
-				.calculate_normals(normal_idx.max(0) as usize, min_sharp_angle)
-		})
+		self.status_error()
+			.mesh
+			.calculate_normals(normal_idx.max(0) as usize, min_sharp_angle)
+			.into()
 	}
 
 	pub fn boolean(&self, other: &Self, op: OpType) -> Self {
-		let result = match op {
+		self.status_error();
+		(match op {
 			OpType::Add => self.mesh.union(&other.mesh),
 			OpType::Subtract => self.mesh.difference(&other.mesh),
 			OpType::Intersect => self.mesh.intersect(&other.mesh),
-		};
-		result.into()
+		})
+		.into()
 	}
 
 	pub fn decompose(&self) -> Vec<Self> {
-		self.mesh.decompose().into_iter().map(Into::into).collect()
+		self.status_error()
+			.mesh
+			.decompose()
+			.into_iter()
+			.map(Into::into)
+			.collect()
 	}
 
 	pub fn split(&self, cutter: &Self) -> (Self, Self) {
-		match self.mesh.split(&cutter.mesh) {
+		match self.status_error().mesh.split(&cutter.mesh) {
 			Ok((a, b)) => (
 				Ok::<_, BooleanError>(a).into(),
 				Ok::<_, BooleanError>(b).into(),
@@ -392,7 +402,11 @@ impl MeshBoolTestWrapper {
 	}
 
 	pub fn split_by_plane(&self, normal: Vector3<f64>, origin_offset: f64) -> (Self, Self) {
-		match self.mesh.split_by_plane(normal, origin_offset) {
+		match self
+			.status_error()
+			.mesh
+			.split_by_plane(normal, origin_offset)
+		{
 			Ok((a, b)) => (
 				Ok::<_, BooleanError>(a).into(),
 				Ok::<_, BooleanError>(b).into(),
@@ -402,55 +416,62 @@ impl MeshBoolTestWrapper {
 	}
 
 	pub fn trim_by_plane(&self, normal: Vector3<f64>, origin_offset: f64) -> Self {
-		self.mesh.trim_by_plane(normal, origin_offset).into()
+		self.status_error()
+			.mesh
+			.trim_by_plane(normal, origin_offset)
+			.into()
 	}
 
 	pub fn set_tolerance(&self, tolerance: f64) -> Self {
-		self.propagate_error(|| self.mesh.set_tolerance(tolerance))
+		self.status_error().mesh.set_tolerance(tolerance).into()
 	}
 
 	pub fn genus(&self) -> usize {
-		self.mesh.genus()
+		self.status_error().mesh.genus()
 	}
 
 	pub fn surface_area(&self) -> f64 {
-		self.mesh.surface_area()
+		self.status_error().mesh.surface_area()
 	}
 
 	pub fn volume(&self) -> f64 {
-		self.mesh.volume()
+		self.status_error().mesh.volume()
 	}
 
 	pub fn original_id(&self) -> i32 {
-		self.mesh.original_id().map(|id| id as i32).unwrap_or(-1)
+		self.status_error()
+			.mesh
+			.original_id()
+			.map(|id| id as i32)
+			.unwrap_or(-1)
 	}
 
 	pub fn matches_tri_normals(&self) -> bool {
-		self.mesh.matches_tri_normals()
+		self.status_error().mesh.matches_tri_normals()
 	}
 
 	pub fn num_degenerate_tris(&self) -> usize {
-		self.mesh.num_degenerate_tris()
+		self.status_error().mesh.num_degenerate_tris()
 	}
 
 	pub fn slice(&self, height: f64) -> Vec<Vec<Point2<f64>>> {
-		self.mesh.slice(height)
+		self.status_error().mesh.slice(height)
 	}
 
 	pub fn project(&self) -> Vec<Vec<Point2<f64>>> {
-		self.mesh.project()
+		self.status_error().mesh.project()
 	}
 
 	pub fn get_mesh_gl_32(&self, normal_idx: i32) -> MeshGL32 {
-		self.mesh.to_meshgl::<f32, u32>(normal_idx)
+		self.status_error().mesh.to_meshgl::<f32, u32>(normal_idx)
 	}
 
 	pub fn get_mesh_gl_64(&self, normal_idx: i32) -> MeshGL64 {
-		self.mesh.to_meshgl::<f64, u64>(normal_idx)
+		self.status_error().mesh.to_meshgl::<f64, u64>(normal_idx)
 	}
 
 	pub fn is_empty(&self) -> bool {
-		self.mesh.is_empty()
+		self.status_error().mesh.is_empty()
 	}
 
 	pub fn status(&self) -> MeshBoolError {
@@ -458,39 +479,39 @@ impl MeshBoolTestWrapper {
 	}
 
 	pub fn num_vert(&self) -> usize {
-		self.mesh.num_vert()
+		self.status_error().mesh.num_vert()
 	}
 
 	pub fn num_edge(&self) -> usize {
-		self.mesh.num_edge()
+		self.status_error().mesh.num_edge()
 	}
 
 	pub fn num_tri(&self) -> usize {
-		self.mesh.num_tri()
+		self.status_error().mesh.num_tri()
 	}
 
 	pub fn prop_stride(&self) -> usize {
-		self.mesh.prop_stride()
+		self.status_error().mesh.prop_stride()
 	}
 
 	pub fn num_prop_vert(&self) -> usize {
-		self.mesh.num_prop_vert()
+		self.status_error().mesh.num_prop_vert()
 	}
 
 	pub fn bounding_box(&self) -> Box3D {
-		self.mesh.bounding_box()
+		self.status_error().mesh.bounding_box()
 	}
 
 	pub fn get_epsilon(&self) -> f64 {
-		self.mesh.get_epsilon()
+		self.status_error().mesh.get_epsilon()
 	}
 
 	pub fn get_tolerance(&self) -> f64 {
-		self.mesh.get_tolerance()
+		self.status_error().mesh.get_tolerance()
 	}
 
 	pub fn min_gap(&self, other: &Self, search_length: f64) -> f64 {
-		self.mesh.min_gap(&other.mesh, search_length)
+		self.status_error().mesh.min_gap(&other.mesh, search_length)
 	}
 }
 
