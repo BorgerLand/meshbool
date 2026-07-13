@@ -49,9 +49,13 @@ cd test #from inside test/manifold/build
 
 ---
 
+## Modified tests
+
+- Manifold.MeshDeterminism: MeshBool's output is not bit-identical to Manifold. There are an infinite number of ways to represent the same mesh in memory, so this should not be a cause for concern.
+
 ## Disabled tests
 
-There are a few upstream tests that prevent other tests from running due to features not yet implemented in Meshbool. Additionally, some suites are entirely built around unimplemented features.
+There are a few upstream tests that prevent other tests from running due to features not yet implemented in MeshBool. Additionally, some suites are entirely built around unimplemented features.
 
 | Disabled test                                | Reason           | Method                         |
 | -------------------------------------------- | ---------------- | ------------------------------ |
