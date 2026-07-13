@@ -115,10 +115,10 @@ where
 		}
 
 		let tolerance = f64::from(mesh_gl.tolerance);
-		let prop_stride = usize::lossy_from(mesh_gl.prop_stride) - 3;
 		// This will have unreferenced duplicate positions that will be removed by
 		// Impl::remove_unreferenced_verts().
 		let mut vert_pos: Vec<Point3<f64>> = unsafe { vec_ext::uninit(num_vert) };
+		let prop_stride = usize::lossy_from(mesh_gl.prop_stride) - 3;
 		let mut properties = unsafe { vec_ext::uninit(num_vert * prop_stride) };
 
 		for i in 0..num_vert {
@@ -133,7 +133,7 @@ where
 			}
 		}
 
-		let mut tri_rel: Vec<TriRelation> = unsafe { vec_ext::uninit(num_tri) };
+		let mut tri_rel_unfiltered: Vec<TriRelation> = unsafe { vec_ext::uninit(num_tri) };
 
 		let mut run_index = mesh_gl.run_index.clone();
 		let run_end = mesh_gl.tri_verts.len();
@@ -164,7 +164,7 @@ where
 			let run_has_n = mesh_gl.has_normals(i) && prop_stride >= 3;
 			for tri in usize::lossy_from(run_index[i]) / 3..usize::lossy_from(run_index[i + 1]) / 3
 			{
-				tri_rel[tri as usize] = TriRelation {
+				tri_rel_unfiltered[tri as usize] = TriRelation {
 					instance_id,
 					face_id: if mesh_gl.face_id.is_empty() {
 						-1
@@ -215,29 +215,37 @@ where
 			})
 			.transpose()?;
 
-		let mut tri_indices = Vec::with_capacity(num_tri);
+		let mut tri_rel = Vec::with_capacity(num_tri);
+		let mut tri_vert = Vec::with_capacity(num_tri);
+		let mut tri_prop = prop2vert.is_some().then(|| Vec::with_capacity(num_tri));
 		for i in 0..num_tri {
-			let mut tri_i = Vector3::default();
-			for j in [0, 1, 2] {
+			let mut tri_v = Vector3::default();
+			let mut tri_p = Vector3::default();
+			for j in 0..3 {
 				let vert = usize::lossy_from(mesh_gl.tri_verts[3 * i + j]);
 				if vert >= num_vert {
 					return Err(MeshGLError::VertexOutOfBounds);
 				}
 
-				tri_i[j] = if let Some(prop2vert) = &prop2vert {
-					prop2vert[vert as usize]
+				if let Some(prop2vert) = &prop2vert {
+					tri_v[j] = prop2vert[vert];
+					tri_p[j] = vert as i32;
 				} else {
-					vert as i32
-				};
+					tri_v[j] = vert as i32;
+				}
 			}
-			if tri_i[0] != tri_i[1] && tri_i[1] != tri_i[2] && tri_i[2] != tri_i[0] {
-				tri_indices.push(tri_i);
+
+			if tri_v[0] != tri_v[1] && tri_v[1] != tri_v[2] && tri_v[2] != tri_v[0] {
+				tri_rel.push(tri_rel_unfiltered[i]);
+				tri_vert.push(tri_v);
+				if let Some(tri_prop) = &mut tri_prop {
+					tri_prop.push(tri_p);
+				}
 			}
 		}
 
 		drop(prop2vert);
-		let mut halfedge =
-			Halfedges::from_tri_indices(vert_pos.len(), prop_stride > 0, tri_indices);
+		let mut halfedge = Halfedges::from_tri_indices(vert_pos.len(), tri_vert, tri_prop);
 		if !halfedge.is_manifold() {
 			return Err(MeshGLError::NotManifold);
 		}
@@ -252,13 +260,17 @@ where
 		// we need to split pinched verts before calculating vertex normals, because
 		// the algorithm doesn't work with pinched verts
 		pp::split_pinched_verts(&mut halfedge, &mut vert_pos);
-		pp::dedupe_prop_verts(&mut halfedge, &tri_rel, &properties);
-		let tri_normal =
-			pp::set_normals_and_coplanar(&mut tri_rel, &halfedge, &vert_pos, precision.tolerance);
+		pp::dedupe_prop_verts(&mut halfedge, &tri_rel_unfiltered, &properties);
+		let tri_normal = pp::set_normals_and_coplanar(
+			&mut tri_rel_unfiltered,
+			&halfedge,
+			&vert_pos,
+			precision.tolerance,
+		);
 		let mut tri = Triangles {
 			halfedge,
 			normal: tri_normal,
-			relation: tri_rel,
+			relation: tri_rel_unfiltered,
 		};
 		pp::dedupe_edges(&mut tri, &mut vert_pos);
 		pp::collapse_short_edges(

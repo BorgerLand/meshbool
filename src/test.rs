@@ -207,6 +207,7 @@ impl MeshBoolTestWrapper {
 				"ERROR STATUS ({:?}), Result will be meaningless.",
 				self.status
 			);
+			eprintln!("{}", std::backtrace::Backtrace::capture());
 		}
 
 		self

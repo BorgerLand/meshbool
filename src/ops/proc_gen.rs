@@ -520,7 +520,7 @@ impl MeshBool {
 		let vert_count = vert_pos.len();
 		Self::from_halfedges(
 			vert_pos,
-			Halfedges::from_tri_indices(vert_count, false, tri_vert),
+			Halfedges::from_tri_indices(vert_count, tri_vert, None),
 		)
 	}
 
