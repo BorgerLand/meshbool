@@ -217,7 +217,10 @@ where
 impl MeshBoolTestWrapper {
 	fn status_error(&self) -> &Self {
 		if self.status != MeshBoolError::NoError {
-			eprintln!("ERROR STATUS ({:?}), Result will be invalid.", self.status);
+			eprintln!(
+				"ERROR STATUS ({:?}), Result will be meaningless.",
+				self.status
+			);
 		}
 
 		self

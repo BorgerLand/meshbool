@@ -167,7 +167,7 @@ impl MeshBool {
 			vert_bary.len() as i32,
 		);
 
-		let mut tri_verts = unsafe {
+		let mut tri_indices = unsafe {
 			vec_ext::uninit(
 				*tri_offset.last().unwrap() as usize + sub_tris.last().unwrap().tri_vert.len(),
 			)
@@ -176,8 +176,8 @@ impl MeshBool {
 			(interior_offset.last().unwrap() + sub_tris.last().unwrap().num_interior()) as usize,
 			Barycentric::default(),
 		);
-		let mut tri_rel = unsafe { vec_ext::uninit(tri_verts.len()) };
-		let mut tri_normal = unsafe { vec_ext::uninit(tri_verts.len()) };
+		let mut tri_rel = unsafe { vec_ext::uninit(tri_indices.len()) };
+		let mut tri_normal = unsafe { vec_ext::uninit(tri_indices.len()) };
 		for tri in 0..num_tri {
 			let halfedges = face_halfedges[tri];
 			if halfedges[0] < 0 {
@@ -199,8 +199,11 @@ impl MeshBool {
 			let new_tris =
 				sub_tris[tri].reindex(tri3, edge_offsets, edge_fwd, interior_offset[tri]);
 
-			tri_verts[tri_offset[tri] as usize..tri_offset[tri] as usize + new_tris.len()]
-				.copy_from_slice(&new_tris);
+			if self.prop_stride() == 0 {
+				tri_indices[tri_offset[tri] as usize..tri_offset[tri] as usize + new_tris.len()]
+					.copy_from_slice(&new_tris);
+			}
+
 			let start = tri_offset[tri] as usize;
 			tri_rel[start..start + new_tris.len()].fill(self.tri.relation[tri]);
 			tri_normal[start..start + new_tris.len()].fill(self.tri.normal[tri]);
@@ -262,7 +265,7 @@ impl MeshBool {
 
 		let (halfedge, properties) = if self.prop_stride() == 0 {
 			(
-				Halfedges::from_tri_indices(vert_pos.len(), tri_verts, None),
+				Halfedges::from_tri_indices(vert_pos.len(), false, tri_indices),
 				Properties::default(),
 			)
 		} else {
@@ -330,7 +333,6 @@ impl MeshBool {
 				}
 			}
 
-			let mut tri_prop = unsafe { vec_ext::uninit(tri_verts.len()) };
 			for tri in 0..num_tri {
 				let halfedges = face_halfedges[tri];
 				if halfedges[0] < 0 {
@@ -369,12 +371,12 @@ impl MeshBool {
 					edge_fwd,
 					interior_offset[tri] + (prop_offset as i32),
 				);
-				tri_prop[tri_offset[tri] as usize..tri_offset[tri] as usize + new_tris.len()]
+				tri_indices[tri_offset[tri] as usize..tri_offset[tri] as usize + new_tris.len()]
 					.copy_from_slice(&new_tris);
 			}
 
 			(
-				Halfedges::from_tri_indices(vert_pos.len(), tri_verts, Some(tri_prop)),
+				Halfedges::from_tri_indices(vert_pos.len(), true, tri_indices),
 				Properties {
 					data: prop,
 					stride: self.properties.stride,

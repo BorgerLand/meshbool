@@ -457,6 +457,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	//MANIFOLD_PAR: halfedge.reorder();
 	//(aka ReorderHalfedges/reorder_halfedges, removed because single
 	//threaded is already deterministic)
+	//tri.halfedge.reorder();
 
 	#[cfg(feature = "test_thoroughly")]
 	if get_intermediate_checks() {

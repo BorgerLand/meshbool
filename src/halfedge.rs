@@ -27,10 +27,10 @@ impl Halfedges {
 	///to map the propVert indices to vert indices.
 	pub fn from_tri_indices(
 		vert_count: usize,
-		tri_vert: Vec<Vector3<i32>>,
-		tri_prop: Option<Vec<Vector3<i32>>>,
+		write_prop: bool,
+		indices: Vec<Vector3<i32>>,
 	) -> Self {
-		let num_tri = tri_vert.len();
+		let num_tri = indices.len();
 		let num_halfedge = 3 * num_tri;
 		let mut halfedge = unsafe { vec_ext::uninit(num_halfedge) };
 
@@ -47,11 +47,10 @@ impl Halfedges {
 						| (v0.max(v1) as u64);
 				};
 
-				if let Some(tri_prop) = tri_prop {
+				if write_prop {
 					let mut job = PrepHalfedges::<true, _> {
 						halfedges: &mut halfedge,
-						tri_vert: &tri_vert,
-						tri_prop: &tri_prop,
+						indices: &indices,
 						f: &mut set_edge,
 					};
 
@@ -62,8 +61,7 @@ impl Halfedges {
 				} else {
 					let mut job = PrepHalfedges::<false, _> {
 						halfedges: &mut halfedge,
-						tri_vert: &tri_vert,
-						tri_prop: &[],
+						indices: &indices,
 						f: &mut set_edge,
 					};
 
@@ -89,11 +87,10 @@ impl Halfedges {
 					atomic_add(&mut offsets[(v0.min(v1) + offset) as usize], 1);
 				};
 
-				if let Some(tri_prop) = tri_prop {
+				if write_prop {
 					let mut job = PrepHalfedges::<true, _> {
 						halfedges: &mut halfedge,
-						tri_vert: &tri_vert,
-						tri_prop: &tri_prop,
+						indices: &indices,
 						f: &mut set_offset,
 					};
 
@@ -104,8 +101,7 @@ impl Halfedges {
 				} else {
 					let mut job = PrepHalfedges::<false, _> {
 						halfedges: &mut halfedge,
-						tri_vert: &tri_vert,
-						tri_prop: &[],
+						indices: &indices,
 						f: &mut set_offset,
 					};
 
@@ -113,9 +109,9 @@ impl Halfedges {
 						let i = i as i32;
 						job.call(i);
 					}
-				}
+				};
 
-				drop(tri_vert);
+				drop(indices);
 				vec_ext::exclusive_scan_in_place(&mut offsets, 0);
 
 				for tri in 0..num_tri {
@@ -291,40 +287,26 @@ struct CreateHalfedge {
 	prop_vert: i32,
 }
 
-struct PrepHalfedges<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> {
+struct PrepHalfedges<'a, const WRITE_PROP: bool, F: FnMut(i32, i32, i32)> {
 	halfedges: &'a mut Vec<CreateHalfedge>,
-	tri_vert: &'a [Vector3<i32>],
-	tri_prop: &'a [Vector3<i32>],
+	indices: &'a [Vector3<i32>],
 	f: &'a mut F,
 }
 
-impl<'a, const USE_PROP: bool, F: FnMut(i32, i32, i32)> PrepHalfedges<'a, USE_PROP, F> {
+impl<'a, const WRITE_PROP: bool, F: FnMut(i32, i32, i32)> PrepHalfedges<'a, WRITE_PROP, F> {
 	fn call(&mut self, tri: i32) {
-		let vert = self.tri_vert[tri as usize];
-		let prop = if USE_PROP {
-			self.tri_prop[tri as usize]
-		} else {
-			//should compile out
-			Vector3::default()
-		};
+		let vert = self.indices[tri as usize];
+
 		for i in 0..3 {
 			let j = next3_i32(i);
 			let e = 3 * tri + i;
-			let v0 = if USE_PROP {
-				prop[i as usize]
-			} else {
-				vert[i as usize]
-			};
-			let v1 = if USE_PROP {
-				prop[j as usize]
-			} else {
-				vert[j as usize]
-			};
+			let v0 = vert[i as usize];
+			let v1 = vert[j as usize];
 			debug_assert!(v0 != v1, "topological degeneracy");
 			self.halfedges[e as usize] = CreateHalfedge {
 				start_vert: v0,
 				end_vert: v1,
-				prop_vert: if USE_PROP { prop[i as usize] } else { 0 },
+				prop_vert: if WRITE_PROP { vert[i as usize] } else { 0 },
 			};
 
 			(self.f)(e, v0, v1);
