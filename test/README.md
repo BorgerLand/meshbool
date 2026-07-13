@@ -52,7 +52,7 @@ cd test #from inside test/manifold/build
 ## Modified tests
 
 - `Manifold.MeshDeterminism`: MeshBool's output is deterministic like Manifold, but not bit-identical
-- `Manifold.MeshRelationRefinePrecision`: Has a crashing bug - forgets to check array length > 0 before reading it
+- `Manifold.MeshRelationRefinePrecision`: Has a crashing bug - uses assert instead of expect as an array length guard
 
 ## Disabled tests
 
