@@ -298,10 +298,10 @@ impl<'a, F: FnMut(usize, i32, i32)> PrepHalfedges<'a, F> {
 			let v0 = verts[i];
 			let v1 = verts[j];
 			debug_assert!(v0 != v1, "topological degeneracy");
-			self.halfedges[e as usize] = CreateHalfedge {
+			self.halfedges[e] = CreateHalfedge {
 				start_vert: v0,
 				end_vert: v1,
-				prop_vert: if HAS_PROP { props[i as usize] } else { 0 },
+				prop_vert: if HAS_PROP { props[i as usize] } else { v0 },
 			};
 
 			(self.f)(e, v0, v1);
