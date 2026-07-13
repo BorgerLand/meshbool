@@ -51,22 +51,23 @@ cd test #from inside test/manifold/build
 
 ## Modified tests
 
-- Manifold.MeshDeterminism: MeshBool's output is not bit-identical to Manifold. There are an infinite number of ways to represent the same mesh in memory, so this should not be a cause for concern.
+- `Manifold.MeshDeterminism`: MeshBool's output is deterministic like Manifold, but not bit-identical
+- `Manifold.MeshRelationRefinePrecision`: Has a crashing bug - forgets to check array length > 0 before reading it
 
 ## Disabled tests
 
 There are a few upstream tests that prevent other tests from running due to features not yet implemented in MeshBool. Additionally, some suites are entirely built around unimplemented features.
 
-| Disabled test                                | Reason           | Method                         |
-| -------------------------------------------- | ---------------- | ------------------------------ |
-| `Manifold.DeepChainDoesNotOverflowNumLeaves` | Does not compile | `#if 0`                        |
-| All of `context_test.cpp`                    | Does not compile | `manifold/test/CMakeLists.txt` |
-| All of `sdf_test.cpp`                        | Unimplemented    | `manifold/test/CMakeLists.txt` |
-| All of `smooth_test.cpp`                     | Unimplemented    | `manifold/test/CMakeLists.txt` |
-| All of `hull_test.cpp`                       | Unimplemented    | `manifold/test/CMakeLists.txt` |
-| All of `cross_section_test.cpp`              | Unimplemented    | `manifold/test/CMakeLists.txt` |
-| All of `manifoldc_test.cpp`                  | Does not compile | CMake flag                     |
-| `Manifold.MeshRelationRefinePrecision`       | Crashes          | `#if 0`                        |
+| Disabled test                                | Reason                  | Method                         |
+| -------------------------------------------- | ----------------------- | ------------------------------ |
+| All of `Manifold.ErrorPropagation*`          | N/A to Result-based API | `#if 0`                        |
+| `Manifold.DeepChainDoesNotOverflowNumLeaves` | Does not compile        | `#if 0`                        |
+| All of `context_test.cpp`                    | Does not compile        | `manifold/test/CMakeLists.txt` |
+| All of `sdf_test.cpp`                        | Unimplemented           | `manifold/test/CMakeLists.txt` |
+| All of `smooth_test.cpp`                     | Unimplemented           | `manifold/test/CMakeLists.txt` |
+| All of `hull_test.cpp`                       | Unimplemented           | `manifold/test/CMakeLists.txt` |
+| All of `cross_section_test.cpp`              | Unimplemented           | `manifold/test/CMakeLists.txt` |
+| All of `manifoldc_test.cpp`                  | Does not compile        | CMake flag                     |
 
 Known failures, treating them as potential bugs in Manifold/its test suite's expectations:
 
