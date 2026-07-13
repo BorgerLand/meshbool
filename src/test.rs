@@ -191,24 +191,10 @@ where
 {
 	fn from(result: Result<MeshBool, E>) -> Self {
 		match result {
-			Ok(mesh) => Self {
-				mesh,
-				status: MeshBoolError::NoError,
-			},
+			Ok(mesh) => mesh.into(),
 			Err(error) => Self {
-				mesh: MeshBool {
-					original_id: None,
-					precision: Precision {
-						epsilon: -1.0,
-						tolerance: -1.0,
-					},
-					vert_pos: Vec::default(),
-					properties: Properties::default(),
-					tri: Triangles::default(),
-					instance_relation: DeterministicMap::default(),
-					collider: BVHCollider::default(),
-				},
 				status: error.into(),
+				..Self::default()
 			},
 		}
 	}
