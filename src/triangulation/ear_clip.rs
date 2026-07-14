@@ -22,7 +22,7 @@ const K_BEST: f64 = f64::NEG_INFINITY;
 ///@brief Triangulates a set of &epsilon;-valid polygons. If the input is not
 ///&epsilon;-valid, the triangulation may overlap, but will always return a
 ///manifold result that matches the input edge directions.
-pub fn triangulate_ear_clip(polys: &PolygonsIdx, mut epsilon: f64) -> HalfedgeTriangulation {
+pub fn triangulate_ear_clip(polys: &PolygonsIdx, epsilon: &mut f64) -> HalfedgeTriangulation {
 	let mut result = HalfedgeTriangulation::new();
 
 	let mut num_vert = 0;
@@ -44,16 +44,10 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, mut epsilon: f64) -> HalfedgeTr
 	//Maps each hole (by way of starting point) to its bounding box.
 	let mut hole2bbox = BTreeMap::new();
 
-	let starts = initialize(
-		&mut polygon,
-		&polygon_range,
-		&mut epsilon,
-		&mut result,
-		polys,
-	);
+	let starts = initialize(&mut polygon, &polygon_range, epsilon, &mut result, polys);
 
 	for v in 0..polygon.len() {
-		clip_if_degenerate(v, &mut result, &mut polygon, &polygon_range, epsilon);
+		clip_if_degenerate(v, &mut result, &mut polygon, &polygon_range, *epsilon);
 	}
 
 	for first in starts {
@@ -64,7 +58,7 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, mut epsilon: f64) -> HalfedgeTr
 			&mut holes,
 			&mut simples,
 			&mut outers,
-			epsilon,
+			*epsilon,
 			first,
 		);
 	}
@@ -78,7 +72,7 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, mut epsilon: f64) -> HalfedgeTr
 			&polygon_range,
 			&outers,
 			&hole2bbox,
-			epsilon,
+			*epsilon,
 		);
 	}
 
@@ -86,7 +80,7 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, mut epsilon: f64) -> HalfedgeTr
 	drop(hole2bbox);
 
 	for start in simples {
-		triangulate_poly(start, &mut polygon, &polygon_range, &mut result, epsilon);
+		triangulate_poly(start, &mut polygon, &polygon_range, &mut result, *epsilon);
 	}
 
 	result
