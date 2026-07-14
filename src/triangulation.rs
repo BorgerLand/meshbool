@@ -1,12 +1,12 @@
 use crate::halfedge::Halfedge;
 use crate::triangulation::ear_clip::triangulate_ear_clip;
+use crate::util::hash_table::DeterministicMap;
 use nalgebra::{Point2, Vector3};
 use std::collections::hash_map::Entry;
 
 #[cfg(feature = "test_thoroughly")]
 use {
 	crate::test::{get_intermediate_checks, get_process_overlaps},
-	crate::util::hash_table::DeterministicMap,
 	crate::util::math::ccw,
 	std::mem,
 };

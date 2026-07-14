@@ -158,7 +158,7 @@ impl MeshBool {
 	///than recalculated to avoid rounding error. This checks that triangles still
 	///match their normal vectors within Precision(), and if all triangles are CCW
 	///relative to their triNormals_
-	#[cfg(feature = "test_thoroughly")]
+	#[cfg(feature = "test")]
 	pub fn matches_tri_normals(&self) -> bool {
 		if self.tri.halfedge.len() == 0 || self.tri.normal.len() != self.num_tri() {
 			return true;
