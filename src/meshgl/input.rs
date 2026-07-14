@@ -260,17 +260,13 @@ where
 		// we need to split pinched verts before calculating vertex normals, because
 		// the algorithm doesn't work with pinched verts
 		pp::split_pinched_verts(&mut halfedge, &mut vert_pos);
-		pp::dedupe_prop_verts(&mut halfedge, &tri_rel_unfiltered, &properties);
-		let tri_normal = pp::set_normals_and_coplanar(
-			&mut tri_rel_unfiltered,
-			&halfedge,
-			&vert_pos,
-			precision.tolerance,
-		);
+		pp::dedupe_prop_verts(&mut halfedge, &tri_rel, &properties);
+		let tri_normal =
+			pp::set_normals_and_coplanar(&mut tri_rel, &halfedge, &vert_pos, precision.tolerance);
 		let mut tri = Triangles {
 			halfedge,
 			normal: tri_normal,
-			relation: tri_rel_unfiltered,
+			relation: tri_rel,
 		};
 		pp::dedupe_edges(&mut tri, &mut vert_pos);
 		pp::collapse_short_edges(
