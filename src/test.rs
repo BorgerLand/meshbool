@@ -213,6 +213,13 @@ impl MeshBoolTestWrapper {
 		self
 	}
 
+	pub fn invalid() -> Self {
+		Self {
+			status: MeshBoolError::InvalidConstruction,
+			..Self::default()
+		}
+	}
+
 	pub fn tetrahedron() -> Self {
 		MeshBool::tetrahedron().into()
 	}

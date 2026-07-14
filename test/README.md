@@ -35,9 +35,9 @@ git submodule update --init --recursive
 ```bash
 mkdir -p test/manifold/build && cd test/manifold/build
 #THOROUGH MODE:
-cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
+cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
 #BENCH MODE (you can use this same command on the upstream manifold repo to bench against the c++ implementation):
-cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_CBIND=OFF -DMANIFOLD_DEBUG=OFF -DMANIFOLD_ASSERT=OFF && make manifold_test -j$(nproc)
+cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_DEBUG=OFF -DMANIFOLD_ASSERT=OFF && make manifold_test -j$(nproc)
 ```
 
 ### 3. Run the tests
@@ -62,12 +62,11 @@ There are a few upstream tests that prevent other tests from running due to feat
 | -------------------------------------------- | ----------------------- | ------------------------------ |
 | All of `Manifold.ErrorPropagation*`          | N/A to Result-based API | `#if 0`                        |
 | `Manifold.DeepChainDoesNotOverflowNumLeaves` | Does not compile        | `#if 0`                        |
+| All of `CBIND.execution_context_*`           | Does not compile        | `#if 0`                        |
 | All of `context_test.cpp`                    | Does not compile        | `manifold/test/CMakeLists.txt` |
 | All of `sdf_test.cpp`                        | Unimplemented           | `manifold/test/CMakeLists.txt` |
 | All of `smooth_test.cpp`                     | Unimplemented           | `manifold/test/CMakeLists.txt` |
 | All of `hull_test.cpp`                       | Unimplemented           | `manifold/test/CMakeLists.txt` |
-| All of `cross_section_test.cpp`              | Unimplemented           | `manifold/test/CMakeLists.txt` |
-| All of `manifoldc_test.cpp`                  | Does not compile        | CMake flag                     |
 
 Known failures, treating them as potential bugs in Manifold/its test suite's expectations:
 
