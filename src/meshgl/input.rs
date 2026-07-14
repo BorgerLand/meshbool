@@ -122,7 +122,7 @@ where
 		let mut properties = unsafe { vec_ext::uninit(num_vert * prop_stride) };
 
 		for i in 0..num_vert {
-			for j in [0, 1, 2] {
+			for j in 0..3 {
 				vert_pos[i][j] =
 					mesh_gl.vert_properties[usize::lossy_from(mesh_gl.prop_stride) * i + j].into();
 			}
@@ -199,7 +199,7 @@ where
 			}
 		}
 
-		let prop2vert = (prop_stride > 0 && !mesh_gl.merge_from_vert.is_empty())
+		let prop2vert = (!mesh_gl.merge_from_vert.is_empty())
 			.then(|| {
 				let mut prop2vert: Vec<_> = (0..num_vert as i32).collect();
 				for i in 0..mesh_gl.merge_from_vert.len() {
@@ -217,7 +217,8 @@ where
 
 		let mut tri_rel = Vec::with_capacity(num_tri);
 		let mut tri_vert = Vec::with_capacity(num_tri);
-		let mut tri_prop = prop2vert.is_some().then(|| Vec::with_capacity(num_tri));
+		let mut tri_prop =
+			(prop2vert.is_some() && prop_stride > 0).then(|| Vec::with_capacity(num_tri));
 		for i in 0..num_tri {
 			let mut tri_v = Vector3::default();
 			let mut tri_p = Vector3::default();
@@ -244,8 +245,14 @@ where
 			}
 		}
 
+		let init_prop_from_start = prop2vert.is_none() && prop_stride > 0;
 		drop(prop2vert);
 		let mut halfedge = Halfedges::from_tri_indices(vert_pos.len(), tri_vert, tri_prop);
+		if init_prop_from_start {
+			//tri_prop was none
+			halfedge.init_prop_from_start();
+		}
+
 		if !halfedge.is_manifold() {
 			return Err(MeshGLError::NotManifold);
 		}
@@ -349,15 +356,7 @@ where
 	///multi-material MeshGL was produced, but its merge vectors were lost due to
 	///a round-trip through a file format. Constructing a Manifold from the result
 	///will report an error status if it is not manifold.
-	pub fn merge(&mut self) -> bool
-	where
-		F: LossyFrom<f64> + Copy + 'static,
-		I: LossyFrom<usize> + Copy,
-		usize: LossyFrom<I>,
-		u64: LossyFrom<I>,
-		i32: LossyFrom<I>,
-		f64: LossyFrom<F>,
-	{
+	pub fn merge(&mut self) -> bool {
 		let mut open_edges = vec![]; //c++ used multiset
 
 		let mut merge: Vec<i32> = (0..i32::lossy_from(self.num_vert())).collect();
@@ -370,7 +369,7 @@ where
 		let num_tri = usize::lossy_from(self.num_tri());
 		let next = [1, 2, 0];
 		for tri in 0..num_tri {
-			for i in [0, 1, 2] {
+			for i in 0..3 {
 				let mut edge = (
 					merge[usize::lossy_from(self.tri_verts[3 * tri + next[i] as usize])],
 					merge[usize::lossy_from(self.tri_verts[3 * tri + i])],
@@ -393,7 +392,7 @@ where
 
 		let vert_prop_d = self.vert_properties.clone();
 		let mut bbox = Box3D::default();
-		for i in [0, 1, 2] {
+		for i in 0..3 {
 			let min_max = vert_prop_d[i..vert_prop_d.len()]
 				.iter()
 				.cloned()
@@ -478,6 +477,6 @@ where
 			}
 		}
 
-		return true;
+		true
 	}
 }

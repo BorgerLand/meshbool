@@ -38,7 +38,7 @@ impl MeshBool {
 		if old_prop_stride == 0 && prop_stride > 0 {
 			//workaround for removal of logic here:
 			//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-			halfedge.init_prop();
+			halfedge.init_prop_from_start();
 		}
 
 		let properties = if prop_stride == 0 {
@@ -487,7 +487,7 @@ impl MeshBool {
 		if old_prop_stride == 0 {
 			//workaround for removal of logic here:
 			//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-			halfedge.init_prop();
+			halfedge.init_prop_from_start();
 		}
 
 		let mut counters: Vec<bool> = vec![false; self.num_prop_vert()];
@@ -576,7 +576,7 @@ impl<'a> CurvatureAngles<'a> {
 		phi[2] = core::f64::consts::PI - phi[0] - phi[1];
 		let area3: f64 = edge_length[0] * edge_length[1] * edge[0].cross(&edge[1]).norm() / 6.0;
 
-		for i in [0, 1, 2] {
+		for i in 0..3 {
 			let vert: i32 = self.halfedge.start((3 * tri + i) as i32);
 			atomic_add(&mut self.gaussian_curvature[vert as usize], -phi[i]);
 			atomic_add(&mut self.area[vert as usize], area3);

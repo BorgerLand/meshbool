@@ -301,7 +301,7 @@ impl<'a, F: FnMut(usize, i32, i32)> PrepHalfedges<'a, F> {
 			self.halfedges[e] = CreateHalfedge {
 				start_vert: v0,
 				end_vert: v1,
-				prop_vert: if HAS_PROP { props[i as usize] } else { v0 },
+				prop_vert: if HAS_PROP { props[i as usize] } else { 0 },
 			};
 
 			(self.f)(e, v0, v1);
@@ -440,7 +440,7 @@ impl Halfedges {
 	}
 
 	//use when stride increases from 0->more than 0
-	pub fn init_prop(&mut self) {
+	pub fn init_prop_from_start(&mut self) {
 		self.prop_vert = self.start.clone();
 	}
 
