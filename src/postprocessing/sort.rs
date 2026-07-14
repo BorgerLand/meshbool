@@ -41,13 +41,13 @@ pub fn sort_and_compact_geometry(
 
 	compact_props(properties, &mut tri.halfedge);
 
+	//presumably this happens here because sort+compact is usually
+	//the final postprocessing stage, so the mesh is done now
 	debug_assert!(
 		tri.halfedge.len() % 6 == 0,
 		"Not an even number of faces after sorting faces!"
 	);
 
-	//presumably this happens here because sort+compact is usually
-	//the final postprocessing stage, so the mesh is done now
 	#[cfg(feature = "test_thoroughly")]
 	{
 		if get_intermediate_checks() {

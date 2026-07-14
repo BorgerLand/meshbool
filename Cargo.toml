@@ -8,14 +8,8 @@ rust-version = "1.91"
 crate-type = ["staticlib"]
 
 [features]
-default = ["test_thoroughly"]
 test = ["dep:zngur", "dep:build-rs"]
 test_thoroughly = ["test"]
-
-#in original manifold, assertions are only used for tests.
-#the test suite cmake file forces debug assertions back on
-[profile.dev.package.meshbool]
-debug-assertions = false
 
 [dependencies]
 libm = { version = "0.2", default-features = false }
