@@ -7,21 +7,11 @@ static ORIGINAL_ID_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 ///System for tracking the origin story of every triangle in the output, allowing
 ///rendering materials and properties to be re-applied to the output
-///
-///**Original ID**: Each mesh that is used as an input to this library, constructed
-///either by loading a MeshGL or procedurally generating a primitive shape, is
-///considered an "original" mesh and receives a GLOBALLY unique original ID. Not
-///all meshes are originals, eg. the output of a boolean operation or some other
-///transformation applied to an original to make a newly derived mesh. These
-///derived meshes do not have their own original ID; they are merely a composite of
-///1 or more originals.
-///
-///**Instance ID**: Each time an instance of an original mesh makes an appearance
-///somewhere in this mesh, the instance receives its own LOCALLY unique (to this
-///mesh) instance ID. Not requiring global uniqueness allows faster cloning.
 #[derive(Copy, Clone, Debug)]
 pub struct TriRelation {
-	/// The unique ID of the mesh instance of this triangle.
+	///Each time an instance of an original mesh makes an appearance somewhere in this
+	///mesh, the instance receives its own LOCALLY unique (to this mesh) instance ID.
+	///Not requiring global uniqueness allows faster cloning.
 	pub instance_id: u32,
 	/// If set as an input of MeshGL, it is passed along unchanged. This is how
 	/// the user can tell us not to collapse certain edges: those that divide
@@ -53,6 +43,12 @@ impl TriRelation {
 
 #[derive(Clone, Copy, Debug)]
 pub struct InstanceRelation {
+	///Each mesh that is used as an input to this library, constructed either by
+	///loading a MeshGL or procedurally generating a primitive shape, is considered an
+	///"original" mesh and receives a GLOBALLY unique original ID. Not all meshes are
+	///originals, eg. the output of a boolean operation or some other transformation
+	///applied to an original to make a newly derived mesh. These derived meshes do not
+	///have their own original ID; they are merely a composite of 1 or more originals.
 	pub original_id: u32,
 	pub transform: Matrix3x4<f64>,
 	pub back_side: bool,

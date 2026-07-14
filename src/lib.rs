@@ -215,17 +215,17 @@ impl Triangles {
 	}
 }
 
-//some algorithms that operate on toplogy optionally accept the
-//normal/relation columns of the triangles soa if they were
-//already eagerly computed, in order to keep them in sync with
-//halfedge. if not eagerly computed, this optimization allows
-//skipping the sync and waiting to populate normal+relation
-//until halfedge is already finalized. having normal+relation
-//both none is the ideal fast scenario. the c++ version
-//implements this same optimization by checking vec.len() > 0 or
-//vec.len() == num_tri() in select areas, which requires a full
-//mental map of the entire codebase to understand whether the
-//columns should exist yet or not
+///Some algorithms that operate on toplogy optionally accept the
+///normal/relation columns of the triangles SOA if they were
+///already eagerly computed, in order to keep them in sync with
+///halfedge. If not eagerly computed, this optimization allows
+///skipping the sync and waiting to populate normal+relation
+///until halfedge is already finalized. Having normal+relation
+///both none is the ideal fast scenario. The C++ version
+///implements this same optimization by checking vec.len() > 0 or
+///vec.len() == num_tri() in select areas, which requires a full
+///mental map of the entire codebase to understand whether the
+///columns should exist yet or not.
 struct TrianglesPartial<'a> {
 	halfedge: &'a mut Halfedges,
 	normal: Option<&'a mut Vec<Vector3<f64>>>,

@@ -86,15 +86,22 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		))
 	};
 
+	let cloned = |mesh: &MeshBool| {
+		Ok(MeshBool {
+			instance_relation: instance_rel.clone().collect(),
+			..mesh.clone()
+		})
+	};
+
 	if ptr::eq(in_p, in_q) {
 		if op == OpType::Difference {
 			return decimated();
 		}
 
-		return Ok(in_p.clone());
+		return cloned(in_p);
 	} else if in_p.is_empty() {
 		if !in_q.is_empty() && op == OpType::Union {
-			return Ok(in_q.clone());
+			return cloned(in_q);
 		}
 
 		return decimated();
@@ -103,20 +110,20 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 			return decimated();
 		}
 
-		return Ok(in_p.clone());
+		return cloned(in_p);
 	} else if !in_p
 		.collider
 		.get_bounding_box()
 		.does_overlap(in_q.collider.get_bounding_box())
 	{
 		if op == OpType::Difference {
-			return Ok(in_p.clone());
+			return cloned(in_p);
 		} else if op == OpType::Intersect {
 			return decimated();
 		}
 
-		//union can be optimized via the same technique as CsgLeafNode::Compose(),
-		//copying and pasting the 2 disjoint meshes into the same buffer
+		//else union can be optimized via the same technique as CsgLeafNode::Compose(),
+		//copying and pasting the 2 disjoint meshes into the same buffer.
 		//for now just let the full pipeline run
 	}
 
