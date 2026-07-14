@@ -76,7 +76,7 @@ mod output; //from meshbool to meshgl, output of this library
 //
 // MeshGLP / MeshGL / MeshGL64 are forward-declared in common.h; the
 // default `I = uint32_t` lives on the forward decl.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MeshGL<F, I> {
 	/// Number of properties per vertex, always >= 3.
 	pub prop_stride: I,
@@ -173,5 +173,27 @@ where
 	///@param run The index of the triangle run (0 <= run < runFlags.size()).
 	pub fn has_normals(&self, run: usize) -> bool {
 		run < self.run_flags.len() && (self.run_flags[run] & 2) != 0
+	}
+}
+
+impl<F, I> Default for MeshGL<F, I>
+where
+	I: LossyFrom<usize>,
+	F: LossyFrom<f64>,
+{
+	fn default() -> Self {
+		Self {
+			prop_stride: I::lossy_from(3),
+			vert_properties: Vec::default(),
+			tri_verts: Vec::default(),
+			merge_from_vert: Vec::default(),
+			merge_to_vert: Vec::default(),
+			run_index: Vec::default(),
+			run_original_id: Vec::default(),
+			run_transform: Vec::default(),
+			run_flags: Vec::default(),
+			face_id: Vec::default(),
+			tolerance: F::lossy_from(0.0),
+		}
 	}
 }
