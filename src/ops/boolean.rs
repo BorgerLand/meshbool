@@ -467,12 +467,10 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	//tri.halfedge.reorder();
 
 	#[cfg(feature = "test_thoroughly")]
-	if get_intermediate_checks() {
-		debug_assert!(
-			tri.halfedge.is_manifold(),
-			"triangulated mesh is not manifold!"
-		);
-	}
+	debug_assert!(
+		tri.halfedge.is_manifold(),
+		"triangulated mesh is not manifold!"
+	);
 
 	let mut properties = Properties {
 		data: construct::create_properties(

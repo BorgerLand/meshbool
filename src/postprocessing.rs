@@ -28,8 +28,6 @@ pub mod sort;
 ///atomic cas operation, the expected case is either invalid id (the vertex
 ///was not processed) or with the same id.
 pub fn split_pinched_verts(halfedge: &mut Halfedges, vert_pos: &mut Vec<Point3<f64>>) {
-	debug_assert!(halfedge.is_manifold(), "polygon mesh is not manifold!");
-
 	let nb_edges = halfedge.len();
 
 	let mut vert_processed = vec![false; vert_pos.len()];
