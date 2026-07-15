@@ -53,6 +53,7 @@ RUST_BACKTRACE=1 ./manifold_test
 
 - `Manifold.MeshDeterminism`: MeshBool's output is deterministic like Manifold, but not bit-identical
 - `Manifold.MeshRelationRefinePrecision`: Had a crashing bug - now uses assert instead of expect as an array length guard
+- `Manifold.InvalidInput*`, `Manifold.Merge`: Removed meaningless `IsEmpty()` check on the errored mesh
 
 ## Disabled tests
 
