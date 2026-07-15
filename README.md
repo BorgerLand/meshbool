@@ -51,16 +51,16 @@ let mesh = union.to_meshgl(0);
 
 | Test                                      | C++ (ms)   | Rust (ms)  |
 | ----------------------------------------- | ---------- | ---------- |
-| Properties.MingapAfterTransformations     | 2925       | 2663       |
-| Properties.MingapStretchyBracelet         | 4930       | 5059       |
-| Properties.ToleranceSphere                | 18955      | 13871      |
-| Boolean.CreatePropertiesSlow              | 2087       | 1861       |
-| Samples.Bracelet                          | 936        | 1167       |
-| Samples.Sponge4                           | 39666      | 43165      |
-| Samples.CondensedMatter16                 | 4381       | 8044       |
-| Samples.CondensedMatter64                 | 71959      | 124466     |
-| BooleanComplex.Close                      | 2715       | 3294       |
-| BooleanComplex.GenericTwinBooleanTest7081 | 25007      | 32707      |
-| Polygon.Zebra                             | 1592       | 1797       |
-| Polygon.Zebra3                            | 1686       | 1889       |
-| **Total**                                 | **176846** | **239990** |
+| Properties.MingapAfterTransformations     | 2925       | 2651       |
+| Properties.MingapStretchyBracelet         | 4930       | 4994       |
+| Properties.ToleranceSphere                | 18955      | 13609      |
+| Boolean.CreatePropertiesSlow              | 2087       | 1730       |
+| Samples.Bracelet                          | 936        | 1139       |
+| Samples.Sponge4                           | 39666      | 42086      |
+| Samples.CondensedMatter16                 | 4381       | 7524       |
+| Samples.CondensedMatter64                 | 71959      | 117483     |
+| BooleanComplex.Close                      | 2715       | 3255       |
+| BooleanComplex.GenericTwinBooleanTest7081 | 25007      | 32628      |
+| Polygon.Zebra                             | 1592       | 1830       |
+| Polygon.Zebra3                            | 1686       | 1924       |
+| **Total**                                 | **176846** | **230853** |
