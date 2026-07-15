@@ -30,7 +30,6 @@ impl<'a> DuplicateVerts<'a> {
 pub struct EdgePos {
 	edge_pos: f64,
 	vert: i32,
-	collision_id: i32,
 	is_start: bool,
 }
 
@@ -43,7 +42,6 @@ pub fn add_new_edge_verts(
 	v12_r: Vec<i32>,
 	halfedge_p: &Halfedges,
 	forward: bool,
-	offset: usize,
 ) {
 	// For each edge of P that intersects a face of Q (p1q2), add this vertex to
 	// P's corresponding edge vector and to the two new edges, which are
@@ -82,7 +80,6 @@ pub fn add_new_edge_verts(
 				tuple.1.push(EdgePos {
 					edge_pos: 0.0,
 					vert: vert + j,
-					collision_id: (i + offset) as i32,
 					is_start: tuple.0,
 				});
 			}
@@ -253,7 +250,7 @@ pub fn size_face_edge(mut sides_per_face_pq: Vec<i32>) -> Vec<i32> {
 }
 
 fn sort_edge_pos(edge_pos: &mut [EdgePos]) {
-	edge_pos.sort_by_key(|i| (OrderedF64(i.edge_pos), i.collision_id));
+	edge_pos.sort_unstable_by_key(|i| (OrderedF64(i.edge_pos), i.vert));
 }
 
 fn pair_up(edge_pos: &mut [EdgePos], mut f: impl FnMut(Halfedge)) {
@@ -324,7 +321,6 @@ pub fn append_partial_edges(
 		let mut edge_pos = EdgePos {
 			edge_pos: vert_pos[v_p2r[v_start] as usize].coords.dot(&edge_vec),
 			vert: v_p2r[v_start],
-			collision_id: i32::MAX,
 			is_start: inclusion > 0,
 		};
 
@@ -337,7 +333,6 @@ pub fn append_partial_edges(
 		edge_pos = EdgePos {
 			edge_pos: vert_pos[v_p2r[v_end] as usize].coords.dot(&edge_vec),
 			vert: v_p2r[v_end],
-			collision_id: i32::MAX,
 			is_start: inclusion < 0,
 		};
 

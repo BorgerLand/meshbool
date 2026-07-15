@@ -112,7 +112,7 @@ fn sort_verts(vert_pos: &mut Vec<Point3<f64>>, halfedge: &mut Halfedges, bbox: B
 
 	let num_vert = vert_pos.len();
 	let mut vert_new2old: Vec<_> = (0..num_vert as i32).collect();
-	vert_new2old.sort_by_key(|&i| vert_morton[i as usize]);
+	vert_new2old.sort_unstable_by_key(|&i| vert_morton[i as usize]);
 
 	reindex_verts(halfedge, &vert_new2old, num_vert);
 
@@ -181,7 +181,7 @@ pub fn get_tri_box_morton(
 ///bounding box and Morton code arrays are also sorted accordingly.
 fn sort_tris(tri: TrianglesPartial, tri_box: &mut Vec<Box3D>, tri_morton: &mut Vec<u32>) {
 	let mut tri_new2old: Vec<_> = (0..tri.halfedge.num_tri() as i32).collect();
-	tri_new2old.sort_by_key(|&i| tri_morton[i as usize]);
+	tri_new2old.sort_unstable_by_key(|&i| tri_morton[i as usize]);
 
 	// Tris were flagged for removal with pairedHalfedge = -1 and assigned kNoCode
 	// to sort them to the end, which allows them to be removed.

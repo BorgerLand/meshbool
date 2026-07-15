@@ -306,7 +306,6 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		v12_r,
 		&in_p.tri.halfedge,
 		true,
-		0,
 	);
 	construct::add_new_edge_verts(
 		&mut edges_q,
@@ -316,7 +315,6 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		v21_r,
 		&in_q.tri.halfedge,
 		false,
-		xv12.p1q2.len(),
 	);
 
 	// Level 4
@@ -446,11 +444,6 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		face_rel,
 		precision.epsilon,
 	);
-
-	//MANIFOLD_PAR: halfedge.reorder();
-	//(aka ReorderHalfedges/reorder_halfedges, removed because single
-	//threaded is already deterministic)
-	//tri.halfedge.reorder();
 
 	#[cfg(feature = "test_thoroughly")]
 	debug_assert!(

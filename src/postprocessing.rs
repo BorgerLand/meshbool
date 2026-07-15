@@ -158,7 +158,7 @@ pub fn set_normals_and_coplanar(
 		};
 	}
 
-	tri_priority.sort_by_key(|t| Reverse(OrderedF64(t.area2)));
+	tri_priority.sort_unstable_by_key(|t| Reverse(OrderedF64(t.area2)));
 
 	let mut interior_halfedges: Vec<i32> = Vec::default();
 	for tp in &tri_priority {

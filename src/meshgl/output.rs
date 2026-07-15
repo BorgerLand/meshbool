@@ -61,7 +61,7 @@ impl MeshBool {
 		let tri_rel = &self.tri.relation;
 		// Don't sort originals - keep them in order
 		if !is_original {
-			tri_new2old.sort_by_key(|&i| {
+			tri_new2old.sort_unstable_by_key(|&i| {
 				(
 					self.instance_relation[tri_rel[i as usize].instance_id as usize].original_id,
 					tri_rel[i as usize].instance_id,

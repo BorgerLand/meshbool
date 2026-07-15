@@ -1,5 +1,5 @@
-use crate::triangulation::PolyVert;
 use crate::spatial::aabb::Box2D;
+use crate::triangulation::PolyVert;
 use crate::util::num_convert::OrderedF64;
 use nalgebra::Point2;
 
@@ -17,9 +17,9 @@ pub fn build_2d_tree(points: &mut [PolyVert]) {
 
 fn build_2d_tree_impl(points: &mut [PolyVert], sort_x: bool) {
 	if sort_x {
-		points.sort_by_key(|vert| OrderedF64(vert.pos.x));
+		points.sort_unstable_by_key(|vert| OrderedF64(vert.pos.x));
 	} else {
-		points.sort_by_key(|vert| OrderedF64(vert.pos.y));
+		points.sort_unstable_by_key(|vert| OrderedF64(vert.pos.y));
 	}
 
 	let len = points.len();

@@ -434,7 +434,7 @@ where
 		});
 
 		let mut vert_new2old: Vec<_> = (0..num_open_vert as i32).into_iter().collect();
-		vert_new2old.sort_by_key(|&i| vert_morton[i as usize]);
+		vert_new2old.sort_unstable_by_key(|&i| vert_morton[i as usize]);
 
 		vec_ext::gather_in_place(&mut vert_morton, &vert_new2old);
 		vec_ext::gather_in_place(&mut vert_box, &vert_new2old);

@@ -5,7 +5,6 @@ use crate::spatial::bvh_collider::{Recorder, SimpleRecorder};
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicSet;
 use crate::util::math::next3_i32;
-use crate::util::vec_ext;
 use core::f64;
 use nalgebra::{Point3, Vector2, Vector3, Vector4};
 use std::mem;
@@ -112,16 +111,6 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 
 	b.collider
 		.collisions_from_fn::<false, _>(&mut recorder, f, a.tri.halfedge.len(), true);
-
-	let p1q2 = &mut xv12.p1q2;
-	// sort p1q2 according to edges
-	let mut i12: Vec<_> = (0..p1q2.len()).collect();
-
-	let index = if FORWARD { 0 } else { 1 };
-	i12.sort_by_key(|&i| (p1q2[i][index], p1q2[i][1 - index]));
-	vec_ext::gather_in_place(p1q2, &i12);
-	vec_ext::gather_in_place(&mut xv12.x12, &i12);
-	vec_ext::gather_in_place(&mut xv12.v12, &i12);
 }
 
 struct Kernel12<'a, const EXPAND_P: bool, const FORWARD: bool> {

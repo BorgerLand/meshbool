@@ -483,7 +483,7 @@ impl Halfedges {
 		}
 
 		let mut halfedge = self.to_data();
-		halfedge.sort_by_key(|edge| (edge.start_vert, edge.end_vert));
+		halfedge.sort_unstable_by_key(|edge| (edge.start_vert, edge.end_vert));
 
 		(0..(2 * self.num_edge() - 1)).all(|edge| {
 			let h = halfedge[edge];

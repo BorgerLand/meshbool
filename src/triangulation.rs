@@ -333,8 +333,8 @@ fn check_topology(halfedges: &[PolyEdge]) {
 	for e in backward.iter_mut() {
 		mem::swap(&mut e.start_vert, &mut e.end_vert);
 	}
-	forward.sort_by_key(|edge| (edge.start_vert, edge.end_vert));
-	backward.sort_by_key(|edge| (edge.start_vert, edge.end_vert));
+	forward.sort_unstable_by_key(|edge| (edge.start_vert, edge.end_vert));
+	backward.sort_unstable_by_key(|edge| (edge.start_vert, edge.end_vert));
 	for i in 0..n_edges {
 		debug_assert!(
 			forward[i].start_vert == backward[i].start_vert
