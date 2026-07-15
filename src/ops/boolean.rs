@@ -23,7 +23,7 @@ pub enum BooleanError {
 enum OpType {
 	Union,
 	Difference,
-	Intersect,
+	Intersection,
 }
 
 impl MeshBool {
@@ -35,8 +35,8 @@ impl MeshBool {
 		boolean(self, OpType::Difference, other)
 	}
 
-	pub fn intersect(&self, other: &Self) -> Result<Self, BooleanError> {
-		boolean(self, OpType::Intersect, other)
+	pub fn intersection(&self, other: &Self) -> Result<Self, BooleanError> {
+		boolean(self, OpType::Intersection, other)
 	}
 }
 
@@ -106,7 +106,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 
 		return decimated();
 	} else if in_q.is_empty() {
-		if op == OpType::Intersect {
+		if op == OpType::Intersection {
 			return decimated();
 		}
 
@@ -118,7 +118,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	{
 		if op == OpType::Difference {
 			return cloned(in_p);
-		} else if op == OpType::Intersect {
+		} else if op == OpType::Intersection {
 			return decimated();
 		}
 
@@ -205,9 +205,9 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		expand_p == (op == OpType::Union),
 		"Result op type not compatible with constructor op type."
 	);
-	let c1 = if op == OpType::Intersect { 0 } else { 1 };
+	let c1 = if op == OpType::Intersection { 0 } else { 1 };
 	let c2 = if op == OpType::Union { 1 } else { 0 };
-	let c3 = if op == OpType::Intersect { 1 } else { -1 };
+	let c3 = if op == OpType::Intersection { 1 } else { -1 };
 
 	// Convert winding numbers to inclusion values based on operation type.
 	//reuses existing allocation

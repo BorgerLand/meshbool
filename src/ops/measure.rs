@@ -93,7 +93,7 @@ impl MeshBool {
 	///@param other The other manifold to compute the minimum gap to.
 	///@param searchLength The maximum distance to search for a minimum gap.
 	pub fn min_gap(&self, other: &Self, search_length: f64) -> f64 {
-		if let Ok(intersect) = self.intersect(other)
+		if let Ok(intersect) = self.intersection(other)
 			&& !intersect.is_empty()
 		{
 			return 0.0;

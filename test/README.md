@@ -72,3 +72,4 @@ Known failures, treating them as potential bugs in Manifold/its test suite's exp
 
 - Boolean.Precision: `CsgLeafNode::Compose` optimization is not implemented, and the unoptimized full boolean path calls simplify_topology with nonzero first_new_vert, causing the tiny cube to not run through degenerate removal
 - Boolean.BatchBoolean: Output looks visually correct, again error may be due to unimplemented `CsgLeafNode::Compose` optimization, though it's weird that they don't produce the same number of triangles out
+- Samples.Sponge4: Changing the halfedges' order causes a different triangulation with different number of degenerate triangles. Unclear to me whether this is a true failure or an overly strict test

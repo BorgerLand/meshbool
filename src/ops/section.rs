@@ -120,7 +120,7 @@ impl MeshBool {
 	pub fn split(&self, cutter: &Self) -> Result<(Self, Self), BooleanError> {
 		//this could be optimized like c++, which runs the intersections
 		//half of the boolean pipeline once and reuses the results
-		let result1 = self.intersect(cutter)?;
+		let result1 = self.intersection(cutter)?;
 		let result2 = self.difference(cutter)?;
 		Ok((result1, result2))
 	}
@@ -163,7 +163,7 @@ impl MeshBool {
 		normal: Vector3<f64>,
 		origin_offset: f64,
 	) -> Result<Self, BooleanError> {
-		self.intersect(&halfspace(self.bounding_box(), normal, origin_offset))
+		self.intersection(&halfspace(self.bounding_box(), normal, origin_offset))
 	}
 
 	///Returns the cross section of this object parallel to the X-Y plane at the

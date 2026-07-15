@@ -374,7 +374,7 @@ impl MeshBoolTestWrapper {
 		(match op {
 			OpType::Add => self.mesh.union(&other.mesh),
 			OpType::Subtract => self.mesh.difference(&other.mesh),
-			OpType::Intersect => self.mesh.intersect(&other.mesh),
+			OpType::Intersect => self.mesh.intersection(&other.mesh),
 		})
 		.into()
 	}

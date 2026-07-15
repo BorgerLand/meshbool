@@ -4,7 +4,7 @@ Meshbool is a pure-Rust implementation/port of Manifold's state of the art **mes
 
 Note that many features are currently unimplemented, and completeness is not the primary goal. I will accept PR's to port more features, especially those that increase the number of passing tests, but the main focus of this crate is the boolean algorithm.
 
-This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/db042ab153bf8e5dbef2eb00990e8024c2f272ec) (v3.5.1) and passes 245 tests when [linked to the original C++ test suite](/test/README.md). I consider what is here to be reliably complete.
+This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/db042ab153bf8e5dbef2eb00990e8024c2f272ec) (v3.5.1) and passes 301 tests when [linked to the original C++ test suite](/test/README.md). I consider what is here to be reliably complete.
 
 ### Why does this exist?
 
@@ -30,15 +30,15 @@ meshbool = { git = "https://github.com/BorgerLand/meshbool.git" }
 ### Example
 
 ```Rust
-let cube1 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), true);
-let cube2 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), false);
+let cube1 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), true)?;
+let cube2 = MeshBool::cube(Vector3::new(1.0, 1.0, 1.0), false)?;
 
-let union = &cube1 + &cube2;
-let difference = &cube1 - &cube2;
-let intersection = &cube1 ^ &cube2;
+let union = cube1.union(&cube2)?;
+let difference = cube1.difference(&cube2)?;
+let intersection = cube1.intersection(&cube2)?;
 
 //now convert the output into a format suitable for rendering
-let mesh = union.get_mesh_gl(0);
+let mesh = union.to_meshgl(0);
 ```
 
 ### Performance:
@@ -49,13 +49,18 @@ let mesh = union.get_mesh_gl(0);
 - The CSG tree, essentially an optimization for operating on batches of meshes, is also unimplemented.
 - Benching was done on an Intel i5-4210M, a force to be reckoned with.
 
-| Test                                  | C++ (ms) | Rust (ms) |
-| ------------------------------------- | -------- | --------- |
-| Properties.MingapAfterTransformations | 2916     | 2760      |
-| Properties.ToleranceSphere            | 18649    | 18009     |
-| Boolean.CreatePropertiesSlow          | 2038     | 2092      |
-| Samples.CondensedMatter16             | 4384     | 8337      |
-| Samples.CondensedMatter64             | 71583    | 127387    |
-| BooleanComplex.Close                  | 2708     | 3242      |
-| Polygon.Zebra                         | 1617     | 1835      |
-| Polygon.Zebra3                        | 1687     | 1917      |
+| Test                                      | C++ (ms)   | Rust (ms)  |
+| ----------------------------------------- | ---------- | ---------- |
+| Properties.MingapAfterTransformations     | 2925       | 2663       |
+| Properties.MingapStretchyBracelet         | 4930       | 5059       |
+| Properties.ToleranceSphere                | 18955      | 13871      |
+| Boolean.CreatePropertiesSlow              | 2087       | 1861       |
+| Samples.Bracelet                          | 936        | 1167       |
+| Samples.Sponge4                           | 39666      | 43165      |
+| Samples.CondensedMatter16                 | 4381       | 8044       |
+| Samples.CondensedMatter64                 | 71959      | 124466     |
+| BooleanComplex.Close                      | 2715       | 3294       |
+| BooleanComplex.GenericTwinBooleanTest7081 | 25007      | 32707      |
+| Polygon.Zebra                             | 1592       | 1797       |
+| Polygon.Zebra3                            | 1686       | 1889       |
+| **Total**                                 | **176846** | **239990** |
