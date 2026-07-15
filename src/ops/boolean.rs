@@ -1,9 +1,9 @@
 use crate::ops::boolean::intersect::Intersections;
 use crate::postprocessing as pp;
 use crate::spatial::aabb::{Box3D, Overlap};
+use crate::util::hash_table::DeterministicMap;
 use crate::util::vec_ext;
 use crate::{MeshBool, Precision, Properties};
-use std::collections::BTreeMap;
 use std::ptr;
 
 #[cfg(feature = "test_thoroughly")]
@@ -227,7 +227,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		v12_r
 	};
 
-	//let n12 = num_vert_r - n_pv - n_qv; //new verts from edgesP -> facesQ
+	let n12 = num_vert_r - n_pv - n_qv; //new verts from edgesP -> facesQ
 
 	let v21_r = if xv21.v12.len() == 0 {
 		Vec::new()
@@ -237,7 +237,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		v21_r
 	};
 
-	//let n21 = num_vert_r - n_pv - n_qv - n12; //new verts from facesP -> edgesQ
+	let n21 = num_vert_r - n_pv - n_qv - n12; //new verts from facesP -> edgesQ
 
 	if num_vert_r == 0 {
 		return decimated();
@@ -293,10 +293,10 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 
 	// This key is the forward halfedge index of P or Q. Only includes intersected
 	// edges.
-	let mut edges_p: BTreeMap<i32, Vec<construct::EdgePos>> = BTreeMap::new();
-	let mut edges_q: BTreeMap<i32, Vec<construct::EdgePos>> = BTreeMap::new();
+	let mut edges_p = DeterministicMap::new();
+	let mut edges_q = DeterministicMap::with_capacity(xv21.p1q2.len() / 2);
 	// This key is the face index of <P, Q>
-	let mut edges_r: BTreeMap<(i32, i32), Vec<construct::EdgePos>> = BTreeMap::new();
+	let mut edges_r = DeterministicMap::with_capacity((n12 + n21) as usize);
 
 	construct::add_new_edge_verts(
 		&mut edges_p,

@@ -26,9 +26,24 @@ impl<K, V> Default for DeterministicMap<K, V> {
 	}
 }
 
+impl<K, V> IntoIterator for DeterministicMap<K, V> {
+	type Item = <HashMap<K, V> as IntoIterator>::Item;
+	type IntoIter = <HashMap<K, V> as IntoIterator>::IntoIter;
+	fn into_iter(self) -> Self::IntoIter {
+		self.0.into_iter()
+	}
+}
+
 impl<K, V> DeterministicMap<K, V> {
 	pub fn new() -> Self {
 		Self(HashMap::with_hasher(BuildHasherDefault::default()))
+	}
+
+	pub fn with_capacity(capacity: usize) -> Self {
+		Self(HashMap::with_capacity_and_hasher(
+			capacity,
+			BuildHasherDefault::default(),
+		))
 	}
 }
 
@@ -74,9 +89,5 @@ impl<K> IntoIterator for DeterministicSet<K> {
 impl<K> DeterministicSet<K> {
 	pub fn new() -> Self {
 		Self(HashSet::with_hasher(BuildHasherDefault::default()))
-	}
-
-	pub fn into_iter(self) -> impl Iterator<Item = K> {
-		self.0.into_iter()
 	}
 }

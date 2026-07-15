@@ -1,0 +1,1274 @@
+-- GTest not found, downloading from source
+-- Rust Toolchain: stable-x86_64-unknown-linux-gnu
+-- Rust Target: x86_64-unknown-linux-gnu
+-- ====================================
+-- Manifold Build Configuration Summary
+-- ====================================
+--  
+-- Environment: Linux
+--  
+-- CMAKE_VERSION:                 4.2.3
+-- CMAKE_TOOLCHAIN_FILE:          
+-- CMAKE_GENERATOR:               Unix Makefiles
+-- CPACK_CMAKE_GENERATOR:         
+-- CMAKE_BUILD_TYPE:              Release
+-- CMAKE_PREFIX_PATH:             
+-- CMAKE_CXX_COMPILER_ID:         GNU
+-- CMAKE_CXX_COMPILER_VERSION:    15.2.0
+-- BUILD_SHARED_LIBS:             ON
+--  
+-- MANIFOLD_VERSION:              3.5.1
+-- MANIFOLD_PAR:                  OFF
+-- MANIFOLD_TEST:                 ON
+-- MANIFOLD_DEBUG:                ON
+-- MANIFOLD_ASSERT:               ON
+-- MANIFOLD_CBIND:                ON
+-- MANIFOLD_PYBIND:               OFF
+-- MANIFOLD_JSBIND:               OFF
+-- MANIFOLD_FLAGS:                -Wall;-Wno-unknown-warning-option;-Wno-unused;-Wno-shorten-64-to-32;-Wno-sign-compare;-Wno-alloc-size-larger-than;-O3;-ffp-contract=off;-fexcess-precision=standard
+-- MANIFOLD_COMPILE_OPTIONS:      MANIFOLD_COMPILE_OPTIONS-NOTFOUND
+-- MANIFOLD_LINK_OPTIONS:         
+-- MANIFOLD_DOWNLOADS:            ON
+-- MANIFOLD_USE_BUILTIN_TBB:      OFF
+-- MANIFOLD_USE_BUILTIN_NANOBIND: OFF
+-- MANIFOLD_FUZZ:                 OFF
+-- TRACY_ENABLE:                  OFF
+-- TRACY_MEMORY_USAGE:            OFF
+-- ASSIMP_ENABLE:                 OFF
+--  
+-- Configuring done (0.9s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/fonsi/meshbool/test/manifold/build
+/usr/bin/cmake -S/home/fonsi/meshbool/test/manifold -B/home/fonsi/meshbool/test/manifold/build --check-build-system CMakeFiles/Makefile.cmake 0
+make  -f CMakeFiles/Makefile2 manifold_test
+make[1]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+/usr/bin/cmake -S/home/fonsi/meshbool/test/manifold -B/home/fonsi/meshbool/test/manifold/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/fonsi/meshbool/test/manifold/build/CMakeFiles 51
+make  -f CMakeFiles/Makefile2 test/CMakeFiles/manifold_test.dir/all
+make[2]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f src/CMakeFiles/cargo-prebuild_meshbool.dir/build.make src/CMakeFiles/cargo-prebuild_meshbool.dir/depend
+make  -f _deps/googletest-build/googletest/CMakeFiles/gtest.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest.dir/depend
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/src /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/src /home/fonsi/meshbool/test/manifold/build/src/CMakeFiles/cargo-prebuild_meshbool.dir/DependInfo.cmake "--color=" cargo-prebuild_meshbool
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/build/_deps/googletest-src/googletest /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/_deps/googletest-build/googletest /home/fonsi/meshbool/test/manifold/build/_deps/googletest-build/googletest/CMakeFiles/gtest.dir/DependInfo.cmake "--color=" gtest
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f src/CMakeFiles/cargo-prebuild_meshbool.dir/build.make src/CMakeFiles/cargo-prebuild_meshbool.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+make[3]: Nothing to be done for 'src/CMakeFiles/cargo-prebuild_meshbool.dir/build'.
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f _deps/googletest-build/googletest/CMakeFiles/gtest.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+make[3]: Nothing to be done for '_deps/googletest-build/googletest/CMakeFiles/gtest.dir/build'.
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[  0%] Built target cargo-prebuild_meshbool
+make  -f src/CMakeFiles/_cargo-build_meshbool.dir/build.make src/CMakeFiles/_cargo-build_meshbool.dir/depend
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/src /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/src /home/fonsi/meshbool/test/manifold/build/src/CMakeFiles/_cargo-build_meshbool.dir/DependInfo.cmake "--color=" _cargo-build_meshbool
+[  3%] Built target gtest
+make  -f _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/depend
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/build/_deps/googletest-src/googletest /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/_deps/googletest-build/googletest /home/fonsi/meshbool/test/manifold/build/_deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/DependInfo.cmake "--color=" gtest_main
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f src/CMakeFiles/_cargo-build_meshbool.dir/build.make src/CMakeFiles/_cargo-build_meshbool.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool && /usr/bin/cmake -E env "RUSTFLAGS=-C debug-assertions=yes" CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/usr/bin/cc CC_x86_64-unknown-linux-gnu=/usr/bin/cc CXX_x86_64-unknown-linux-gnu=/usr/bin/c++ AR_x86_64-unknown-linux-gnu=/usr/bin/ar CORROSION_BUILD_DIR=/home/fonsi/meshbool/test/manifold/build/src CARGO_BUILD_RUSTC=/home/fonsi/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rustc /home/fonsi/.rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/cargo rustc --lib --target=x86_64-unknown-linux-gnu --features=test_thoroughly --package meshbool --crate-type=staticlib --manifest-path /home/fonsi/meshbool/Cargo.toml --target-dir /home/fonsi/meshbool/test/manifold/build/cargo/.._41f71 --release -- -Cdefault-linker-libraries=yes
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/build.make _deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+make[3]: Nothing to be done for '_deps/googletest-build/googletest/CMakeFiles/gtest_main.dir/build'.
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[  7%] Built target gtest_main
+   Compiling meshbool v3.5.1 (/home/fonsi/meshbool)
+    Finished `release` profile [optimized] target(s) in 12.13s
+Copying byproducts `libmeshbool.a` to /home/fonsi/meshbool/test/manifold/build/src
+cd /home/fonsi/meshbool/test/manifold/build/src && /usr/bin/cmake -E make_directory /home/fonsi/meshbool/test/manifold/build/src
+cd /home/fonsi/meshbool/test/manifold/build/src && /usr/bin/cmake -E copy_if_different /home/fonsi/meshbool/test/manifold/build/cargo/.._41f71/x86_64-unknown-linux-gnu/release/libmeshbool.a /home/fonsi/meshbool/test/manifold/build/src
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[  7%] Built target _cargo-build_meshbool
+make  -f src/CMakeFiles/cargo-build_meshbool.dir/build.make src/CMakeFiles/cargo-build_meshbool.dir/depend
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/src /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/src /home/fonsi/meshbool/test/manifold/build/src/CMakeFiles/cargo-build_meshbool.dir/DependInfo.cmake "--color=" cargo-build_meshbool
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f src/CMakeFiles/cargo-build_meshbool.dir/build.make src/CMakeFiles/cargo-build_meshbool.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+make[3]: Nothing to be done for 'src/CMakeFiles/cargo-build_meshbool.dir/build'.
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[  7%] Built target cargo-build_meshbool
+make  -f src/CMakeFiles/manifold_test_helpers.dir/build.make src/CMakeFiles/manifold_test_helpers.dir/depend
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/src /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/src /home/fonsi/meshbool/test/manifold/build/src/CMakeFiles/manifold_test_helpers.dir/DependInfo.cmake "--color=" manifold_test_helpers
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f src/CMakeFiles/manifold_test_helpers.dir/build.make src/CMakeFiles/manifold_test_helpers.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+[  9%] Linking CXX shared library libmanifold_test_helpers.so
+cd /home/fonsi/meshbool/test/manifold/build/src && /usr/bin/cmake -E cmake_link_script CMakeFiles/manifold_test_helpers.dir/link.txt --verbose=1
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -shared -Wl,--dependency-file=CMakeFiles/manifold_test_helpers.dir/link.d -Wl,-soname,libmanifold_test_helpers.so -o libmanifold_test_helpers.so CMakeFiles/manifold_test_helpers.dir/cross_section/cross_section.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/boolean2.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/bvh.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/canonicalize.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/containment.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/diagnostics.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/driver.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/edge_vert_lists.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/intersections.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/offset.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/predicates.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/vertex_merge.cpp.o CMakeFiles/manifold_test_helpers.dir/cross_section/boolean2/winding_filter.cpp.o CMakeFiles/manifold_test_helpers.dir/impl.cpp.o CMakeFiles/manifold_test_helpers.dir/home/fonsi/meshbool/test/generated/test.cpp.o  libmeshbool.a -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[ 39%] Built target manifold_test_helpers
+make  -f samples/CMakeFiles/samples.dir/build.make samples/CMakeFiles/samples.dir/depend
+make  -f bindings/c/CMakeFiles/manifoldc.dir/build.make bindings/c/CMakeFiles/manifoldc.dir/depend
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/samples /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/samples /home/fonsi/meshbool/test/manifold/build/samples/CMakeFiles/samples.dir/DependInfo.cmake "--color=" samples
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/bindings/c /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/bindings/c /home/fonsi/meshbool/test/manifold/build/bindings/c/CMakeFiles/manifoldc.dir/DependInfo.cmake "--color=" manifoldc
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f bindings/c/CMakeFiles/manifoldc.dir/build.make bindings/c/CMakeFiles/manifoldc.dir/build
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f samples/CMakeFiles/samples.dir/build.make samples/CMakeFiles/samples.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+[ 41%] Linking CXX shared library libmanifoldc.so
+[ 43%] Linking CXX shared library libsamples.so
+cd /home/fonsi/meshbool/test/manifold/build/bindings/c && /usr/bin/cmake -E cmake_link_script CMakeFiles/manifoldc.dir/link.txt --verbose=1
+cd /home/fonsi/meshbool/test/manifold/build/samples && /usr/bin/cmake -E cmake_link_script CMakeFiles/samples.dir/link.txt --verbose=1
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -shared -Wl,--dependency-file=CMakeFiles/manifoldc.dir/link.d -Wl,-soname,libmanifoldc.so.3 -o libmanifoldc.so.3.5.1 CMakeFiles/manifoldc.dir/manifoldc.cpp.o CMakeFiles/manifoldc.dir/conv.cpp.o CMakeFiles/manifoldc.dir/box.cpp.o CMakeFiles/manifoldc.dir/cross.cpp.o CMakeFiles/manifoldc.dir/rect.cpp.o CMakeFiles/manifoldc.dir/home/fonsi/meshbool/test/generated/test.cpp.o  -Wl,-rpath,/home/fonsi/meshbool/test/manifold/build/src: ../../src/libmanifold_test_helpers.so ../../src/libmeshbool.a -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+/usr/bin/c++ -fPIC -O3 -DNDEBUG -shared -Wl,--dependency-file=CMakeFiles/samples.dir/link.d -Wl,-soname,libsamples.so.3 -o libsamples.so.3.5.1 CMakeFiles/samples.dir/src/menger_sponge.cpp.o CMakeFiles/samples.dir/src/rounded_frame.cpp.o CMakeFiles/samples.dir/src/scallop.cpp.o CMakeFiles/samples.dir/src/tet_puzzle.cpp.o CMakeFiles/samples.dir/src/gyroid_module.cpp.o CMakeFiles/samples.dir/src/condensed_matter.cpp.o CMakeFiles/samples.dir/src/bracelet.cpp.o CMakeFiles/samples.dir/src/knot.cpp.o CMakeFiles/samples.dir/home/fonsi/meshbool/test/generated/test.cpp.o  -Wl,-rpath,/home/fonsi/meshbool/test/manifold/build/src ../src/libmanifold_test_helpers.so ../src/libmeshbool.a -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+cd /home/fonsi/meshbool/test/manifold/build/bindings/c && /usr/bin/cmake -E cmake_symlink_library libmanifoldc.so.3.5.1 libmanifoldc.so.3 libmanifoldc.so
+cd /home/fonsi/meshbool/test/manifold/build/samples && /usr/bin/cmake -E cmake_symlink_library libsamples.so.3.5.1 libsamples.so.3 libsamples.so
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[ 54%] Built target manifoldc
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[ 72%] Built target samples
+make  -f test/CMakeFiles/manifold_test.dir/build.make test/CMakeFiles/manifold_test.dir/depend
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+cd /home/fonsi/meshbool/test/manifold/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/fonsi/meshbool/test/manifold /home/fonsi/meshbool/test/manifold/test /home/fonsi/meshbool/test/manifold/build /home/fonsi/meshbool/test/manifold/build/test /home/fonsi/meshbool/test/manifold/build/test/CMakeFiles/manifold_test.dir/DependInfo.cmake "--color=" manifold_test
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+make  -f test/CMakeFiles/manifold_test.dir/build.make test/CMakeFiles/manifold_test.dir/build
+make[3]: Entering directory '/home/fonsi/meshbool/test/manifold/build'
+[ 74%] Linking CXX executable manifold_test
+cd /home/fonsi/meshbool/test/manifold/build/test && /usr/bin/cmake -E cmake_link_script CMakeFiles/manifold_test.dir/link.txt --verbose=1
+/usr/bin/c++ -O3 -DNDEBUG -Wl,--dependency-file=CMakeFiles/manifold_test.dir/link.d CMakeFiles/manifold_test.dir/test_main.cpp.o CMakeFiles/manifold_test.dir/polygon_test.cpp.o CMakeFiles/manifold_test.dir/properties_test.cpp.o CMakeFiles/manifold_test.dir/manifold_test.cpp.o CMakeFiles/manifold_test.dir/measurement_test.cpp.o CMakeFiles/manifold_test.dir/boolean_test.cpp.o CMakeFiles/manifold_test.dir/samples_test.cpp.o CMakeFiles/manifold_test.dir/boolean_complex_test.cpp.o CMakeFiles/manifold_test.dir/cross_section_test.cpp.o CMakeFiles/manifold_test.dir/manifoldc_test.cpp.o CMakeFiles/manifold_test.dir/home/fonsi/meshbool/test/generated/test.cpp.o CMakeFiles/manifold_test.dir/__/samples/src/bracelet.cpp.o CMakeFiles/manifold_test.dir/__/samples/src/knot.cpp.o -o manifold_test  -Wl,-rpath,/home/fonsi/meshbool/test/manifold/build/samples:/home/fonsi/meshbool/test/manifold/build/bindings/c:/home/fonsi/meshbool/test/manifold/build/src ../lib/libgtest_main.a ../samples/libsamples.so.3.5.1 ../bindings/c/libmanifoldc.so.3.5.1 ../lib/libgtest.a ../src/libmanifold_test_helpers.so ../src/libmeshbool.a -lgcc_s -lutil -lrt -lpthread -lm -ldl -lc
+cd /home/fonsi/meshbool/test/manifold/build/test && /usr/bin/cmake -D TEST_TARGET=manifold_test -D TEST_EXECUTABLE=/home/fonsi/meshbool/test/manifold/build/test/manifold_test -D TEST_EXECUTOR= -D TEST_WORKING_DIR=/home/fonsi/meshbool/test/manifold/build/test -D TEST_EXTRA_ARGS= -D TEST_PROPERTIES= -D TEST_PREFIX= -D TEST_SUFFIX= -D TEST_FILTER= -D NO_PRETTY_TYPES=FALSE -D NO_PRETTY_VALUES=FALSE -D TEST_LIST=manifold_test_TESTS -D CTEST_FILE=/home/fonsi/meshbool/test/manifold/build/test/manifold_test[1]_tests.cmake -D TEST_DISCOVERY_TIMEOUT=5 -D TEST_DISCOVERY_EXTRA_ARGS= -D TEST_XML_OUTPUT_DIR= -P /usr/share/cmake-4.2/Modules/GoogleTestAddTests.cmake
+make[3]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[100%] Built target manifold_test
+make[2]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+/usr/bin/cmake -E cmake_progress_start /home/fonsi/meshbool/test/manifold/build/CMakeFiles 0
+make[1]: Leaving directory '/home/fonsi/meshbool/test/manifold/build'
+[==========] Running 330 tests from 8 test suites.
+[----------] Global test environment set-up.
+[----------] 23 tests from Properties
+[ RUN      ] Properties.MinGapCubeCube
+[       OK ] Properties.MinGapCubeCube (0 ms)
+[ RUN      ] Properties.MinGapCubeCube2
+[       OK ] Properties.MinGapCubeCube2 (0 ms)
+[ RUN      ] Properties.MinGapCubeSphereOverlapping
+[       OK ] Properties.MinGapCubeSphereOverlapping (0 ms)
+[ RUN      ] Properties.MinGapSphereSphere
+[       OK ] Properties.MinGapSphereSphere (0 ms)
+[ RUN      ] Properties.MinGapSphereSphereOutOfBounds
+[       OK ] Properties.MinGapSphereSphereOutOfBounds (0 ms)
+[ RUN      ] Properties.MinGapClosestPointOnEdge
+[       OK ] Properties.MinGapClosestPointOnEdge (0 ms)
+[ RUN      ] Properties.MinGapClosestPointOnTriangleFace
+[       OK ] Properties.MinGapClosestPointOnTriangleFace (0 ms)
+[ RUN      ] Properties.MingapAfterTransformations
+[       OK ] Properties.MingapAfterTransformations (2843 ms)
+[ RUN      ] Properties.MingapStretchyBracelet
+[       OK ] Properties.MingapStretchyBracelet (5613 ms)
+[ RUN      ] Properties.MinGapAfterTransformationsOutOfBounds
+[       OK ] Properties.MinGapAfterTransformationsOutOfBounds (400 ms)
+[ RUN      ] Properties.TriangleDistanceClosestPointsOnVertices
+[       OK ] Properties.TriangleDistanceClosestPointsOnVertices (0 ms)
+[ RUN      ] Properties.TriangleDistanceClosestPointOnEdge
+[       OK ] Properties.TriangleDistanceClosestPointOnEdge (0 ms)
+[ RUN      ] Properties.TriangleDistanceClosestPointOnEdge2
+[       OK ] Properties.TriangleDistanceClosestPointOnEdge2 (0 ms)
+[ RUN      ] Properties.TriangleDistanceClosestPointOnFace
+[       OK ] Properties.TriangleDistanceClosestPointOnFace (0 ms)
+[ RUN      ] Properties.TriangleDistanceOverlapping
+[       OK ] Properties.TriangleDistanceOverlapping (0 ms)
+[ RUN      ] Properties.Measurements
+[       OK ] Properties.Measurements (0 ms)
+[ RUN      ] Properties.Epsilon
+[       OK ] Properties.Epsilon (0 ms)
+[ RUN      ] Properties.Epsilon2
+[       OK ] Properties.Epsilon2 (0 ms)
+[ RUN      ] Properties.Tolerance
+[       OK ] Properties.Tolerance (0 ms)
+[ RUN      ] Properties.ToleranceSphere
+[       OK ] Properties.ToleranceSphere (19429 ms)
+[ RUN      ] Properties.CalculateCurvature
+[       OK ] Properties.CalculateCurvature (16 ms)
+[ RUN      ] Properties.CalculateNormals
+[       OK ] Properties.CalculateNormals (4 ms)
+[ RUN      ] Properties.Coplanar
+[       OK ] Properties.Coplanar (0 ms)
+[----------] 23 tests from Properties (28310 ms total)
+
+[----------] 82 tests from Manifold
+[ RUN      ] Manifold.GetMeshGL
+[       OK ] Manifold.GetMeshGL (0 ms)
+[ RUN      ] Manifold.MeshDeterminism
+/home/fonsi/meshbool/test/manifold/test/manifold_test.cpp:123: Failure
+Value of: flag
+  Actual: false
+Expected: true
+
+[  FAILED  ] Manifold.MeshDeterminism (0 ms)
+[ RUN      ] Manifold.Empty
+[       OK ] Manifold.Empty (0 ms)
+[ RUN      ] Manifold.ValidInput
+[       OK ] Manifold.ValidInput (0 ms)
+[ RUN      ] Manifold.ValidInputOneRunIndex
+[       OK ] Manifold.ValidInputOneRunIndex (0 ms)
+[ RUN      ] Manifold.InvalidInput1
+[       OK ] Manifold.InvalidInput1 (0 ms)
+[ RUN      ] Manifold.InvalidInput2
+[       OK ] Manifold.InvalidInput2 (0 ms)
+[ RUN      ] Manifold.InvalidInput3
+[       OK ] Manifold.InvalidInput3 (0 ms)
+[ RUN      ] Manifold.InvalidInput4
+[       OK ] Manifold.InvalidInput4 (0 ms)
+[ RUN      ] Manifold.InvalidInput5
+[       OK ] Manifold.InvalidInput5 (0 ms)
+[ RUN      ] Manifold.InvalidInput6
+[       OK ] Manifold.InvalidInput6 (0 ms)
+[ RUN      ] Manifold.InvalidInput7
+[       OK ] Manifold.InvalidInput7 (0 ms)
+[ RUN      ] Manifold.NormalsCavity
+[       OK ] Manifold.NormalsCavity (2 ms)
+[ RUN      ] Manifold.NormalsRotateBeforeCalc
+[       OK ] Manifold.NormalsRotateBeforeCalc (0 ms)
+[ RUN      ] Manifold.NormalsRotateAfterCalc
+[       OK ] Manifold.NormalsRotateAfterCalc (0 ms)
+[ RUN      ] Manifold.NormalsAutoSubstitute
+[       OK ] Manifold.NormalsAutoSubstitute (0 ms)
+[ RUN      ] Manifold.NormalsRoundTrip
+[       OK ] Manifold.NormalsRoundTrip (4 ms)
+[ RUN      ] Manifold.NormalsRefinePreserved
+Manifold::Refine(): STUB, not implemented in Rust
+[       OK ] Manifold.NormalsRefinePreserved (0 ms)
+[ RUN      ] Manifold.NormalsSmoothByNormalsNoArg
+Manifold::SmoothByNormals(): STUB, not implemented in Rust
+[       OK ] Manifold.NormalsSmoothByNormalsNoArg (0 ms)
+[ RUN      ] Manifold.NormalsNonStandardSlotNotRecorded
+[       OK ] Manifold.NormalsNonStandardSlotNotRecorded (1 ms)
+[ RUN      ] Manifold.NormalsSharedPropVertMixedFlagsUndefined
+[       OK ] Manifold.NormalsSharedPropVertMixedFlagsUndefined (0 ms)
+[ RUN      ] Manifold.GetNormalLegacyContract
+Manifold::SmoothByNormals(): STUB, not implemented in Rust
+Manifold::Refine(): STUB, not implemented in Rust
+Manifold::SmoothByNormals(): STUB, not implemented in Rust
+Manifold::Refine(): STUB, not implemented in Rust
+[       OK ] Manifold.GetNormalLegacyContract (0 ms)
+[ RUN      ] Manifold.TransformMixedNormalsPerMeshID
+[       OK ] Manifold.TransformMixedNormalsPerMeshID (1 ms)
+[ RUN      ] Manifold.ComposeMixedNormalsPerMeshID
+[       OK ] Manifold.ComposeMixedNormalsPerMeshID (3 ms)
+[ RUN      ] Manifold.BooleanSubtractMixedQPerMeshIDNegation
+[       OK ] Manifold.BooleanSubtractMixedQPerMeshIDNegation (2 ms)
+[ RUN      ] Manifold.CalculateNormalsNonZeroIdxSurvivesTransform
+[       OK ] Manifold.CalculateNormalsNonZeroIdxSurvivesTransform (0 ms)
+[ RUN      ] Manifold.ObjRoundTrip
+[       OK ] Manifold.ObjRoundTrip (0 ms)
+[ RUN      ] Manifold.OppositeFace
+[       OK ] Manifold.OppositeFace (0 ms)
+[ RUN      ] Manifold.Decompose
+[       OK ] Manifold.Decompose (0 ms)
+[ RUN      ] Manifold.DecomposeProps
+[       OK ] Manifold.DecomposeProps (0 ms)
+[ RUN      ] Manifold.Sphere
+[       OK ] Manifold.Sphere (5 ms)
+[ RUN      ] Manifold.Cylinder
+[       OK ] Manifold.Cylinder (58 ms)
+[ RUN      ] Manifold.CylinderZeroRadiusLow
+[       OK ] Manifold.CylinderZeroRadiusLow (12 ms)
+[ RUN      ] Manifold.Extrude
+[       OK ] Manifold.Extrude (0 ms)
+[ RUN      ] Manifold.ExtrudeCone
+[       OK ] Manifold.ExtrudeCone (0 ms)
+[ RUN      ] Manifold.Revolve
+[       OK ] Manifold.Revolve (1 ms)
+[ RUN      ] Manifold.Revolve2
+[       OK ] Manifold.Revolve2 (0 ms)
+[ RUN      ] Manifold.Revolve3
+[       OK ] Manifold.Revolve3 (0 ms)
+[ RUN      ] Manifold.RevolveClip
+[       OK ] Manifold.RevolveClip (0 ms)
+[ RUN      ] Manifold.PartialRevolveOnYAxis
+[       OK ] Manifold.PartialRevolveOnYAxis (1 ms)
+[ RUN      ] Manifold.PartialRevolveOffset
+[       OK ] Manifold.PartialRevolveOffset (1 ms)
+[ RUN      ] Manifold.Warp
+[       OK ] Manifold.Warp (0 ms)
+[ RUN      ] Manifold.Warp2
+[       OK ] Manifold.Warp2 (1 ms)
+[ RUN      ] Manifold.WarpBatch
+[       OK ] Manifold.WarpBatch (0 ms)
+[ RUN      ] Manifold.Project
+[       OK ] Manifold.Project (0 ms)
+[ RUN      ] Manifold.Transform
+[       OK ] Manifold.Transform (0 ms)
+[ RUN      ] Manifold.Slice
+[       OK ] Manifold.Slice (0 ms)
+[ RUN      ] Manifold.SliceEmptyObject
+[       OK ] Manifold.SliceEmptyObject (0 ms)
+[ RUN      ] Manifold.Simplify
+[       OK ] Manifold.Simplify (9 ms)
+[ RUN      ] Manifold.MeshID
+[       OK ] Manifold.MeshID (0 ms)
+[ RUN      ] Manifold.MeshRelation
+Manifold::LevelSet(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:334: Failure
+Value of: out.IsEmpty()
+  Actual: true
+Expected: false
+
+[  FAILED  ] Manifold.MeshRelation (0 ms)
+[ RUN      ] Manifold.MeshRelationTransform
+[       OK ] Manifold.MeshRelationTransform (0 ms)
+[ RUN      ] Manifold.MeshRelationRefine
+Manifold::RefineToLength(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:462: Failure
+Expected equality of these values:
+  manifolds[i].NumVert()
+    Which is: 7
+  meshSize[i].numVert
+    Which is: 9019
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:463: Failure
+Expected equality of these values:
+  manifolds[i].NumTri()
+    Which is: 14
+  meshSize[i].numTri
+    Which is: 18038
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:465: Failure
+Expected equality of these values:
+  manifolds[i].NumPropVert()
+    Which is: 7
+  meshSize[i].numPropVert
+    Which is: 9019
+
+[  FAILED  ] Manifold.MeshRelationRefine (0 ms)
+[ RUN      ] Manifold.MeshRelationRefinePrecision
+Manifold::Smooth(MeshGL): STUB, not implemented in Rust
+Manifold::RefineToTolerance(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:452: Failure
+Value of: manifold.IsEmpty()
+  Actual: true
+Expected: false
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:455: Failure
+Expected equality of these values:
+  manifolds.size()
+    Which is: 0
+  meshSize.size()
+    Which is: 1
+
+/home/fonsi/meshbool/test/manifold/test/manifold_test.cpp:1113: Failure
+Expected equality of these values:
+  runOriginalID.size()
+    Which is: 0
+  1
+
+[  FAILED  ] Manifold.MeshRelationRefinePrecision (0 ms)
+[ RUN      ] Manifold.MeshGLRoundTrip
+[       OK ] Manifold.MeshGLRoundTrip (0 ms)
+[ RUN      ] Manifold.Merge
+[       OK ] Manifold.Merge (0 ms)
+[ RUN      ] Manifold.MergeEmpty
+[       OK ] Manifold.MergeEmpty (0 ms)
+[ RUN      ] Manifold.PinchedVert
+[       OK ] Manifold.PinchedVert (0 ms)
+[ RUN      ] Manifold.FaceIDRoundTrip
+[       OK ] Manifold.FaceIDRoundTrip (0 ms)
+[ RUN      ] Manifold.MirrorUnion
+[       OK ] Manifold.MirrorUnion (0 ms)
+[ RUN      ] Manifold.MirrorUnion2
+[       OK ] Manifold.MirrorUnion2 (0 ms)
+[ RUN      ] Manifold.Invalid
+[       OK ] Manifold.Invalid (0 ms)
+[ RUN      ] Manifold.MergeDegenerates
+[       OK ] Manifold.MergeDegenerates (0 ms)
+[ RUN      ] Manifold.MergeRefine
+Manifold::RefineToLength(): STUB, not implemented in Rust
+[       OK ] Manifold.MergeRefine (0 ms)
+[ RUN      ] Manifold.OpenscadCrash
+[       OK ] Manifold.OpenscadCrash (121 ms)
+[ RUN      ] Manifold.RayCastHitCube
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:33: Failure
+Expected equality of these values:
+  hits.size()
+    Which is: 0
+  2
+
+[  FAILED  ] Manifold.RayCastHitCube (0 ms)
+[ RUN      ] Manifold.RayCastMiss
+Manifold::RayCast(): STUB, not implemented in Rust
+[       OK ] Manifold.RayCastMiss (0 ms)
+[ RUN      ] Manifold.RayCastDiagonal
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:52: Failure
+Expected equality of these values:
+  hits.size()
+    Which is: 0
+  2
+
+[  FAILED  ] Manifold.RayCastDiagonal (0 ms)
+[ RUN      ] Manifold.RayCastBehindOrigin
+Manifold::RayCast(): STUB, not implemented in Rust
+[       OK ] Manifold.RayCastBehindOrigin (0 ms)
+[ RUN      ] Manifold.RayCastSphere
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:65: Failure
+Expected equality of these values:
+  hits.size()
+    Which is: 0
+  2
+
+[  FAILED  ] Manifold.RayCastSphere (11 ms)
+[ RUN      ] Manifold.RayCastTwoCubes
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:77: Failure
+Expected equality of these values:
+  hits.size()
+    Which is: 0
+  4
+
+[  FAILED  ] Manifold.RayCastTwoCubes (0 ms)
+[ RUN      ] Manifold.RayCastEmpty
+Manifold::RayCast(): STUB, not implemented in Rust
+[       OK ] Manifold.RayCastEmpty (0 ms)
+[ RUN      ] Manifold.RayCastAlongX
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:93: Failure
+Expected equality of these values:
+  hits.size()
+    Which is: 0
+  2
+
+[  FAILED  ] Manifold.RayCastAlongX (0 ms)
+[ RUN      ] Manifold.RayCastAlongY
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:101: Failure
+Expected equality of these values:
+  hits.size()
+    Which is: 0
+  2
+
+[  FAILED  ] Manifold.RayCastAlongY (0 ms)
+[ RUN      ] Manifold.RayCastZeroLength
+Manifold::RayCast(): STUB, not implemented in Rust
+[       OK ] Manifold.RayCastZeroLength (0 ms)
+[ RUN      ] Manifold.RayCastWatertightVertex
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:116: Failure
+Expected equality of these values:
+  hits.size()
+    Which is: 0
+  2
+
+[  FAILED  ] Manifold.RayCastWatertightVertex (0 ms)
+[ RUN      ] Manifold.RayCastSilhouetteEdge
+Manifold::RayCast(): STUB, not implemented in Rust
+[       OK ] Manifold.RayCastSilhouetteEdge (0 ms)
+[ RUN      ] Manifold.WindingTallBox
+Manifold::WindingNumber(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:281: Failure
+Expected equality of these values:
+  w[0]
+    Which is: 0
+  1
+
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:282: Failure
+Expected equality of these values:
+  w[1]
+    Which is: 0
+  1
+
+[  FAILED  ] Manifold.WindingTallBox (0 ms)
+[ RUN      ] Manifold.WindingEmpty
+Manifold::WindingNumber(): STUB, not implemented in Rust
+[       OK ] Manifold.WindingEmpty (0 ms)
+[ RUN      ] Manifold.WindingWatertight
+Manifold::WindingNumber(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:301: Failure
+Expected equality of these values:
+  w[2]
+    Which is: 0
+  1
+
+[  FAILED  ] Manifold.WindingWatertight (0 ms)
+[ RUN      ] Manifold.WindingHollowShell
+Manifold::WindingNumber(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/measurement_test.cpp:310: Failure
+Expected equality of these values:
+  w[1]
+    Which is: 0
+  1
+
+[  FAILED  ] Manifold.WindingHollowShell (2 ms)
+[ RUN      ] Manifold.WindingMatchesRayCastParity
+Manifold::WindingNumber(): STUB, not implemented in Rust
+Manifold::RayCast(): STUB, not implemented in Rust
+Manifold::RayCast(): STUB, not implemented in Rust
+Manifold::RayCast(): STUB, not implemented in Rust
+Manifold::RayCast(): STUB, not implemented in Rust
+Manifold::RayCast(): STUB, not implemented in Rust
+Manifold::RayCast(): STUB, not implemented in Rust
+[       OK ] Manifold.WindingMatchesRayCastParity (0 ms)
+[----------] 82 tests from Manifold (253 ms total)
+
+[----------] 51 tests from Boolean
+[ RUN      ] Boolean.Tetra
+[       OK ] Boolean.Tetra (0 ms)
+[ RUN      ] Boolean.MeshGLRoundTrip
+[       OK ] Boolean.MeshGLRoundTrip (0 ms)
+[ RUN      ] Boolean.Normals
+[       OK ] Boolean.Normals (12 ms)
+[ RUN      ] Boolean.MissingNormals
+[       OK ] Boolean.MissingNormals (0 ms)
+[ RUN      ] Boolean.EmptyOriginal
+[       OK ] Boolean.EmptyOriginal (0 ms)
+[ RUN      ] Boolean.Mirrored
+[       OK ] Boolean.Mirrored (0 ms)
+[ RUN      ] Boolean.Cubes
+[       OK ] Boolean.Cubes (0 ms)
+[ RUN      ] Boolean.DeterminismSimpleSubtract
+[       OK ] Boolean.DeterminismSimpleSubtract (0 ms)
+[ RUN      ] Boolean.DeterminismSimpleUnion
+[       OK ] Boolean.DeterminismSimpleUnion (0 ms)
+[ RUN      ] Boolean.DeterminismSimpleIntersect
+[       OK ] Boolean.DeterminismSimpleIntersect (0 ms)
+[ RUN      ] Boolean.Simplify
+Manifold::Refine(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:222: Failure
+Expected equality of these values:
+  result.NumTri()
+    Which is: 20
+  nExpected
+    Which is: 2000
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:224: Failure
+Expected equality of these values:
+  result.NumTri()
+    Which is: 20
+  nExpected
+    Which is: 2000
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:229: Failure
+Expected equality of these values:
+  result2.NumTri()
+    Which is: 20
+  nExpected
+    Which is: 2000
+
+[  FAILED  ] Boolean.Simplify (0 ms)
+[ RUN      ] Boolean.SimplifyCracks
+Manifold::RefineToLength(): STUB, not implemented in Rust
+[       OK ] Boolean.SimplifyCracks (8 ms)
+[ RUN      ] Boolean.NoRetainedVerts
+[       OK ] Boolean.NoRetainedVerts (0 ms)
+[ RUN      ] Boolean.PropertiesNoIntersection
+[       OK ] Boolean.PropertiesNoIntersection (0 ms)
+[ RUN      ] Boolean.MixedProperties
+[       OK ] Boolean.MixedProperties (0 ms)
+[ RUN      ] Boolean.MixedNumProp
+[       OK ] Boolean.MixedNumProp (0 ms)
+[ RUN      ] Boolean.PropsMismatch
+[       OK ] Boolean.PropsMismatch (0 ms)
+[ RUN      ] Boolean.UnionDifference
+[       OK ] Boolean.UnionDifference (1 ms)
+[ RUN      ] Boolean.TreeTransforms
+[       OK ] Boolean.TreeTransforms (0 ms)
+[ RUN      ] Boolean.CreatePropertiesSlow
+[       OK ] Boolean.CreatePropertiesSlow (2961 ms)
+[ RUN      ] Boolean.SelfSubtract
+[       OK ] Boolean.SelfSubtract (0 ms)
+[ RUN      ] Boolean.Perturb
+[       OK ] Boolean.Perturb (0 ms)
+[ RUN      ] Boolean.Perturb1
+[       OK ] Boolean.Perturb1 (1 ms)
+[ RUN      ] Boolean.Perturb2
+[       OK ] Boolean.Perturb2 (3 ms)
+[ RUN      ] Boolean.Perturb3
+[       OK ] Boolean.Perturb3 (77 ms)
+[ RUN      ] Boolean.Coplanar
+[       OK ] Boolean.Coplanar (1 ms)
+[ RUN      ] Boolean.MultiCoplanar
+[       OK ] Boolean.MultiCoplanar (0 ms)
+[ RUN      ] Boolean.AlmostCoplanar
+[       OK ] Boolean.AlmostCoplanar (0 ms)
+[ RUN      ] Boolean.FaceUnion
+[       OK ] Boolean.FaceUnion (0 ms)
+[ RUN      ] Boolean.EdgeUnion
+[       OK ] Boolean.EdgeUnion (0 ms)
+[ RUN      ] Boolean.EdgeUnion2
+[       OK ] Boolean.EdgeUnion2 (0 ms)
+[ RUN      ] Boolean.CornerUnion
+[       OK ] Boolean.CornerUnion (0 ms)
+[ RUN      ] Boolean.Split
+[       OK ] Boolean.Split (0 ms)
+[ RUN      ] Boolean.SplitByPlaneEmpty
+[       OK ] Boolean.SplitByPlaneEmpty (0 ms)
+[ RUN      ] Boolean.SplitByPlane
+[       OK ] Boolean.SplitByPlane (0 ms)
+[ RUN      ] Boolean.SplitByPlane60
+[       OK ] Boolean.SplitByPlane60 (0 ms)
+[ RUN      ] Boolean.ConvexConvexMinkowski
+Manifold::MinkowskiSum(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:648: Failure
+The difference between sum.Volume() and analyticalVolume is 2.5926843494201748, which exceeds 0.15, where
+sum.Volume() evaluates to 8,
+analyticalVolume evaluates to 10.592684349420175, and
+0.15 evaluates to 0.14999999999999999.
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:649: Failure
+The difference between sum.SurfaceArea() and analyticalArea is 3.8955748904513428, which exceeds 0.5, where
+sum.SurfaceArea() evaluates to 24,
+analyticalArea evaluates to 27.895574890451343, and
+0.5 evaluates to 0.5.
+
+[  FAILED  ] Boolean.ConvexConvexMinkowski (0 ms)
+[ RUN      ] Boolean.ConvexConvexMinkowskiDifference
+Manifold::MinkowskiDifference(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:666: Failure
+The difference between difference.Volume() and analyticalVolume is 2.1679999999999993, which exceeds 0.1, where
+difference.Volume() evaluates to 8,
+analyticalVolume evaluates to 5.8320000000000007, and
+0.1 evaluates to 0.10000000000000001.
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:669: Failure
+The difference between difference.SurfaceArea() and analyticalArea is 4.5599999999999987, which exceeds 0.1, where
+difference.SurfaceArea() evaluates to 24,
+analyticalArea evaluates to 19.440000000000001, and
+0.1 evaluates to 0.10000000000000001.
+
+[  FAILED  ] Boolean.ConvexConvexMinkowskiDifference (0 ms)
+[ RUN      ] Boolean.NonConvexConvexMinkowskiSum
+Manifold::MinkowskiSum(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:684: Failure
+The difference between sum.Volume() and 4.841 is 2.9956517565106333, which exceeds 1e-3, where
+sum.Volume() evaluates to 1.8453482434893671,
+4.841 evaluates to 4.8410000000000002, and
+1e-3 evaluates to 0.001.
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:685: Failure
+The difference between sum.SurfaceArea() and 34.06 is 7.7403332476365883, which exceeds 1e-2, where
+sum.SurfaceArea() evaluates to 26.319666752363414,
+34.06 evaluates to 34.060000000000002, and
+1e-2 evaluates to 0.01.
+
+[  FAILED  ] Boolean.NonConvexConvexMinkowskiSum (2 ms)
+[ RUN      ] Boolean.NonConvexConvexMinkowskiDifference
+Manifold::MinkowskiDifference(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:701: Failure
+The difference between difference.Volume() and 0.778 is 1.0673482434893671, which exceeds 1e-3, where
+difference.Volume() evaluates to 1.8453482434893671,
+0.778 evaluates to 0.77800000000000002, and
+1e-3 evaluates to 0.001.
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:702: Failure
+The difference between difference.SurfaceArea() and 16.70 is 9.6196667523634147, which exceeds 1e-2, where
+difference.SurfaceArea() evaluates to 26.319666752363414,
+16.70 evaluates to 16.699999999999999, and
+1e-2 evaluates to 0.01.
+
+[  FAILED  ] Boolean.NonConvexConvexMinkowskiDifference (2 ms)
+[ RUN      ] Boolean.NonConvexNonConvexMinkowskiSum
+Manifold::MinkowskiSum(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:717: Failure
+The difference between sum.Volume() and 8.65625 is 6.2395833333333339, which exceeds 1e-5, where
+sum.Volume() evaluates to 2.4166666666666665,
+8.65625 evaluates to 8.65625, and
+1e-5 evaluates to 1.0000000000000001e-05.
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:718: Failure
+The difference between sum.SurfaceArea() and 31.17691 is 17.320503539448982, which exceeds 1e-5, where
+sum.SurfaceArea() evaluates to 13.856406460551018,
+31.17691 evaluates to 31.176909999999999, and
+1e-5 evaluates to 1.0000000000000001e-05.
+
+[  FAILED  ] Boolean.NonConvexNonConvexMinkowskiSum (0 ms)
+[ RUN      ] Boolean.NonConvexNonConvexMinkowskiDifference
+Manifold::MinkowskiDifference(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:734: Failure
+The difference between difference.Volume() and 0.815542 is 1.6011246666666665, which exceeds 1e-5, where
+difference.Volume() evaluates to 2.4166666666666665,
+0.815542 evaluates to 0.81554199999999999, and
+1e-5 evaluates to 1.0000000000000001e-05.
+
+/home/fonsi/meshbool/test/manifold/test/boolean_test.cpp:735: Failure
+The difference between difference.SurfaceArea() and 6.95045 is 6.9059564605510175, which exceeds 1e-5, where
+difference.SurfaceArea() evaluates to 13.856406460551018,
+6.95045 evaluates to 6.95045, and
+1e-5 evaluates to 1.0000000000000001e-05.
+
+[  FAILED  ] Boolean.NonConvexNonConvexMinkowskiDifference (0 ms)
+[ RUN      ] Boolean.Vug
+[       OK ] Boolean.Vug (0 ms)
+[ RUN      ] Boolean.Empty
+[       OK ] Boolean.Empty (0 ms)
+[ RUN      ] Boolean.Winding
+[       OK ] Boolean.Winding (0 ms)
+[ RUN      ] Boolean.NonIntersecting
+[       OK ] Boolean.NonIntersecting (0 ms)
+[ RUN      ] Boolean.Precision
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:455: Failure
+Expected equality of these values:
+  manifolds.size()
+    Which is: 2
+  meshSize.size()
+    Which is: 1
+
+[  FAILED  ] Boolean.Precision (0 ms)
+[ RUN      ] Boolean.Precision2
+[       OK ] Boolean.Precision2 (0 ms)
+[ RUN      ] Boolean.SimpleCubeRegression
+[       OK ] Boolean.SimpleCubeRegression (1 ms)
+[ RUN      ] Boolean.BatchBoolean
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:462: Failure
+Expected equality of these values:
+  manifolds[i].NumVert()
+    Which is: 160
+  meshSize[i].numVert
+    Which is: 152
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:463: Failure
+Expected equality of these values:
+  manifolds[i].NumTri()
+    Which is: 316
+  meshSize[i].numTri
+    Which is: 300
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:465: Failure
+Expected equality of these values:
+  manifolds[i].NumPropVert()
+    Which is: 160
+  meshSize[i].numPropVert
+    Which is: 152
+
+[  FAILED  ] Boolean.BatchBoolean (7 ms)
+[ RUN      ] Boolean.SharedSubtreeAfterSiblingDestroyed
+[       OK ] Boolean.SharedSubtreeAfterSiblingDestroyed (1 ms)
+[----------] 51 tests from Boolean (3096 ms total)
+
+[----------] 12 tests from Samples
+[ RUN      ] Samples.Knot13
+[       OK ] Samples.Knot13 (49 ms)
+[ RUN      ] Samples.Knot42
+[       OK ] Samples.Knot42 (41 ms)
+[ RUN      ] Samples.Scallop
+Manifold::Smooth(MeshGL64): STUB, not implemented in Rust
+Manifold::Refine(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/samples_test.cpp:83: Failure
+The difference between scallop.Volume() and 39.9 is 39.899999999999999, which exceeds 0.1, where
+scallop.Volume() evaluates to 0,
+39.9 evaluates to 39.899999999999999, and
+0.1 evaluates to 0.10000000000000001.
+
+/home/fonsi/meshbool/test/manifold/test/samples_test.cpp:84: Failure
+The difference between scallop.SurfaceArea() and 79.4 is 79.400000000000006, which exceeds 0.1, where
+scallop.SurfaceArea() evaluates to 0,
+79.4 evaluates to 79.400000000000006, and
+0.1 evaluates to 0.10000000000000001.
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:478: Failure
+Value of: manifold.IsEmpty()
+  Actual: true
+Expected: false
+
+[  FAILED  ] Samples.Scallop (0 ms)
+[ RUN      ] Samples.TetPuzzle
+[       OK ] Samples.TetPuzzle (24 ms)
+[ RUN      ] Samples.FrameReduced
+[       OK ] Samples.FrameReduced (3 ms)
+[ RUN      ] Samples.Frame
+[       OK ] Samples.Frame (24 ms)
+[ RUN      ] Samples.Bracelet
+[       OK ] Samples.Bracelet (1403 ms)
+[ RUN      ] Samples.GyroidModule
+Manifold::LevelSet(): STUB, not implemented in Rust
+Manifold::LevelSet(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/samples_test.cpp:156: Failure
+Expected equality of these values:
+  gyroid.Genus()
+    Which is: 1
+  15
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:478: Failure
+Value of: manifold.IsEmpty()
+  Actual: true
+Expected: false
+
+/home/fonsi/meshbool/test/manifold/test/samples_test.cpp:165: Failure
+Expected equality of these values:
+  slice.NumContour()
+    Which is: 0
+  4
+
+/home/fonsi/meshbool/test/manifold/test/samples_test.cpp:166: Failure
+The difference between slice.Area() and 121.9 is 121.90000000000001, which exceeds 0.1, where
+slice.Area() evaluates to 0,
+121.9 evaluates to 121.90000000000001, and
+0.1 evaluates to 0.10000000000000001.
+
+ERROR STATUS (InvalidConstruction), Result will be meaningless.
+disabled backtrace
+/home/fonsi/meshbool/test/manifold/test/samples_test.cpp:168: Failure
+Expected equality of these values:
+  extrusion.Genus()
+    Which is: 1
+  -3
+
+[  FAILED  ] Samples.GyroidModule (0 ms)
+[ RUN      ] Samples.Sponge1
+[       OK ] Samples.Sponge1 (1 ms)
+[ RUN      ] Samples.Sponge4
+/home/fonsi/meshbool/test/manifold/test/samples_test.cpp:189: Failure
+Expected: (sponge.NumDegenerateTris()) <= (8), actual: 14 vs 8
+
+[  FAILED  ] Samples.Sponge4 (62620 ms)
+[ RUN      ] Samples.CondensedMatter16
+[       OK ] Samples.CondensedMatter16 (12267 ms)
+[ RUN      ] Samples.CondensedMatter64
+[       OK ] Samples.CondensedMatter64 (184165 ms)
+[----------] 12 tests from Samples (260602 ms total)
+
+[----------] 19 tests from BooleanComplex
+[ RUN      ] BooleanComplex.Sphere
+Manifold::Refine(): STUB, not implemented in Rust
+[       OK ] BooleanComplex.Sphere (0 ms)
+[ RUN      ] BooleanComplex.MeshRelation
+Manifold::LevelSet(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_complex_test.cpp:50: Failure
+Value of: gyroid.IsEmpty()
+  Actual: true
+Expected: false
+
+/home/fonsi/meshbool/test/manifold/test/boolean_complex_test.cpp:52: Failure
+Expected: (gyroid.NumDegenerateTris()) <= (0), actual: 1 vs 0
+
+Manifold::RefineToLength(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/boolean_complex_test.cpp:61: Failure
+Expected equality of these values:
+  result.Decompose().size()
+    Which is: 0
+  1
+
+/home/fonsi/meshbool/test/manifold/test/boolean_complex_test.cpp:62: Failure
+The difference between result.Volume() and 226 is 226, which exceeds 1, where
+result.Volume() evaluates to 0,
+226 evaluates to 226, and
+1 evaluates to 1.
+
+/home/fonsi/meshbool/test/manifold/test/boolean_complex_test.cpp:63: Failure
+The difference between result.SurfaceArea() and 387 is 387, which exceeds 1, where
+result.SurfaceArea() evaluates to 0,
+387 evaluates to 387, and
+1 evaluates to 1.
+
+/home/fonsi/meshbool/test/manifold/test/test_main.cpp:334: Failure
+Value of: out.IsEmpty()
+  Actual: true
+Expected: false
+
+[  FAILED  ] BooleanComplex.MeshRelation (0 ms)
+[ RUN      ] BooleanComplex.Cylinders
+[       OK ] BooleanComplex.Cylinders (13 ms)
+[ RUN      ] BooleanComplex.Subtract
+[       OK ] BooleanComplex.Subtract (0 ms)
+[ RUN      ] BooleanComplex.Close
+[       OK ] BooleanComplex.Close (3295 ms)
+[ RUN      ] BooleanComplex.BooleanVolumes
+[       OK ] BooleanComplex.BooleanVolumes (3 ms)
+[ RUN      ] BooleanComplex.Spiral
+[       OK ] BooleanComplex.Spiral (125 ms)
+[ RUN      ] BooleanComplex.Sweep
+[       OK ] BooleanComplex.Sweep (655 ms)
+[ RUN      ] BooleanComplex.InterpolatedNormals
+[       OK ] BooleanComplex.InterpolatedNormals (0 ms)
+[ RUN      ] BooleanComplex.Ring
+[       OK ] BooleanComplex.Ring (7 ms)
+[ RUN      ] BooleanComplex.SelfIntersect
+[       OK ] BooleanComplex.SelfIntersect (223 ms)
+[ RUN      ] BooleanComplex.GenericTwinBooleanTest7081
+[       OK ] BooleanComplex.GenericTwinBooleanTest7081 (30322 ms)
+[ RUN      ] BooleanComplex.GenericTwinBooleanTest7863
+[       OK ] BooleanComplex.GenericTwinBooleanTest7863 (12 ms)
+[ RUN      ] BooleanComplex.Havocglass8Bool
+[       OK ] BooleanComplex.Havocglass8Bool (2 ms)
+[ RUN      ] BooleanComplex.CraycloudBool
+[       OK ] BooleanComplex.CraycloudBool (5 ms)
+[ RUN      ] BooleanComplex.HullMask
+[       OK ] BooleanComplex.HullMask (126 ms)
+[ RUN      ] BooleanComplex.LazyCollider
+[       OK ] BooleanComplex.LazyCollider (6 ms)
+[ RUN      ] BooleanComplex.OffsetTriangulationFailure
+[       OK ] BooleanComplex.OffsetTriangulationFailure (119 ms)
+[ RUN      ] BooleanComplex.OffsetSelfIntersect
+[       OK ] BooleanComplex.OffsetSelfIntersect (2 ms)
+[----------] 19 tests from BooleanComplex (34924 ms total)
+
+[----------] 15 tests from CrossSection
+[ RUN      ] CrossSection.Square
+[       OK ] CrossSection.Square (0 ms)
+[ RUN      ] CrossSection.MirrorUnion
+[       OK ] CrossSection.MirrorUnion (0 ms)
+[ RUN      ] CrossSection.MirrorCheckAxis
+[       OK ] CrossSection.MirrorCheckAxis (0 ms)
+[ RUN      ] CrossSection.RoundOffset
+[       OK ] CrossSection.RoundOffset (0 ms)
+[ RUN      ] CrossSection.BevelOffset
+[       OK ] CrossSection.BevelOffset (0 ms)
+[ RUN      ] CrossSection.Empty
+[       OK ] CrossSection.Empty (0 ms)
+[ RUN      ] CrossSection.Rect
+[       OK ] CrossSection.Rect (0 ms)
+[ RUN      ] CrossSection.Transform
+[       OK ] CrossSection.Transform (0 ms)
+[ RUN      ] CrossSection.Warp
+[       OK ] CrossSection.Warp (0 ms)
+[ RUN      ] CrossSection.Decompose
+[       OK ] CrossSection.Decompose (0 ms)
+[ RUN      ] CrossSection.FillRule
+[       OK ] CrossSection.FillRule (0 ms)
+[ RUN      ] CrossSection.Hull
+[       OK ] CrossSection.Hull (2 ms)
+[ RUN      ] CrossSection.HullError
+[       OK ] CrossSection.HullError (0 ms)
+[ RUN      ] CrossSection.BatchBoolean
+[       OK ] CrossSection.BatchBoolean (0 ms)
+[ RUN      ] CrossSection.NegativeOffset
+[       OK ] CrossSection.NegativeOffset (1 ms)
+[----------] 15 tests from CrossSection (5 ms total)
+
+[----------] 19 tests from CBIND
+[ RUN      ] CBIND.sphere
+[       OK ] CBIND.sphere (6 ms)
+[ RUN      ] CBIND.warp_translation
+[       OK ] CBIND.warp_translation (110 ms)
+[ RUN      ] CBIND.include_pt_mutates_bounds
+[       OK ] CBIND.include_pt_mutates_bounds (0 ms)
+[ RUN      ] CBIND.obj_round_trip
+[       OK ] CBIND.obj_round_trip (0 ms)
+[ RUN      ] CBIND.level_set
+Manifold::LevelSet(): STUB, not implemented in Rust
+Manifold::LevelSet(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/manifoldc_test.cpp:245: Failure
+The difference between v and manifold_volume(sdf_man) is 42411.500823462207, which exceeds 0.005 * v, where
+v evaluates to 42411.500823462207,
+manifold_volume(sdf_man) evaluates to 0, and
+0.005 * v evaluates to 212.05750411731105.
+
+/home/fonsi/meshbool/test/manifold/test/manifoldc_test.cpp:246: Failure
+The difference between s and manifold_surface_area(sdf_man) is 6932.719570016694, which exceeds 0.005 * s, where
+s evaluates to 6932.719570016694,
+manifold_surface_area(sdf_man) evaluates to 0, and
+0.005 * s evaluates to 34.66359785008347.
+
+[  FAILED  ] CBIND.level_set (0 ms)
+[ RUN      ] CBIND.level_set_64
+Manifold::LevelSet(): STUB, not implemented in Rust
+Manifold::LevelSet(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/manifoldc_test.cpp:383: Failure
+The difference between v and manifold_volume(sdf_man) is 42411.500823462207, which exceeds 0.005 * v, where
+v evaluates to 42411.500823462207,
+manifold_volume(sdf_man) evaluates to 0, and
+0.005 * v evaluates to 212.05750411731105.
+
+/home/fonsi/meshbool/test/manifold/test/manifoldc_test.cpp:384: Failure
+The difference between s and manifold_surface_area(sdf_man) is 6932.719570016694, which exceeds 0.005 * s, where
+s evaluates to 6932.719570016694,
+manifold_surface_area(sdf_man) evaluates to 0, and
+0.005 * s evaluates to 34.66359785008347.
+
+[  FAILED  ] CBIND.level_set_64 (0 ms)
+[ RUN      ] CBIND.properties
+[       OK ] CBIND.properties (0 ms)
+[ RUN      ] CBIND.extrude
+[       OK ] CBIND.extrude (0 ms)
+[ RUN      ] CBIND.compose_decompose
+[       OK ] CBIND.compose_decompose (32 ms)
+[ RUN      ] CBIND.polygons
+[       OK ] CBIND.polygons (0 ms)
+[ RUN      ] CBIND.triangulation
+[       OK ] CBIND.triangulation (0 ms)
+[ RUN      ] CBIND.meshgl_merge_returns_mem
+[       OK ] CBIND.meshgl_merge_returns_mem (0 ms)
+[ RUN      ] CBIND.meshgl64_merge_returns_mem
+[       OK ] CBIND.meshgl64_merge_returns_mem (0 ms)
+[ RUN      ] CBIND.ray_cast
+Manifold::RayCast(): STUB, not implemented in Rust
+/home/fonsi/meshbool/test/manifold/test/manifoldc_test.cpp:603: Failure
+Expected equality of these values:
+  manifold_ray_hit_vec_length(hits)
+    Which is: 0
+  2
+
+[  FAILED  ] CBIND.ray_cast (0 ms)
+[ RUN      ] CBIND.tolerance
+[       OK ] CBIND.tolerance (15 ms)
+[ RUN      ] CBIND.num_prop_vert
+[       OK ] CBIND.num_prop_vert (0 ms)
+[ RUN      ] CBIND.meshgl_run_accessors
+[       OK ] CBIND.meshgl_run_accessors (3 ms)
+[ RUN      ] CBIND.run_flag_accessors
+[       OK ] CBIND.run_flag_accessors (2 ms)
+[ RUN      ] CBIND.alloc_delete_roundtrip
+[       OK ] CBIND.alloc_delete_roundtrip (0 ms)
+[----------] 19 tests from CBIND (171 ms total)
+
+[----------] 109 tests from Polygon
+[ RUN      ] Polygon.SimpleHole
+[       OK ] Polygon.SimpleHole (0 ms)
+[ RUN      ] Polygon.SimpleHole2
+[       OK ] Polygon.SimpleHole2 (0 ms)
+[ RUN      ] Polygon.MultiMerge
+[       OK ] Polygon.MultiMerge (0 ms)
+[ RUN      ] Polygon.SimpleHoles
+[       OK ] Polygon.SimpleHoles (0 ms)
+[ RUN      ] Polygon.SimpleHoles2
+[       OK ] Polygon.SimpleHoles2 (0 ms)
+[ RUN      ] Polygon.PinchedHole
+[       OK ] Polygon.PinchedHole (0 ms)
+[ RUN      ] Polygon.Looping1
+[       OK ] Polygon.Looping1 (0 ms)
+[ RUN      ] Polygon.Looping2
+[       OK ] Polygon.Looping2 (0 ms)
+[ RUN      ] Polygon.AlignedHoles
+[       OK ] Polygon.AlignedHoles (0 ms)
+[ RUN      ] Polygon.Outers
+[       OK ] Polygon.Outers (0 ms)
+[ RUN      ] Polygon.Holes
+[       OK ] Polygon.Holes (0 ms)
+[ RUN      ] Polygon.Holes2
+[       OK ] Polygon.Holes2 (0 ms)
+[ RUN      ] Polygon.Holes3
+[       OK ] Polygon.Holes3 (0 ms)
+[ RUN      ] Polygon.Holes4
+[       OK ] Polygon.Holes4 (0 ms)
+[ RUN      ] Polygon.SmallHole
+[       OK ] Polygon.SmallHole (0 ms)
+[ RUN      ] Polygon.Precision4
+[       OK ] Polygon.Precision4 (0 ms)
+[ RUN      ] Polygon.CoincidentHole
+[       OK ] Polygon.CoincidentHole (0 ms)
+[ RUN      ] Polygon.Holes5
+[       OK ] Polygon.Holes5 (0 ms)
+[ RUN      ] Polygon.Holes6
+[       OK ] Polygon.Holes6 (0 ms)
+[ RUN      ] Polygon.Holes7
+[       OK ] Polygon.Holes7 (0 ms)
+[ RUN      ] Polygon.Holes8
+[       OK ] Polygon.Holes8 (0 ms)
+[ RUN      ] Polygon.Holes9
+[       OK ] Polygon.Holes9 (0 ms)
+[ RUN      ] Polygon.Eberly
+[       OK ] Polygon.Eberly (0 ms)
+[ RUN      ] Polygon.Ugly
+[       OK ] Polygon.Ugly (0 ms)
+[ RUN      ] Polygon.Sponge4a
+[       OK ] Polygon.Sponge4a (0 ms)
+[ RUN      ] Polygon.CoincidentHole2
+[       OK ] Polygon.CoincidentHole2 (0 ms)
+[ RUN      ] Polygon.CoincidentHole3
+[       OK ] Polygon.CoincidentHole3 (0 ms)
+[ RUN      ] Polygon.CoincidentHole4
+[       OK ] Polygon.CoincidentHole4 (0 ms)
+[ RUN      ] Polygon.Colinear
+[       OK ] Polygon.Colinear (0 ms)
+[ RUN      ] Polygon.Colinear4
+[       OK ] Polygon.Colinear4 (0 ms)
+[ RUN      ] Polygon.Merges
+[       OK ] Polygon.Merges (0 ms)
+[ RUN      ] Polygon.ExtraTriangle
+[       OK ] Polygon.ExtraTriangle (0 ms)
+[ RUN      ] Polygon.SpongeThin
+[       OK ] Polygon.SpongeThin (0 ms)
+[ RUN      ] Polygon.ColinearY
+[       OK ] Polygon.ColinearY (0 ms)
+[ RUN      ] Polygon.NearlyColinearY
+[       OK ] Polygon.NearlyColinearY (0 ms)
+[ RUN      ] Polygon.Concave
+[       OK ] Polygon.Concave (0 ms)
+[ RUN      ] Polygon.Concave2
+[       OK ] Polygon.Concave2 (0 ms)
+[ RUN      ] Polygon.Sliver
+[       OK ] Polygon.Sliver (0 ms)
+[ RUN      ] Polygon.Duplicate
+[       OK ] Polygon.Duplicate (0 ms)
+[ RUN      ] Polygon.Duplicate2
+[       OK ] Polygon.Duplicate2 (0 ms)
+[ RUN      ] Polygon.Folded
+[       OK ] Polygon.Folded (0 ms)
+[ RUN      ] Polygon.NearlyLinear
+[       OK ] Polygon.NearlyLinear (0 ms)
+[ RUN      ] Polygon.Sliver2
+[       OK ] Polygon.Sliver2 (0 ms)
+[ RUN      ] Polygon.Sliver3
+[       OK ] Polygon.Sliver3 (0 ms)
+[ RUN      ] Polygon.Sliver4
+[       OK ] Polygon.Sliver4 (0 ms)
+[ RUN      ] Polygon.Sliver5
+[       OK ] Polygon.Sliver5 (0 ms)
+[ RUN      ] Polygon.Sliver6
+[       OK ] Polygon.Sliver6 (0 ms)
+[ RUN      ] Polygon.Sliver7
+[       OK ] Polygon.Sliver7 (0 ms)
+[ RUN      ] Polygon.Sliver8
+[       OK ] Polygon.Sliver8 (0 ms)
+[ RUN      ] Polygon.Sliver9
+[       OK ] Polygon.Sliver9 (0 ms)
+[ RUN      ] Polygon.Sliver10
+[       OK ] Polygon.Sliver10 (0 ms)
+[ RUN      ] Polygon.Colinear2
+[       OK ] Polygon.Colinear2 (0 ms)
+[ RUN      ] Polygon.Colinear3
+[       OK ] Polygon.Colinear3 (0 ms)
+[ RUN      ] Polygon.Envelope
+[       OK ] Polygon.Envelope (0 ms)
+[ RUN      ] Polygon.Split
+[       OK ] Polygon.Split (0 ms)
+[ RUN      ] Polygon.Duplicates
+[       OK ] Polygon.Duplicates (0 ms)
+[ RUN      ] Polygon.Simple1
+[       OK ] Polygon.Simple1 (0 ms)
+[ RUN      ] Polygon.Simple2
+[       OK ] Polygon.Simple2 (0 ms)
+[ RUN      ] Polygon.Simple3
+[       OK ] Polygon.Simple3 (0 ms)
+[ RUN      ] Polygon.Simple4
+[       OK ] Polygon.Simple4 (0 ms)
+[ RUN      ] Polygon.Simple5
+[       OK ] Polygon.Simple5 (0 ms)
+[ RUN      ] Polygon.Simple6
+[       OK ] Polygon.Simple6 (0 ms)
+[ RUN      ] Polygon.TouchingHole
+[       OK ] Polygon.TouchingHole (0 ms)
+[ RUN      ] Polygon.TouchingHole2
+[       OK ] Polygon.TouchingHole2 (0 ms)
+[ RUN      ] Polygon.Degenerate
+[       OK ] Polygon.Degenerate (0 ms)
+[ RUN      ] Polygon.Degenerate2
+[       OK ] Polygon.Degenerate2 (0 ms)
+[ RUN      ] Polygon.Degenerate3
+[       OK ] Polygon.Degenerate3 (0 ms)
+[ RUN      ] Polygon.Degenerate4
+[       OK ] Polygon.Degenerate4 (0 ms)
+[ RUN      ] Polygon.Degenerate5
+[       OK ] Polygon.Degenerate5 (0 ms)
+[ RUN      ] Polygon.Degenerate6
+[       OK ] Polygon.Degenerate6 (0 ms)
+[ RUN      ] Polygon.Tricky
+[       OK ] Polygon.Tricky (0 ms)
+[ RUN      ] Polygon.Tricky2
+[       OK ] Polygon.Tricky2 (0 ms)
+[ RUN      ] Polygon.Slit
+[       OK ] Polygon.Slit (0 ms)
+[ RUN      ] Polygon.SharedEdge
+[       OK ] Polygon.SharedEdge (0 ms)
+[ RUN      ] Polygon.Precision
+[       OK ] Polygon.Precision (0 ms)
+[ RUN      ] Polygon.Precision2
+[       OK ] Polygon.Precision2 (0 ms)
+[ RUN      ] Polygon.Precision3
+[       OK ] Polygon.Precision3 (0 ms)
+[ RUN      ] Polygon.DegenerateRing
+[       OK ] Polygon.DegenerateRing (0 ms)
+[ RUN      ] Polygon.Sweep
+[       OK ] Polygon.Sweep (0 ms)
+[ RUN      ] Polygon.Hole
+[       OK ] Polygon.Hole (0 ms)
+[ RUN      ] Polygon.Hole2
+[       OK ] Polygon.Hole2 (0 ms)
+[ RUN      ] Polygon.Hole3
+[       OK ] Polygon.Hole3 (0 ms)
+[ RUN      ] Polygon.Separate3
+[       OK ] Polygon.Separate3 (0 ms)
+[ RUN      ] Polygon.Small
+[       OK ] Polygon.Small (0 ms)
+[ RUN      ] Polygon.Comb
+[       OK ] Polygon.Comb (0 ms)
+[ RUN      ] Polygon.Comb2
+[       OK ] Polygon.Comb2 (0 ms)
+[ RUN      ] Polygon.PointPoly
+[       OK ] Polygon.PointPoly (0 ms)
+[ RUN      ] Polygon.KissingZigzag
+[       OK ] Polygon.KissingZigzag (0 ms)
+[ RUN      ] Polygon.Sponge
+[       OK ] Polygon.Sponge (0 ms)
+[ RUN      ] Polygon.Sponge2
+[       OK ] Polygon.Sponge2 (0 ms)
+[ RUN      ] Polygon.SquareHoles
+[       OK ] Polygon.SquareHoles (0 ms)
+[ RUN      ] Polygon.SquareHoles2
+[       OK ] Polygon.SquareHoles2 (0 ms)
+[ RUN      ] Polygon.Woodgrain1
+[       OK ] Polygon.Woodgrain1 (0 ms)
+[ RUN      ] Polygon.Woodgrain2
+[       OK ] Polygon.Woodgrain2 (0 ms)
+[ RUN      ] Polygon.Separate_Quad_And_Tri
+[       OK ] Polygon.Separate_Quad_And_Tri (0 ms)
+[ RUN      ] Polygon.Very_Branchy_With_hole
+[       OK ] Polygon.Very_Branchy_With_hole (0 ms)
+[ RUN      ] Polygon.CondensedMatter64
+[       OK ] Polygon.CondensedMatter64 (0 ms)
+[ RUN      ] Polygon.BarelyValid
+[       OK ] Polygon.BarelyValid (0 ms)
+[ RUN      ] Polygon.SpongeReduced
+[       OK ] Polygon.SpongeReduced (0 ms)
+[ RUN      ] Polygon.Sponge4b
+[       OK ] Polygon.Sponge4b (6 ms)
+[ RUN      ] Polygon.Sponge4
+[       OK ] Polygon.Sponge4 (3 ms)
+[ RUN      ] Polygon.Sponge3
+[       OK ] Polygon.Sponge3 (1 ms)
+[ RUN      ] Polygon.SpongeMore
+[       OK ] Polygon.SpongeMore (0 ms)
+[ RUN      ] Polygon.Sponge3b
+[       OK ] Polygon.Sponge3b (2 ms)
+[ RUN      ] Polygon.Sponge3a
+[       OK ] Polygon.Sponge3a (3 ms)
+[ RUN      ] Polygon.BigSponge
+[       OK ] Polygon.BigSponge (47 ms)
+[ RUN      ] Polygon.Zebra1
+[       OK ] Polygon.Zebra1 (8 ms)
+[ RUN      ] Polygon.Zebra
+[       OK ] Polygon.Zebra (2285 ms)
+[ RUN      ] Polygon.Zebra3
+[       OK ] Polygon.Zebra3 (2692 ms)
+[----------] 109 tests from Polygon (5064 ms total)
+
+[----------] Global test environment tear-down
+[==========] 330 tests from 8 test suites ran. (332427 ms total)
+[  PASSED  ] 300 tests.
+[  FAILED  ] 30 tests, listed below:
+[  FAILED  ] Manifold.MeshDeterminism
+[  FAILED  ] Manifold.MeshRelation
+[  FAILED  ] Manifold.MeshRelationRefine
+[  FAILED  ] Manifold.MeshRelationRefinePrecision
+[  FAILED  ] Manifold.RayCastHitCube
+[  FAILED  ] Manifold.RayCastDiagonal
+[  FAILED  ] Manifold.RayCastSphere
+[  FAILED  ] Manifold.RayCastTwoCubes
+[  FAILED  ] Manifold.RayCastAlongX
+[  FAILED  ] Manifold.RayCastAlongY
+[  FAILED  ] Manifold.RayCastWatertightVertex
+[  FAILED  ] Manifold.WindingTallBox
+[  FAILED  ] Manifold.WindingWatertight
+[  FAILED  ] Manifold.WindingHollowShell
+[  FAILED  ] Boolean.Simplify
+[  FAILED  ] Boolean.ConvexConvexMinkowski
+[  FAILED  ] Boolean.ConvexConvexMinkowskiDifference
+[  FAILED  ] Boolean.NonConvexConvexMinkowskiSum
+[  FAILED  ] Boolean.NonConvexConvexMinkowskiDifference
+[  FAILED  ] Boolean.NonConvexNonConvexMinkowskiSum
+[  FAILED  ] Boolean.NonConvexNonConvexMinkowskiDifference
+[  FAILED  ] Boolean.Precision
+[  FAILED  ] Boolean.BatchBoolean
+[  FAILED  ] Samples.Scallop
+[  FAILED  ] Samples.GyroidModule
+[  FAILED  ] Samples.Sponge4
+[  FAILED  ] BooleanComplex.MeshRelation
+[  FAILED  ] CBIND.level_set
+[  FAILED  ] CBIND.level_set_64
+[  FAILED  ] CBIND.ray_cast
+
+30 FAILED TESTS
+fonsi@shakirashakira:~/meshbool/test/manifold/build$ 
+
