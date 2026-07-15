@@ -6,7 +6,6 @@ use crate::postprocessing::sort::morton_code;
 use crate::spatial::aabb::Box3D;
 use crate::spatial::bvh_collider::{BVHCollider, SimpleRecorder};
 use crate::util::disjoint_sets::DisjointSets;
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::K_PRECISION;
 use crate::util::num_convert::{LossyFrom, LossyInto};
 use crate::util::vec_ext;
@@ -51,7 +50,7 @@ where
 	fn try_from(mesh_gl: &MeshGL<F, I>) -> Result<Self, Self::Error> {
 		let num_vert = usize::lossy_from(mesh_gl.num_vert());
 		let num_tri = usize::lossy_from(mesh_gl.num_tri());
-		let mut instance_relation = DeterministicMap::new();
+		let mut instance_relation = Vec::new();
 
 		if num_vert == 0 && num_tri == 0 {
 			return Ok(MeshBool {
@@ -176,26 +175,20 @@ where
 			}
 
 			if mesh_gl.run_transform.is_empty() {
-				instance_relation.insert(
-					instance_id,
-					InstanceRelation {
-						original_id,
-						transform: Matrix3x4::identity(),
-						back_side,
-						has_normals: run_has_n,
-					},
-				);
+				instance_relation.push(InstanceRelation {
+					original_id,
+					transform: Matrix3x4::identity(),
+					back_side,
+					has_normals: run_has_n,
+				});
 			} else {
 				let m: [_; 12] = array::from_fn(|j| f64::from(mesh_gl.run_transform[i * 12 + j]));
-				instance_relation.insert(
-					instance_id,
-					InstanceRelation {
-						original_id,
-						transform: Matrix3x4::from_column_slice(&m),
-						back_side,
-						has_normals: run_has_n,
-					},
-				);
+				instance_relation.push(InstanceRelation {
+					original_id,
+					transform: Matrix3x4::from_column_slice(&m),
+					back_side,
+					has_normals: run_has_n,
+				});
 			}
 		}
 

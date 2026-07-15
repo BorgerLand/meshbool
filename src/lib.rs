@@ -9,7 +9,6 @@ pub use nalgebra::{Matrix3x4, Point3, Vector3};
 use crate::halfedge::Halfedges;
 use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::spatial::bvh_collider::BVHCollider;
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::K_PRECISION;
 
 mod halfedge;
@@ -81,7 +80,7 @@ pub struct MeshBool {
 	tri: Triangles,
 	///Maps <instance id, instance metadata> to look up how each mesh instance
 	///relates back to its original
-	instance_relation: DeterministicMap<u32, InstanceRelation>,
+	instance_relation: Vec<InstanceRelation>,
 	collider: BVHCollider,
 }
 

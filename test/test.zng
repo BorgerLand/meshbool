@@ -4,7 +4,7 @@ mod crate
 	{
 		type MeshBoolTestWrapper
 		{
-			#layout(size = 312, align = 8);
+			#layout(size = 304, align = 8);
 			
 			fn default() -> MeshBoolTestWrapper;
 			fn invalid() -> MeshBoolTestWrapper;
@@ -78,10 +78,10 @@ mod crate
 		
 		type (MeshBoolTestWrapper, MeshBoolTestWrapper)
 		{
-			#layout(size = 624, align = 8);
+			#layout(size = 608, align = 8);
 			
 			field 0 (offset = 0,   type = MeshBoolTestWrapper);
-			field 1 (offset = 312, type = MeshBoolTestWrapper);
+			field 1 (offset = 304, type = MeshBoolTestWrapper);
 		}
 		
 		fn get_intermediate_checks() -> bool;

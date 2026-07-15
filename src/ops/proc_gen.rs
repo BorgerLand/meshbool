@@ -554,16 +554,12 @@ impl MeshBool {
 				normal: tri_normal,
 				relation: tri_rel,
 			},
-			instance_relation: [(
-				0_u32,
-				InstanceRelation {
-					original_id,
-					transform: Matrix3x4::identity(),
-					back_side: false,
-					has_normals: false,
-				},
-			)]
-			.into(),
+			instance_relation: vec![InstanceRelation {
+				original_id,
+				transform: Matrix3x4::identity(),
+				back_side: false,
+				has_normals: false,
+			}],
 			collider,
 		}
 	}

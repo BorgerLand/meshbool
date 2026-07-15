@@ -65,7 +65,7 @@ impl Default for MeshBoolTestWrapper {
 				vert_pos: Vec::default(),
 				properties: Properties::default(),
 				tri: Triangles::default(),
-				instance_relation: DeterministicMap::default(),
+				instance_relation: Vec::default(),
 				collider: BVHCollider::default(),
 			},
 			status: MeshBoolError::default(),

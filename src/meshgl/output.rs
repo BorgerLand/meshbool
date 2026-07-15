@@ -1,6 +1,7 @@
 use crate::MeshBool;
 use crate::mesh_relations::{InstanceRelation, all_instances_have_normals};
 use crate::meshgl::MeshGL;
+use crate::util::hash_table::DeterministicSet;
 use crate::util::math::{normal_transform, safe_normalize3};
 use crate::util::num_convert::LossyFrom;
 use nalgebra::{Matrix3x4, Vector2, Vector3};
@@ -62,10 +63,7 @@ impl MeshBool {
 		if !is_original {
 			tri_new2old.sort_by_key(|&i| {
 				(
-					self.instance_relation
-						.get(&tri_rel[i as usize].instance_id)
-						.unwrap()
-						.original_id,
+					self.instance_relation[tri_rel[i as usize].instance_id as usize].original_id,
 					tri_rel[i as usize].instance_id,
 				)
 			});
@@ -96,7 +94,8 @@ impl MeshBool {
 			}
 		};
 
-		let mut instance_rel = self.instance_relation.clone();
+		let mut unhandled_instance: DeterministicSet<u32> =
+			(0..self.instance_relation.len() as u32).collect();
 		let mut last_id = None;
 		for tri in 0..num_tri {
 			let old_tri = tri_new2old[tri];
@@ -114,15 +113,15 @@ impl MeshBool {
 			}
 
 			if Some(instance_id) != last_id {
-				let rel = instance_rel.remove(&instance_id).unwrap();
-				add_run(tri, rel);
+				unhandled_instance.remove(&instance_id);
+				add_run(tri, self.instance_relation[instance_id as usize]);
 				last_id = Some(instance_id);
 			}
 		}
 
 		// Add runs for originals that did not contribute any faces to the output
-		for pair in instance_rel {
-			add_run(num_tri, pair.1);
+		for instance_id in unhandled_instance {
+			add_run(num_tri, self.instance_relation[instance_id as usize]);
 		}
 
 		run_index.push(I::lossy_from(3 * num_tri));

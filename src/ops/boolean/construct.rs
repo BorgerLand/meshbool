@@ -2,7 +2,6 @@ use crate::MeshBool;
 use crate::halfedge::{Halfedge, Halfedges, next_halfedge};
 use crate::mesh_relations::{TriRelation, tri_has_normals};
 use crate::spatial::aabb::Box3D;
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{atomic_add, get_barycentric, next3_i32, prev3_i32};
 use crate::util::num_convert::OrderedF64;
 use crate::util::vec_ext;
@@ -294,9 +293,8 @@ pub fn append_partial_edges(
 	v_p2r: &[i32],
 	face_pq2r: &[i32],
 	tri_rel_a: &[TriRelation],
-	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	instance_id_offset: u32,
 	write_tri2face: bool,
-	forward: bool,
 ) {
 	// Each edge in the map is partially retained; for each of these, look up
 	// their original verts and include them based on their winding number (i03),
@@ -358,13 +356,9 @@ pub fn append_partial_edges(
 		// position advanced CCW. This is only valid if this is a retained vert; it
 		// will be ignored later if the vert is new.
 		let mut forward_rel = tri_rel_a[face_left_a as usize];
-		forward_rel.instance_id = *instance_id_old2new
-			.get(&(forward, forward_rel.instance_id))
-			.unwrap();
+		forward_rel.instance_id += instance_id_offset;
 		let mut backward_rel = tri_rel_a[face_right_a as usize];
-		backward_rel.instance_id = *instance_id_old2new
-			.get(&(forward, backward_rel.instance_id))
-			.unwrap();
+		backward_rel.instance_id += instance_id_offset;
 
 		if write_tri2face {
 			forward_rel.face_id = face_left_a;
@@ -400,7 +394,7 @@ pub fn append_new_edges(
 	num_face_p: usize,
 	tri_rel_p: &[TriRelation],
 	tri_rel_q: &[TriRelation],
-	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	instance_id_offset_q: u32,
 	write_tri2face: bool,
 ) {
 	// Per-iter cancel check; the caller's post-call IsCancelled discards the
@@ -434,13 +428,8 @@ pub fn append_new_edges(
 		let face_left = face_pq2r[face_p] as usize;
 		let face_right = face_pq2r[num_face_p + face_q] as usize;
 		let mut forward_ref = tri_rel_p[face_p];
-		forward_ref.instance_id = *instance_id_old2new
-			.get(&(true, forward_ref.instance_id))
-			.unwrap();
 		let mut backward_ref = tri_rel_q[face_q];
-		backward_ref.instance_id = *instance_id_old2new
-			.get(&(false, backward_ref.instance_id))
-			.unwrap();
+		backward_ref.instance_id += instance_id_offset_q;
 
 		if write_tri2face {
 			forward_ref.face_id = face_p as i32;
@@ -475,9 +464,8 @@ pub fn append_whole_edges(
 	v_p2r: Vec<i32>,
 	face_pq2r: &[i32],
 	tri_rel_a: &[TriRelation],
-	instance_id_old2new: &DeterministicMap<(bool, u32), u32>,
+	instance_id_offset: u32,
 	write_tri2face: bool,
-	forward: bool,
 ) {
 	//(struct DuplicateHalfedges is inlined here)
 	for idx in 0..halfedge_a.len() as i32 {
@@ -511,13 +499,9 @@ pub fn append_whole_edges(
 		// reference is now to the endVert instead of the startVert, which is one
 		// position advanced CCW.
 		let mut forward_rel = tri_rel_a[face_left_a as usize];
-		forward_rel.instance_id = *instance_id_old2new
-			.get(&(forward, forward_rel.instance_id))
-			.unwrap();
+		forward_rel.instance_id += instance_id_offset;
 		let mut backward_rel = tri_rel_a[face_right_a as usize];
-		backward_rel.instance_id = *instance_id_old2new
-			.get(&(forward, backward_rel.instance_id))
-			.unwrap();
+		backward_rel.instance_id += instance_id_offset;
 
 		if write_tri2face {
 			forward_rel.face_id = face_left_a;

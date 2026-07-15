@@ -3,7 +3,6 @@ use crate::mesh_relations::{
 };
 use crate::postprocessing as pp;
 use crate::spatial::bvh_collider::BVHCollider;
-use crate::util::hash_table::DeterministicMap;
 use crate::{Box3D, MeshBool, Precision, Properties, Triangles};
 use nalgebra::Matrix3x4;
 
@@ -33,16 +32,12 @@ impl MeshBool {
 				normal: self.tri.normal.clone(),
 				relation: tri_rel,
 			},
-			instance_relation: [(
-				0_u32,
-				InstanceRelation {
-					original_id,
-					transform: Matrix3x4::identity(),
-					back_side: false,
-					has_normals: all_instances_have_normals(&self.instance_relation),
-				},
-			)]
-			.into(),
+			instance_relation: vec![InstanceRelation {
+				original_id,
+				transform: Matrix3x4::identity(),
+				back_side: false,
+				has_normals: all_instances_have_normals(&self.instance_relation),
+			}],
 			collider: self.collider.clone(),
 		}
 	}
@@ -152,7 +147,7 @@ impl MeshBool {
 	//but lost all its geometry along the way and early exited
 	pub(crate) fn decimated(
 		original_id: Option<u32>,
-		instance_relation: DeterministicMap<u32, InstanceRelation>,
+		instance_relation: Vec<InstanceRelation>,
 		prop_stride: usize,
 		precision: Precision,
 	) -> Self {

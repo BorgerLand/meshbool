@@ -26,32 +26,6 @@ impl<K, V> Default for DeterministicMap<K, V> {
 	}
 }
 
-impl<K, V, const N: usize> From<[(K, V); N]> for DeterministicMap<K, V>
-where
-	K: Eq + Hash,
-{
-	fn from(arr: [(K, V); N]) -> Self {
-		Self(HashMap::from_iter(arr))
-	}
-}
-
-impl<K, V> FromIterator<(K, V)> for DeterministicMap<K, V>
-where
-	K: Eq + Hash,
-{
-	fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
-		Self(HashMap::from_iter(iter))
-	}
-}
-
-impl<K, V> IntoIterator for DeterministicMap<K, V> {
-	type Item = <HashMap<K, V> as IntoIterator>::Item;
-	type IntoIter = <HashMap<K, V> as IntoIterator>::IntoIter;
-	fn into_iter(self) -> Self::IntoIter {
-		self.0.into_iter()
-	}
-}
-
 impl<K, V> DeterministicMap<K, V> {
 	pub fn new() -> Self {
 		Self(HashMap::with_hasher(BuildHasherDefault::default()))
@@ -77,6 +51,23 @@ impl<K> DerefMut for DeterministicSet<K> {
 impl<K> Default for DeterministicSet<K> {
 	fn default() -> Self {
 		Self::new()
+	}
+}
+
+impl<K> FromIterator<K> for DeterministicSet<K>
+where
+	K: Eq + Hash,
+{
+	fn from_iter<T: IntoIterator<Item = K>>(iter: T) -> Self {
+		Self(HashSet::from_iter(iter))
+	}
+}
+
+impl<K> IntoIterator for DeterministicSet<K> {
+	type Item = <HashSet<K> as IntoIterator>::Item;
+	type IntoIter = <HashSet<K> as IntoIterator>::IntoIter;
+	fn into_iter(self) -> Self::IntoIter {
+		self.0.into_iter()
 	}
 }
 

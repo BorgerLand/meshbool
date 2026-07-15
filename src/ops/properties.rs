@@ -108,13 +108,13 @@ impl MeshBool {
 		let instance_relation = self
 			.instance_relation
 			.iter()
-			.map(|(&instance_id, &rel)| {
+			.map(|&rel| {
 				let mut rel = rel;
 				if normal_idx == 0 {
 					rel.has_normals = true;
 				}
 
-				(instance_id, rel)
+				rel
 			})
 			.collect();
 
@@ -180,10 +180,7 @@ impl MeshBool {
 			instance_id_to_normal_transform
 				.entry(instance_id)
 				.or_insert_with(|| {
-					instance_relation
-						.get(&instance_id)
-						.unwrap()
-						.get_inverse_normal_transform()
+					instance_relation[instance_id as usize].get_inverse_normal_transform()
 				})
 				.clone()
 		};

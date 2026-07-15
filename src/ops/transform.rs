@@ -2,7 +2,6 @@ use crate::halfedge::Halfedges;
 use crate::mesh_relations::{InstanceRelation, TriRelation, tri_has_normals};
 use crate::postprocessing::sort::get_tri_box_morton;
 use crate::spatial::bvh_collider::BVHCollider;
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{
 	cosd, is_axis_aligned, mat3, mat4, normal_transform, safe_normalize3, sind, transform_normal,
 };
@@ -107,10 +106,10 @@ impl MeshBool {
 		let instance_relation = self
 			.instance_relation
 			.iter()
-			.map(|(&instance_id, &rel)| {
+			.map(|&rel| {
 				let mut rel = rel;
 				rel.transform = transform * mat4(rel.transform);
-				(instance_id, rel)
+				rel
 			})
 			.collect();
 
@@ -204,7 +203,7 @@ impl MeshBool {
 fn eager_transform_prop_normals(
 	properties: &mut Properties,
 	halfedge: &Halfedges,
-	instance_rel: &DeterministicMap<u32, InstanceRelation>,
+	instance_rel: &[InstanceRelation],
 	tri_rel: &[TriRelation],
 	normal_transform: Matrix3<f64>,
 	num_prop_vert: usize,
@@ -214,7 +213,7 @@ fn eager_transform_prop_normals(
 	// it), unlike AllHaveNormals() - mixed inputs still need the per-meshID
 	// iteration below to rotate the with-normals subset.
 	let mut any_has_normals = false;
-	for m in instance_rel.values() {
+	for m in instance_rel {
 		if m.has_normals {
 			any_has_normals = true;
 			break;

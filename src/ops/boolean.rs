@@ -1,7 +1,6 @@
 use crate::ops::boolean::intersect::Intersections;
 use crate::postprocessing as pp;
 use crate::spatial::aabb::{Box3D, Overlap};
-use crate::util::hash_table::DeterministicMap;
 use crate::util::vec_ext;
 use crate::{MeshBool, Precision, Properties};
 use std::collections::BTreeMap;
@@ -61,21 +60,15 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 
 	let invert_q = op == OpType::Difference;
 
-	let instance_id_merge = in_p
-		.instance_relation
-		.iter()
-		.map(|(&old_id, &rel)| (true, old_id, rel))
-		.chain(in_q.instance_relation.iter().map(|(&old_id, rel)| {
-			let mut rel = *rel;
-			rel.back_side ^= invert_q;
-			(false, old_id, rel)
-		}))
-		.enumerate()
-		.map(|(new_id, (pq, old_id, rel))| (pq, old_id, new_id as u32, rel));
-
-	let instance_rel = instance_id_merge
-		.clone()
-		.map(|(_, _, new_id, rel)| (new_id, rel));
+	let instance_rel =
+		in_p.instance_relation
+			.iter()
+			.cloned()
+			.chain(in_q.instance_relation.iter().map(|&rel| {
+				let mut rel = rel;
+				rel.back_side ^= invert_q;
+				rel
+			}));
 
 	let decimated = || {
 		Ok(MeshBool::decimated(
@@ -367,9 +360,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	// since the faces can be arbitrary polygons before feeding into the
 	// triangulator. prop_vert is meaningless until after create_properties
 	let mut face_halfedges = unsafe { vec_ext::uninit(num_halfedge_r) };
-	let instance_id_old2new: DeterministicMap<(bool, u32), u32> = instance_id_merge
-		.map(|(pq, old_id, new_id, _)| ((pq, old_id), new_id))
-		.collect();
+	let instance_id_offset_q = in_p.instance_relation.len() as u32;
 
 	construct::append_partial_edges(
 		&mut vert_pos,
@@ -383,9 +374,8 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&v_p2r,
 		&face_pq2r,
 		&in_p.tri.relation,
-		&instance_id_old2new,
+		0,
 		prop_stride > 0,
-		true,
 	);
 	construct::append_partial_edges(
 		&mut vert_pos,
@@ -399,9 +389,8 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&v_q2r,
 		&face_pq2r[in_p.num_tri()..],
 		&in_q.tri.relation,
-		&instance_id_old2new,
+		instance_id_offset_q,
 		prop_stride > 0,
-		false,
 	);
 
 	construct::append_new_edges(
@@ -414,7 +403,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		in_p.num_tri(),
 		&in_p.tri.relation,
 		&in_q.tri.relation,
-		&instance_id_old2new,
+		instance_id_offset_q,
 		prop_stride > 0,
 	);
 
@@ -428,9 +417,8 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		v_p2r,
 		&face_pq2r[..in_p.num_tri()],
 		&in_p.tri.relation,
-		&instance_id_old2new,
+		0,
 		prop_stride > 0,
-		true,
 	);
 	construct::append_whole_edges(
 		&mut face_ptr_r,
@@ -442,14 +430,12 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		v_q2r,
 		&face_pq2r[in_p.num_tri()..],
 		&in_q.tri.relation,
-		&instance_id_old2new,
+		instance_id_offset_q,
 		prop_stride > 0,
-		false,
 	);
 
 	drop(face_ptr_r);
 	drop(face_pq2r);
-	drop(instance_id_old2new);
 
 	// Level 6
 	let mut tri = face2tri::face2tri(

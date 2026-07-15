@@ -1,4 +1,3 @@
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::inverse_normal_transform;
 use nalgebra::{Matrix3, Matrix3x4};
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -70,18 +69,13 @@ pub fn reserve_original_id() -> u32 {
 
 ///True iff the meshID owning `tri` has hasNormals set. Returns false when
 ///the meshID isn't in meshRelation_.meshIDtransform (treat as no-normals).
-pub fn tri_has_normals(
-	instance_rel: &DeterministicMap<u32, InstanceRelation>,
-	tri: TriRelation,
-) -> bool {
+pub fn tri_has_normals(instance_rel: &[InstanceRelation], tri: TriRelation) -> bool {
 	instance_rel
-		.get(&tri.instance_id)
+		.get(tri.instance_id as usize)
 		.map(|it| it.has_normals)
 		.unwrap_or(false)
 }
 
-pub fn all_instances_have_normals(instance_rel: &DeterministicMap<u32, InstanceRelation>) -> bool {
-	instance_rel
-		.iter()
-		.all(|(_, instance)| instance.has_normals)
+pub fn all_instances_have_normals(instance_rel: &Vec<InstanceRelation>) -> bool {
+	instance_rel.iter().all(|instance| instance.has_normals)
 }
