@@ -36,7 +36,7 @@ git submodule update --init --recursive
 mkdir -p test/manifold/build && cd test/manifold/build
 #THOROUGH MODE:
 cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_DEBUG=ON -DMANIFOLD_ASSERT=ON && make manifold_test -j$(nproc)
-#BENCH MODE (you can use this same command on the upstream manifold repo to bench against the c++ implementation):
+#BENCH MODE (you can use this same command on the upstream manifold repo to bench against the C++ implementation):
 cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_DEBUG=OFF -DMANIFOLD_ASSERT=OFF && make manifold_test -j$(nproc)
 ```
 
@@ -44,7 +44,10 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_DEBUG=OFF -DMANIFOLD_ASSERT=OFF &
 
 ```bash
 cd test #from inside test/manifold/build
+#THOROUGH MODE (requires thorough build):
 RUST_BACKTRACE=1 ./manifold_test
+#BENCH MODE (requires bench build):
+./manifold_test --gtest_filter='Properties.MingapAfterTransformations:Properties.MingapStretchyBracelet:Properties.ToleranceSphere:Boolean.CreatePropertiesSlow:Samples.Bracelet:Samples.CondensedMatter16:Samples.CondensedMatter64:Samples.Sponge4:BooleanComplex.Close:BooleanComplex.GenericTwinBooleanTest7081:Polygon.Zebra:Polygon.Zebra3'
 ```
 
 ---
