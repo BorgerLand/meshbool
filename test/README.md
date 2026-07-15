@@ -60,8 +60,6 @@ RUST_BACKTRACE=1 ./manifold_test
 
 ## Disabled tests
 
-There are a few upstream tests that prevent other tests from running due to features not yet implemented in MeshBool. Additionally, some suites are entirely built around unimplemented features.
-
 | Disabled test                                | Reason                  | Method                         |
 | -------------------------------------------- | ----------------------- | ------------------------------ |
 | All of `Manifold.ErrorPropagation*`          | N/A to Result-based API | `#if 0`                        |
@@ -72,8 +70,14 @@ There are a few upstream tests that prevent other tests from running due to feat
 | All of `smooth_test.cpp`                     | Unimplemented           | `manifold/test/CMakeLists.txt` |
 | All of `hull_test.cpp`                       | Unimplemented           | `manifold/test/CMakeLists.txt` |
 
-Known failures, treating them as potential bugs in Manifold/its test suite's expectations:
+## Known failures
 
-- Boolean.Precision: `CsgLeafNode::Compose` optimization is not implemented, and the unoptimized full boolean path calls simplify_topology with nonzero first_new_vert, causing the tiny cube to not run through degenerate removal
+Currently treating these as potential bugs in Manifold/its test suite's expectations:
+
+- Boolean.Precision: `CsgLeafNode::Compose` optimization is not implemented, and the unoptimized full boolean path calls simplify_topology with nonzero first_new_vert, causing the tiny cube to not run through degenerate removal. Perhaps `MeshBool` (the standalone tiny cube in particular) should not be allowed to exist in an unsimplified state.
 - Boolean.BatchBoolean: Output looks visually correct, again error may be due to unimplemented `CsgLeafNode::Compose` optimization, though it's weird that they don't produce the same number of triangles out
-- Samples.Sponge4: Changing the halfedges' order causes a different triangulation with different number of degenerate triangles. Unclear to me whether this is a true failure or an overly strict test
+- Samples.Sponge4: Number of degenerate triangles too large, purely due to removal/destabilizing of some sorting. Culprits:
+  - Removed `reorder_halfedge` during large refactor (impl [here](https://github.com/BorgerLand/meshbool/blob/28d29259978beb73c703fcbd9ad26172962be1ec/src/sort.rs#L499), called [here](https://github.com/BorgerLand/meshbool/blob/28d29259978beb73c703fcbd9ad26172962be1ec/src/boolean_result.rs#L1078))
+  - [use preallocated deterministicmap instead of btreemap](https://github.com/BorgerLand/meshbool/commit/d1b8c6395b0bf1c1fd428ac34fb1f018d96b8e03)
+  - [loosen sorting strictness hopefully](https://github.com/BorgerLand/meshbool/commit/dcd237f795bb8acaca3c51c63f68c98e3a24434a)
+    - ^ Revert all these optimizations and it will pass
