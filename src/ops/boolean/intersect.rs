@@ -36,7 +36,7 @@ use std::ops::DerefMut;
 #[derive(Default, Debug)]
 pub struct Intersections {
 	pub p1q2: Vec<[i32; 2]>,
-	pub x12: Vec<i32>,
+	pub x12: Vec<i8>,
 	pub v12: Vec<Point3<f64>>,
 }
 
@@ -121,8 +121,8 @@ struct Kernel12<'a, const EXPAND_P: bool, const FORWARD: bool> {
 }
 
 impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWARD> {
-	fn call(&self, a1: i32, b2: i32) -> (i32, Point3<f64>) {
-		let mut x12 = 0;
+	fn call(&self, a1: i32, b2: i32) -> (i8, Point3<f64>) {
+		let mut x12: i8 = 0;
 		let mut v12 = Point3::new(f64::NAN, f64::NAN, f64::NAN);
 
 		// For xzy_lr-[k], k==0 is the left and k==1 is the right.
@@ -140,12 +140,12 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWA
 		for vert_a in [edge_a_start, edge_a_end] {
 			let (s, z) = self.k02.call_with_edge(vert_a, b2, &edge_b);
 			if z.is_finite() {
-				x12 += s
+				x12 += (s
 					* (if (vert_a == edge_a_start) == FORWARD {
 						1
 					} else {
 						-1
-					});
+					})) as i8;
 				if k < 2 && (k == 0 || (s != 0) != shadows_var) {
 					shadows_var = s != 0;
 					xzy_lr0[k] = self.in_a.vert_pos[vert_a as usize];
@@ -243,15 +243,7 @@ struct Kernel11<'a, const EXPAND_P: bool> {
 }
 
 impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
-	fn call(
-		&self,
-		p1: i32,
-		p1s: i32,
-		p1e: i32,
-		q1: i32,
-		q1s: i32,
-		q1e: i32,
-	) -> (i32, Vector4<f64>) {
+	fn call(&self, p1: i32, p1s: i32, p1e: i32, q1: i32, q1s: i32, q1e: i32) -> (i8, Vector4<f64>) {
 		let xyzz11;
 		let mut s11 = 0;
 
@@ -499,7 +491,7 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel02<'a, EXPAND_P, FORWA
 			}
 		}
 
-		(s02, z02)
+		(s02.into(), z02)
 	}
 }
 
@@ -513,7 +505,7 @@ fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
 	vert_normal_a: &[Vector3<f64>],
 	in_b: &MeshBool,
 	vert_normal_b: &[Vector3<f64>],
-) -> (i32, Vector2<f64>) {
+) -> (i8, Vector2<f64>) {
 	let a0x = in_a.vert_pos[a0 as usize].x;
 	let b1sx = in_b.vert_pos[b1s as usize].x;
 	let b1ex = in_b.vert_pos[b1e as usize].x;
@@ -521,11 +513,11 @@ fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
 	let b1sxp = vert_normal_b[b1s as usize].x;
 	let b1exp = vert_normal_b[b1e as usize].x;
 	let mut s01 = if FORWARD {
-		shadows(a0x, b1ex, with_sign(EXPAND_P, a0xp) - b1exp) as i32
-			- shadows(a0x, b1sx, with_sign(EXPAND_P, a0xp) - b1sxp) as i32
+		shadows(a0x, b1ex, with_sign(EXPAND_P, a0xp) - b1exp) as i8
+			- shadows(a0x, b1sx, with_sign(EXPAND_P, a0xp) - b1sxp) as i8
 	} else {
-		shadows(b1sx, a0x, with_sign(EXPAND_P, b1sxp) - a0xp) as i32
-			- shadows(b1ex, a0x, with_sign(EXPAND_P, b1exp) - a0xp) as i32
+		shadows(b1sx, a0x, with_sign(EXPAND_P, b1sxp) - a0xp) as i8
+			- shadows(b1ex, a0x, with_sign(EXPAND_P, b1exp) - a0xp) as i8
 	};
 
 	let mut yz01 = Vector2::from_element(f64::NAN);

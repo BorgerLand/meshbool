@@ -71,10 +71,11 @@ where
 ///The input range `[first, last)` and
 ///the output range `[d_first, d_first + last - first)`
 ///must be equal or non-overlapping.
-pub fn exclusive_scan_transformed<IO, F>(input: &[IO], init: IO, mut transform: F) -> Vec<IO>
+pub fn exclusive_scan_transformed<In, Out, F>(input: &[In], init: Out, mut transform: F) -> Vec<Out>
 where
-	IO: Copy,
-	F: FnMut(IO, IO) -> IO,
+	In: Copy + Into<Out>,
+	Out: Copy,
+	F: FnMut(Out, Out) -> Out,
 {
 	let mut output = unsafe { vec_ext::uninit(input.len()) };
 	if input.len() == 0 {
@@ -83,7 +84,7 @@ where
 
 	output[0] = init;
 	for i in 1..input.len() {
-		output[i] = transform(output[i - 1], input[i - 1]);
+		output[i] = transform(output[i - 1], input[i - 1].into());
 	}
 
 	output

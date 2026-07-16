@@ -10,16 +10,19 @@ use nalgebra::{Matrix3, Point3, Vector3, Vector4};
 use std::mem;
 use std::ops::Deref;
 
-pub struct DuplicateVerts<'a> {
+pub struct DuplicateVerts<'a, T> {
 	pub vert_pos_r: &'a mut [Point3<f64>],
-	pub inclusion: &'a [i32],
+	pub inclusion: &'a [T],
 	pub vert_r: &'a [i32],
 	pub vert_pos_p: &'a [Point3<f64>],
 }
 
-impl<'a> DuplicateVerts<'a> {
+impl<'a, T> DuplicateVerts<'a, T>
+where
+	T: Copy + Into<i32>,
+{
 	pub fn call(&mut self, vert: usize) {
-		let n = self.inclusion[vert].abs();
+		let n: i32 = self.inclusion[vert].into().abs();
 		for i in 0..n {
 			self.vert_pos_r[(self.vert_r[vert] + i) as usize] = self.vert_pos_p[vert];
 		}
@@ -38,7 +41,7 @@ pub fn add_new_edge_verts(
 	edges_old: &mut DeterministicMap<i32, Vec<EdgePos>>,
 	edges_new: &mut DeterministicMap<(i32, i32), Vec<EdgePos>>,
 	p1q2: &[[i32; 2]],
-	i12: &[i32],
+	i12: &[i8],
 	v12_r: Vec<i32>,
 	halfedge_p: &Halfedges,
 	forward: bool,
@@ -79,7 +82,7 @@ pub fn add_new_edge_verts(
 			for j in 0..inclusion.abs() {
 				tuple.1.push(EdgePos {
 					edge_pos: 0.0,
-					vert: vert + j,
+					vert: vert + (j as i32),
 					is_start: tuple.0,
 				});
 			}
@@ -105,7 +108,7 @@ impl<'a> CountVerts<'a> {
 struct CountNewVerts<'a, const INVERTED: bool> {
 	count_p: &'a mut [i32],
 	count_q: &'a mut [i32],
-	i12: &'a [i32],
+	i12: &'a [i8],
 	pq: &'a [[i32; 2]],
 	halfedges: &'a Halfedges,
 }
@@ -114,7 +117,7 @@ impl<'a, const INVERTED: bool> CountNewVerts<'a, INVERTED> {
 	fn call(&mut self, idx: usize) {
 		let edge_p = self.pq[idx][if INVERTED { 1 } else { 0 }];
 		let face_q = self.pq[idx][if INVERTED { 0 } else { 1 }];
-		let inclusion = self.i12[idx].abs();
+		let inclusion = (self.i12[idx] as i32).abs();
 
 		self.count_q[face_q as usize] += inclusion;
 		self.count_p[(edge_p / 3) as usize] += inclusion;
@@ -127,8 +130,8 @@ pub fn size_sides_per_face_pq(
 	halfedge_q: &Halfedges,
 	i03: &[i32],
 	i30: &[i32],
-	i12: Vec<i32>,
-	i21: Vec<i32>,
+	i12: Vec<i8>,
+	i21: Vec<i8>,
 	p1q2: Vec<[i32; 2]>,
 	p2q1: Vec<[i32; 2]>,
 ) -> Vec<i32> {

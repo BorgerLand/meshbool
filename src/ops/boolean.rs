@@ -206,8 +206,8 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	//reuses existing allocation
 	let i12: Vec<_> = xv12.x12.into_iter().map(|v| c3 * v).collect();
 	let i21: Vec<_> = xv21.x12.into_iter().map(|v| c3 * v).collect();
-	let i03: Vec<_> = w03.into_iter().map(|v| c1 + c3 * v).collect();
-	let i30: Vec<_> = w30.into_iter().map(|v| c2 + c3 * v).collect();
+	let i03: Vec<_> = w03.into_iter().map(|v| c1 + (c3 as i32) * v).collect();
+	let i30: Vec<_> = w30.into_iter().map(|v| c2 + (c3 as i32) * v).collect();
 
 	let abs_sum = |a: i32, b: i32| a.abs() + b.abs();
 
@@ -223,7 +223,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		Vec::new()
 	} else {
 		let v12_r = vec_ext::exclusive_scan_transformed(&i12, num_vert_r, &abs_sum);
-		num_vert_r = abs_sum(*v12_r.last().unwrap(), *i12.last().unwrap());
+		num_vert_r = abs_sum(*v12_r.last().unwrap(), *i12.last().unwrap() as i32);
 		v12_r
 	};
 
@@ -233,7 +233,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		Vec::new()
 	} else {
 		let v21_r = vec_ext::exclusive_scan_transformed(&i21, num_vert_r, &abs_sum);
-		num_vert_r = abs_sum(*v21_r.last().unwrap(), *i21.last().unwrap());
+		num_vert_r = abs_sum(*v21_r.last().unwrap(), *i21.last().unwrap() as i32);
 		v21_r
 	};
 
