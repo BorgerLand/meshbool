@@ -4,7 +4,6 @@ use crate::ops::boolean::face2tri::{assemble_halfedges, project_polygons};
 use crate::postprocessing as pp;
 use crate::postprocessing::sort::{gather_tris, reindex_verts};
 use crate::spatial::aabb::Box3D;
-use crate::spatial::bvh_collider::SimpleRecorder;
 use crate::triangulation::{Polygons, SimplePolygon};
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicSet;
@@ -178,23 +177,24 @@ impl MeshBool {
 		query.push(plane);
 
 		let mut tris = DeterministicSet::new();
-		let mut record_collision = |_, tri: i32| {
-			let mut min = f64::INFINITY;
-			let mut max = f64::NEG_INFINITY;
-			for j in 0..3 {
-				let z: f64 = self.vert_pos[self.tri.halfedge.start(3 * tri + j) as usize].z;
-				min = min.min(z);
-				max = max.max(z);
-			}
 
-			if min <= height && max > height {
-				tris.insert(tri);
-			}
-		};
+		self.collider.collisions_from_slice::<false, _>(
+			|_, tri| {
+				let mut min = f64::INFINITY;
+				let mut max = f64::NEG_INFINITY;
+				for j in 0..3 {
+					let z: f64 = self.vert_pos[self.tri.halfedge.start(3 * tri + j) as usize].z;
+					min = min.min(z);
+					max = max.max(z);
+				}
 
-		let mut recorder = SimpleRecorder::new(&mut record_collision);
-		self.collider
-			.collisions_from_slice::<false, _>(&mut recorder, &query, false);
+				if min <= height && max > height {
+					tris.insert(tri);
+				}
+			},
+			&query,
+			false,
+		);
 
 		let mut polys = Polygons::default();
 		while !tris.is_empty() {

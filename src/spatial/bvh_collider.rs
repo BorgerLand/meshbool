@@ -93,14 +93,13 @@ impl BVHCollider {
 
 	pub fn collisions_from_fn<const SELF_COLLISION: bool, OverlapT>(
 		&self,
-		recorder: &mut impl Recorder,
+		recorder: impl FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
 		f: impl Fn(i32) -> OverlapT,
 		n: usize,
 		_parallel: bool,
 	) where
-		OverlapT: Debug + 'static,
+		OverlapT: Copy + Debug + 'static,
 		Box3D: Overlap<OverlapT>,
-		OverlapT: Copy,
 	{
 		if self.internal_children.is_empty() {
 			return;
@@ -127,7 +126,7 @@ impl BVHCollider {
 	///If thread local storage is not needed, use SimpleRecorder.
 	pub fn collisions_from_slice<const SELF_COLLISION: bool, OverlapT>(
 		&self,
-		recorder: &mut impl Recorder,
+		recorder: impl FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
 		queries_in: &[OverlapT],
 		parallel: bool,
 	) where
@@ -272,29 +271,24 @@ impl<'a> CreateRadixTree<'a> {
 	}
 }
 
-pub trait Recorder {
-	fn record(&mut self, query_idx: i32, leaf_idx: i32);
-}
-
 struct FindCollision<'a, const SELF_COLLISION: bool, F, OverlapT, RecorderT>
 where
 	F: Fn(i32) -> OverlapT,
-	RecorderT: Recorder,
+	RecorderT: FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
 {
 	f: &'a F,
 	node_bbox: &'a [Box3D],
 	internal_children: &'a [(i32, i32)],
-	recorder: &'a mut RecorderT,
+	recorder: RecorderT,
 }
 
 impl<'a, const SELF_COLLISION: bool, F, OverlapT, RecorderT>
 	FindCollision<'a, SELF_COLLISION, F, OverlapT, RecorderT>
 where
 	F: Fn(i32) -> OverlapT,
-	OverlapT: Debug + 'static,
-	RecorderT: Recorder,
+	OverlapT: Copy + Debug + 'static,
+	RecorderT: FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
 	Box3D: Overlap<OverlapT>,
-	OverlapT: Copy,
 {
 	#[inline(always)]
 	fn record_collision(&mut self, query: OverlapT, node: i32, query_idx: i32) -> bool {
@@ -303,7 +297,7 @@ where
 		if overlaps && is_leaf(node) {
 			let leaf_idx = node2leaf(node);
 			if !SELF_COLLISION || leaf_idx != query_idx {
-				self.recorder.record(query_idx, leaf_idx);
+				(self.recorder)(query_idx, leaf_idx);
 			}
 		}
 
@@ -386,22 +380,6 @@ const fn spread_bits3(mut v: u32) -> u32 {
 	v = 0xC30C30C3 & (v.wrapping_mul(0x00000011));
 	v = 0x49249249 & (v.wrapping_mul(0x00000005));
 	return v;
-}
-
-pub struct SimpleRecorder<'a> {
-	pub f: &'a mut dyn FnMut(i32, i32),
-}
-
-impl<'a> SimpleRecorder<'a> {
-	pub fn new(f: &'a mut dyn FnMut(i32, i32)) -> Self {
-		Self { f }
-	}
-}
-
-impl<'a> Recorder for SimpleRecorder<'a> {
-	fn record(&mut self, query_idx: i32, leaf_idx: i32) {
-		(self.f)(query_idx, leaf_idx);
-	}
 }
 
 #[inline(always)]

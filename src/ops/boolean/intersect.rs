@@ -1,7 +1,6 @@
 use crate::MeshBool;
 use crate::halfedge::Halfedges;
 use crate::spatial::aabb::Box3D;
-use crate::spatial::bvh_collider::{Recorder, SimpleRecorder};
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicSet;
 use crate::util::math::next3_i32;
@@ -95,10 +94,6 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		k02,
 		k11,
 	};
-	let mut recorder = Kernel12Recorder::<EXPAND_P, FORWARD> {
-		k12: &k12,
-		local_store: xv12,
-	};
 	let f = |i| {
 		let start = a.tri.halfedge.start(i);
 		let end = a.tri.halfedge.end(i);
@@ -109,8 +104,24 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		}
 	};
 
-	b.collider
-		.collisions_from_fn::<false, _>(&mut recorder, f, a.tri.halfedge.len(), true);
+	b.collider.collisions_from_fn::<false, _>(
+		|query_idx, leaf_idx| {
+			let (x12, v12) = k12.call(query_idx, leaf_idx);
+			if v12[0].is_finite() {
+				if FORWARD {
+					xv12.p1q2.push([query_idx, leaf_idx]);
+				} else {
+					xv12.p1q2.push([leaf_idx, query_idx]);
+				}
+
+				xv12.x12.push(x12);
+				xv12.v12.push(v12);
+			}
+		},
+		f,
+		a.tri.halfedge.len(),
+		true,
+	);
 }
 
 struct Kernel12<'a, const EXPAND_P: bool, const FORWARD: bool> {
@@ -208,30 +219,6 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWA
 		}
 
 		(x12, v12)
-	}
-}
-
-struct Kernel12Recorder<'a, const EXPAND_P: bool, const FORWARD: bool> {
-	k12: &'a Kernel12<'a, EXPAND_P, FORWARD>,
-	local_store: &'a mut Intersections,
-}
-
-impl<'a, const EXPAND_P: bool, const FORWARD: bool> Recorder
-	for Kernel12Recorder<'a, EXPAND_P, FORWARD>
-{
-	fn record(&mut self, query_idx: i32, leaf_idx: i32) {
-		let tmp = &mut self.local_store;
-		let (x12, v12) = self.k12.call(query_idx, leaf_idx);
-		if v12[0].is_finite() {
-			if FORWARD {
-				tmp.p1q2.push([query_idx, leaf_idx]);
-			} else {
-				tmp.p1q2.push([leaf_idx, query_idx]);
-			}
-
-			tmp.x12.push(x12);
-			tmp.v12.push(v12);
-		}
 	}
 }
 
@@ -393,18 +380,20 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		in_b: b,
 		vert_normal_b,
 	};
-	let mut recorderf = |query_idx: i32, leaf_idx: i32| {
-		let (s02, z02) = k02.call(verts[query_idx as usize], leaf_idx);
-		if z02.is_finite() {
-			// note that i is distinct on each thread, and verts contains unique
-			// elements, so this does not require atomics
-			w03[verts[query_idx as usize] as usize] += s02 * (if FORWARD { 1 } else { -1 });
-		}
-	};
-	let mut recorder = SimpleRecorder::new(&mut recorderf);
 	let f = |i| a.vert_pos[verts[i as usize] as usize];
-	b.collider
-		.collisions_from_fn::<false, _>(&mut recorder, f, verts.len(), true);
+	b.collider.collisions_from_fn::<false, _>(
+		|query_idx, leaf_idx| {
+			let (s02, z02) = k02.call(verts[query_idx as usize], leaf_idx);
+			if z02.is_finite() {
+				// note that i is distinct on each thread, and verts contains unique
+				// elements, so this does not require atomics
+				w03[verts[query_idx as usize] as usize] += s02 * (if FORWARD { 1 } else { -1 });
+			}
+		},
+		f,
+		verts.len(),
+		true,
+	);
 	// flood fill
 	for i in 0..w03.len() {
 		let root = u_a.find(i);

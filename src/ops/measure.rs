@@ -1,7 +1,6 @@
 use crate::MeshBool;
 use crate::postprocessing::sort::get_tri_box_morton;
 use crate::spatial::aabb::Box3D;
-use crate::spatial::bvh_collider::Recorder;
 use crate::util::math::{ccw, get_axis_aligned_projection};
 use crate::util::tri_dst::distance_triangle_triangle_squared;
 use nalgebra::{Point2, Point3, Vector3};
@@ -109,47 +108,23 @@ impl MeshBool {
 			);
 		}
 
-		let mut recorder = MinDistanceRecorder::new(&self, other);
-		self.collider
-			.collisions_from_slice::<false, _>(&mut recorder, &face_box_other, false);
-		let min_distance_squared = recorder.get().min(search_length * search_length);
-		return min_distance_squared.sqrt();
-	}
-}
+		let mut min_distance = f64::INFINITY;
+		self.collider.collisions_from_slice::<false, _>(
+			|tri_other, tri| {
+				let mut p: [Point3<f64>; 3] = Default::default();
+				let mut q: [Point3<f64>; 3] = Default::default();
 
-struct MinDistanceRecorder<'a> {
-	this: &'a MeshBool,
-	other: &'a MeshBool,
-	result: f64,
-}
-
-impl<'a> MinDistanceRecorder<'a> {
-	fn new(this: &'a MeshBool, other: &'a MeshBool) -> Self {
-		Self {
-			this,
-			other,
-			result: f64::INFINITY,
-		}
-	}
-
-	fn get(&self) -> f64 {
-		return self.result;
-	}
-}
-
-impl Recorder for MinDistanceRecorder<'_> {
-	fn record(&mut self, tri_other: i32, tri: i32) {
-		let min_distance = &mut self.result;
-
-		let mut p: [Point3<f64>; 3] = Default::default();
-		let mut q: [Point3<f64>; 3] = Default::default();
-
-		for j in 0..3 {
-			p[j as usize] = self.this.vert_pos[self.this.tri.halfedge.start(3 * tri + j) as usize];
-			q[j as usize] =
-				self.other.vert_pos[self.other.tri.halfedge.start(3 * tri_other + j) as usize];
-		}
-		*min_distance = min_distance.min(distance_triangle_triangle_squared(&p, &q));
+				for j in 0..3 {
+					p[j as usize] = self.vert_pos[self.tri.halfedge.start(3 * tri + j) as usize];
+					q[j as usize] =
+						other.vert_pos[other.tri.halfedge.start(3 * tri_other + j) as usize];
+				}
+				min_distance = min_distance.min(distance_triangle_triangle_squared(&p, &q));
+			},
+			&face_box_other,
+			false,
+		);
+		min_distance.min(search_length * search_length).sqrt()
 	}
 }
 

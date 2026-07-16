@@ -1,7 +1,6 @@
 use crate::mesh_relations::reserve_original_id;
 use crate::meshgl::MeshGL;
 use crate::postprocessing::sort::get_tri_box_morton;
-use crate::spatial::bvh_collider::SimpleRecorder;
 use crate::triangulation::PolyVert;
 use crate::util::num_convert::LossyFrom;
 use crate::util::segment_resolution::SegmentResolution;
@@ -523,62 +522,62 @@ impl MeshBool {
 
 		let intersecting = AtomicBool::new(false);
 
-		let mut f = |tri0: i32, tri1: i32| {
-			let mut tri_verts0: [Point3<f64>; 3] = [Point3::default(); 3];
-			let mut tri_verts1: [Point3<f64>; 3] = [Point3::default(); 3];
-			for i in 0..3 {
-				tri_verts0[i as usize] =
-					self.vert_pos[self.tri.halfedge.start(3 * tri0 + i) as usize];
-				tri_verts1[i as usize] =
-					self.vert_pos[self.tri.halfedge.start(3 * tri1 + i) as usize];
-			}
-			// if triangles tri0 and tri1 share a vertex, return true to skip the
-			// check. we relax the sharing criteria a bit to allow for at most
-			// distance epsilon squared
-			for i in 0..3 {
-				for j in 0..3 {
-					if (tri_verts1[j] - tri_verts0[i]).magnitude_squared() <= epsilon_sq {
-						return;
+		self.collider.collisions_from_slice::<true, _>(
+			|tri0, tri1| {
+				let mut tri_verts0: [Point3<f64>; 3] = [Point3::default(); 3];
+				let mut tri_verts1: [Point3<f64>; 3] = [Point3::default(); 3];
+				for i in 0..3 {
+					tri_verts0[i as usize] =
+						self.vert_pos[self.tri.halfedge.start(3 * tri0 + i) as usize];
+					tri_verts1[i as usize] =
+						self.vert_pos[self.tri.halfedge.start(3 * tri1 + i) as usize];
+				}
+				// if triangles tri0 and tri1 share a vertex, return true to skip the
+				// check. we relax the sharing criteria a bit to allow for at most
+				// distance epsilon squared
+				for i in 0..3 {
+					for j in 0..3 {
+						if (tri_verts1[j] - tri_verts0[i]).magnitude_squared() <= epsilon_sq {
+							return;
+						}
 					}
 				}
-			}
 
-			if distance_triangle_triangle_squared(&tri_verts0, &tri_verts1) == 0.0 {
-				// try to move the triangles around the normal of the other face
-				let mut tmp0: [Point3<f64>; 3] = [Point3::default(); 3];
-				let mut tmp1: [Point3<f64>; 3] = [Point3::default(); 3];
-				for i in 0..3 {
-					tmp0[i] = tri_verts0[i] + ep * self.tri.normal[tri1 as usize];
-				}
-				if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
-					return;
-				}
-				for i in 0..3 {
-					tmp0[i] = tri_verts0[i] - ep * self.tri.normal[tri1 as usize];
-				}
-				if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
-					return;
-				}
-				for i in 0..3 {
-					tmp1[i] = tri_verts1[i] + ep * self.tri.normal[tri0 as usize];
-				}
-				if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
-					return;
-				}
-				for i in 0..3 {
-					tmp1[i] = tri_verts1[i] - ep * self.tri.normal[tri0 as usize];
-				}
-				if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
-					return;
-				}
+				if distance_triangle_triangle_squared(&tri_verts0, &tri_verts1) == 0.0 {
+					// try to move the triangles around the normal of the other face
+					let mut tmp0: [Point3<f64>; 3] = [Point3::default(); 3];
+					let mut tmp1: [Point3<f64>; 3] = [Point3::default(); 3];
+					for i in 0..3 {
+						tmp0[i] = tri_verts0[i] + ep * self.tri.normal[tri1 as usize];
+					}
+					if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
+						return;
+					}
+					for i in 0..3 {
+						tmp0[i] = tri_verts0[i] - ep * self.tri.normal[tri1 as usize];
+					}
+					if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
+						return;
+					}
+					for i in 0..3 {
+						tmp1[i] = tri_verts1[i] + ep * self.tri.normal[tri0 as usize];
+					}
+					if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
+						return;
+					}
+					for i in 0..3 {
+						tmp1[i] = tri_verts1[i] - ep * self.tri.normal[tri0 as usize];
+					}
+					if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
+						return;
+					}
 
-				intersecting.store(true, Ordering::SeqCst);
-			}
-		};
-
-		let mut recorder = SimpleRecorder::new(&mut f);
-		self.collider
-			.collisions_from_slice::<true, _>(&mut recorder, &tri_box, true);
+					intersecting.store(true, Ordering::SeqCst);
+				}
+			},
+			&tri_box,
+			true,
+		);
 
 		intersecting.load(Ordering::SeqCst)
 	}

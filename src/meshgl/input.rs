@@ -4,7 +4,7 @@ use crate::meshgl::MeshGL;
 use crate::postprocessing as pp;
 use crate::postprocessing::sort::morton_code;
 use crate::spatial::aabb::Box3D;
-use crate::spatial::bvh_collider::{BVHCollider, SimpleRecorder};
+use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::math::K_PRECISION;
 use crate::util::num_convert::{LossyFrom, LossyInto};
@@ -443,15 +443,16 @@ where
 		let collider = BVHCollider::new(&vert_box, &vert_morton);
 		let uf = DisjointSets::new(num_vert);
 
-		let mut f = |a: i32, b: i32| {
-			uf.unite(
-				open_verts[a as usize] as usize,
-				open_verts[b as usize] as usize,
-			);
-		};
-
-		let mut recorder = SimpleRecorder::new(&mut f);
-		collider.collisions_from_slice::<true, _>(&mut recorder, &vert_box, false);
+		collider.collisions_from_slice::<true, _>(
+			|a, b| {
+				uf.unite(
+					open_verts[a as usize] as usize,
+					open_verts[b as usize] as usize,
+				);
+			},
+			&vert_box,
+			false,
+		);
 
 		for i in 0..self.merge_from_vert.len() {
 			uf.unite(
