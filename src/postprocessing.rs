@@ -100,7 +100,7 @@ pub fn dedupe_prop_verts(
 
 	let num_prop_vert = properties.data.len() / prop_stride;
 
-	let uf = DisjointSets::new(num_prop_vert);
+	let mut uf = DisjointSets::new(num_prop_vert);
 	for edge in vert2vert {
 		if edge.0 == -1 || edge.1 == -1 {
 			continue;

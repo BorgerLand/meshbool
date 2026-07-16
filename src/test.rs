@@ -520,7 +520,7 @@ impl MeshBool {
 		let epsilon_sq = ep * ep;
 		let (tri_box, _) = get_tri_box_morton(&self.tri.halfedge, &self.vert_pos, None);
 
-		let intersecting = AtomicBool::new(false);
+		let mut intersecting = false;
 
 		self.collider.collisions_from_slice::<true, _>(
 			|tri0, tri1| {
@@ -572,14 +572,14 @@ impl MeshBool {
 						return;
 					}
 
-					intersecting.store(true, Ordering::SeqCst);
+					intersecting = true;
 				}
 			},
 			&tri_box,
 			true,
 		);
 
-		intersecting.load(Ordering::SeqCst)
+		intersecting
 	}
 }
 

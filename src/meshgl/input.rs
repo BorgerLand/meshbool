@@ -441,7 +441,7 @@ where
 		vec_ext::gather_in_place(&mut open_verts, &vert_new2old);
 
 		let collider = BVHCollider::new(&vert_box, &vert_morton);
-		let uf = DisjointSets::new(num_vert);
+		let mut uf = DisjointSets::new(num_vert);
 
 		collider.collisions_from_slice::<true, _>(
 			|a, b| {

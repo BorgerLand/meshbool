@@ -16,7 +16,7 @@ impl MeshBool {
 	// disconnected. If everything is connected, the vector is length one,
 	// containing a copy of the original. It is the inverse operation of Compose().
 	pub fn decompose(&self) -> Vec<Self> {
-		let uf = DisjointSets::new(self.num_vert());
+		let mut uf = DisjointSets::new(self.num_vert());
 		for edge in 0..self.tri.halfedge.len() as i32 {
 			if self.tri.halfedge.is_forward(edge) {
 				uf.unite(

@@ -352,7 +352,7 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 	};
 	let index = if FORWARD { 0 } else { 1 };
 
-	let u_a = DisjointSets::new(a.vert_pos.len());
+	let mut u_a = DisjointSets::new(a.vert_pos.len());
 	for edge in 0..a.tri.halfedge.len() as i32 {
 		let start = a.tri.halfedge.start(edge);
 		let end = a.tri.halfedge.end(edge);
