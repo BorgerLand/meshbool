@@ -466,6 +466,8 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	};
 
 	let first_new_vert = n_pv + n_qv;
+	let instance_rel: Vec<_> = instance_rel.clone().collect();
+
 	pp::split_pinched_verts(&mut tri.halfedge, &mut vert_pos);
 	pp::dedupe_edges(&mut tri, &mut vert_pos);
 	pp::collapse_short_edges(
@@ -473,6 +475,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&mut vert_pos,
 		&tri.normal,
 		&tri.relation,
+		&instance_rel,
 		prop_stride,
 		precision,
 		first_new_vert,
@@ -482,6 +485,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&mut vert_pos,
 		&tri.normal,
 		&tri.relation,
+		&instance_rel,
 		prop_stride,
 		precision.epsilon,
 		first_new_vert,
@@ -490,6 +494,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		&mut tri,
 		&mut vert_pos,
 		&mut properties,
+		&instance_rel,
 		precision,
 		first_new_vert,
 	);
@@ -516,7 +521,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		vert_pos,
 		properties,
 		tri,
-		instance_relation: instance_rel.collect(),
+		instance_relation: instance_rel,
 		collider,
 	};
 

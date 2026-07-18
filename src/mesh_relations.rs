@@ -6,7 +6,7 @@ static ORIGINAL_ID_COUNTER: AtomicU32 = AtomicU32::new(1);
 
 ///System for tracking the origin story of every triangle in the output, allowing
 ///rendering materials and properties to be re-applied to the output
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TriRelation {
 	///Each time an instance of an original mesh makes an appearance somewhere in this
 	///mesh, the instance receives its own LOCALLY unique (to this mesh) instance ID.
@@ -14,29 +14,20 @@ pub struct TriRelation {
 	pub instance_id: u32,
 	/// If set as an input of MeshGL, it is passed along unchanged. This is how
 	/// the user can tell us not to collapse certain edges: those that divide
-	/// difference faceIDs. If not set, this is always -1.
+	/// difference faceIDs. If not set by user, it will be computed as part of
+	/// set_normals_and_coplanar, which groups and detects coplanar triangles
+	/// under the same face ID. Note that the actual value is meaningless; what
+	/// matters is that 2 or more equal TriRelation objects are considered to
+	/// make up a singular polygonal face.
 	pub face_id: i32,
-	/// Triangles with the same coplanar ID are coplanar. Starts as a canonical
-	/// triangle index, but after boolean operations it may refer to a triangle
-	/// that is no longer present in this mesh.
-	pub coplanar_id: i32,
 }
 
 impl Default for TriRelation {
 	fn default() -> Self {
 		Self {
 			instance_id: 0,
-			face_id: -1,
-			coplanar_id: -1,
+			face_id: -1, //to be populated by set_normals_and_coplanar
 		}
-	}
-}
-
-impl TriRelation {
-	pub fn same_face(&self, other: &TriRelation) -> bool {
-		self.instance_id == other.instance_id
-			&& self.coplanar_id == other.coplanar_id
-			&& self.face_id == other.face_id
 	}
 }
 
@@ -55,6 +46,7 @@ pub struct InstanceRelation {
 	///world-frame vertex normals (set by CalculateNormals at slot 0). Carries
 	///through Transforms and Booleans. Exported as runFlags bit 1.
 	pub has_normals: bool,
+	pub user_provided_face_id: bool,
 }
 
 impl InstanceRelation {

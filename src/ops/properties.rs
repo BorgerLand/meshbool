@@ -398,7 +398,7 @@ impl MeshBool {
 
 			let mut normal = Vector3::from_element(0.0);
 			self.tri.halfedge.for_vert(first_edge, |edge| {
-				let tri_verts = Vector3::<i32>::new(
+				let tri_verts = Vector3::new(
 					self.tri.halfedge.start(edge),
 					self.tri.halfedge.end(edge),
 					self.tri.halfedge.end(next_halfedge(edge)),

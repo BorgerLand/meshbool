@@ -1,5 +1,5 @@
 use crate::halfedge::{Halfedges, next_halfedge};
-use crate::mesh_relations::TriRelation;
+use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::util::math::{ccw, get_axis_aligned_projection};
 use crate::{Precision, Properties, Triangles};
 use nalgebra::{Point2, Point3, Vector3, distance};
@@ -104,6 +104,7 @@ pub fn recursive_swap(
 	visited: &mut [i32],
 	edge_swap_stack: &mut Vec<i32>,
 	edges: &mut Vec<i32>,
+	instance_rel: &[InstanceRelation],
 	precision: Precision,
 ) {
 	if edge < 0 {
@@ -215,6 +216,7 @@ pub fn recursive_swap(
 				&mut tri.halfedge,
 				&tri.normal,
 				&tri.relation,
+				instance_rel,
 				vert_pos,
 				edges,
 				properties.stride,
@@ -258,6 +260,7 @@ pub fn collapse(
 	halfedge: &mut Halfedges,
 	tri_normal: &[Vector3<f64>],
 	tri_rel: &[TriRelation],
+	instance_rel: &[InstanceRelation],
 	vert_pos: &mut Vec<Point3<f64>>,
 	edges: &mut Vec<i32>,
 	prop_stride: usize,
@@ -302,15 +305,18 @@ pub fn collapse(
 			let projection = get_axis_aligned_projection(tri_normal[tri]);
 			// Don't collapse if the edge is not redundant (this may have changed due
 			// to the collapse of neighbors).
-			if !rel.same_face(&ref_check) {
-				let old_ref = ref_check;
+			if rel != ref_check {
+				let old_rel = ref_check;
 				ref_check = tri_rel[(edge / 3) as usize];
-				if !rel.same_face(&ref_check) {
+				if rel != ref_check {
 					return false;
 				}
 
-				if rel.instance_id != old_ref.instance_id
-					|| rel.face_id != old_ref.face_id
+				//if these are from different meshes. OR if they are from the same mesh, check if user allows them to collapse (different faces). OR if the user says "no collapsin" do this final normals check
+
+				if rel.instance_id != old_rel.instance_id
+					|| (rel.face_id != old_rel.face_id
+						&& instance_rel[rel.instance_id as usize].user_provided_face_id)
 					|| tri_normal[(pair / 3) as usize].dot(&tri_normal[tri]) < -0.5
 				{
 					// Restrict collapse to colinear edges when the edge separates faces
@@ -368,9 +374,9 @@ pub fn collapse(
 		if prop_stride > 0 {
 			// Update the shifted triangles to the vertBary of endVert
 			let tri = (current / 3) as usize;
-			if tri_rel[tri].same_face(&tri_rel[tri0]) {
+			if tri_rel[tri] == tri_rel[tri0] {
 				halfedge.set_prop(current, halfedge.prop(next_halfedge(edge)));
-			} else if tri_rel[tri].same_face(&tri_rel[tri1]) {
+			} else if tri_rel[tri] == tri_rel[tri1] {
 				halfedge.set_prop(current, halfedge.prop(pair));
 			}
 		}

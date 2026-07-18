@@ -47,7 +47,7 @@ impl<K, V> DeterministicMap<K, V> {
 	}
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DeterministicSet<K>(HashSet<K, BuildHasherDefault<DefaultHasher>>);
 
 impl<K> Deref for DeterministicSet<K> {

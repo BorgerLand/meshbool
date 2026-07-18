@@ -363,8 +363,13 @@ impl MeshBool {
 			bbox,
 		)
 		.unwrap();
-		let tri_normal =
-			pp::set_normals_and_coplanar(&mut tri_rel, &halfedge, &vert_pos, precision.tolerance);
+		let tri_normal = pp::set_normals_and_coplanar(
+			&mut tri_rel,
+			&self.instance_relation,
+			&halfedge,
+			&vert_pos,
+			precision.tolerance,
+		);
 
 		Self {
 			original_id: None,
@@ -374,7 +379,7 @@ impl MeshBool {
 			tri: Triangles {
 				halfedge,
 				normal: tri_normal,
-				relation: self.tri.relation.clone(),
+				relation: tri_rel,
 			},
 			instance_relation: self.instance_relation.clone(),
 			collider,

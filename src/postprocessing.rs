@@ -1,12 +1,11 @@
 pub use crate::postprocessing::sort::sort_and_compact_geometry;
 
 use crate::halfedge::{Halfedges, next_halfedge};
-use crate::mesh_relations::TriRelation;
+use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{ccw, get_axis_aligned_projection};
 use crate::util::num_convert::OrderedF64;
-use crate::util::vec_ext;
 use crate::{Precision, Properties, Triangles};
 use nalgebra::{Point2, Point3, Vector3};
 use std::cmp::Reverse;
@@ -124,49 +123,57 @@ pub fn dedupe_prop_verts(
 
 pub fn set_normals_and_coplanar(
 	tri_rel: &mut [TriRelation],
+	instance_rel: &[InstanceRelation],
 	halfedge: &Halfedges,
 	vert_pos: &[Point3<f64>],
 	tolerance: f64,
 ) -> Vec<Vector3<f64>> {
 	let num_tri = halfedge.num_tri();
-	let mut tri_normal = unsafe { vec_ext::uninit(num_tri) };
 	struct TriPriority {
 		area2: f64,
 		tri: i32,
 	}
-	let mut tri_priority = unsafe { vec_ext::uninit(num_tri) };
-	for tri in 0..num_tri {
-		tri_rel[tri].coplanar_id = -1;
-		if halfedge.start((3 * tri) as i32) < 0 {
-			tri_priority[tri] = TriPriority {
-				area2: 0.0,
+
+	let (mut tri_normal, mut tri_priority): (Vec<_>, Vec<_>) = (0..num_tri)
+		.map(|tri| {
+			if halfedge.start((3 * tri) as i32) < 0 {
+				return (
+					Vector3::new(0.0, 0.0, 1.0),
+					TriPriority {
+						area2: 0.0,
+						tri: tri as i32,
+					},
+				);
+			}
+
+			let v = vert_pos[halfedge.start((3 * tri) as i32) as usize];
+			let mut n = (vert_pos[halfedge.end(3 * (tri as i32)) as usize] - v)
+				.cross(&(vert_pos[halfedge.end((3 * tri + 1) as i32) as usize] - v));
+
+			let priority = TriPriority {
+				area2: n.magnitude_squared(),
 				tri: tri as i32,
 			};
-			continue;
-		}
 
-		let v = vert_pos[halfedge.start((3 * tri) as i32) as usize];
-		let n = (vert_pos[halfedge.end(3 * (tri as i32)) as usize] - v)
-			.cross(&(vert_pos[halfedge.end((3 * tri + 1) as i32) as usize] - v));
-		tri_normal[tri] = n.normalize();
-		if tri_normal[tri].x.is_nan() {
-			tri_normal[tri] = Vector3::new(0.0, 0.0, 1.0);
-		}
-		tri_priority[tri] = TriPriority {
-			area2: n.magnitude_squared(),
-			tri: tri as i32,
-		};
-	}
+			n = n.normalize();
+			if n.x.is_nan() {
+				n = Vector3::new(0.0, 0.0, 1.0);
+			}
+
+			(n, priority)
+		})
+		.unzip();
 
 	tri_priority.sort_unstable_by_key(|t| Reverse(OrderedF64(t.area2)));
 
+	let mut coplanar_id = vec![-1; num_tri];
 	let mut interior_halfedges: Vec<i32> = Vec::default();
-	for tp in &tri_priority {
-		if tri_rel[tp.tri as usize].coplanar_id >= 0 {
+	for tp in tri_priority {
+		if coplanar_id[tp.tri as usize] >= 0 {
 			continue;
 		}
 
-		tri_rel[tp.tri as usize].coplanar_id = tp.tri;
+		coplanar_id[tp.tri as usize] = tp.tri;
 		if halfedge.start(3 * tp.tri) < 0 {
 			continue;
 		}
@@ -178,14 +185,14 @@ pub fn set_normals_and_coplanar(
 		interior_halfedges[2] = 3 * tp.tri + 2;
 		while !interior_halfedges.is_empty() {
 			let h = next_halfedge(halfedge.pair(interior_halfedges.pop().unwrap()));
-			if tri_rel[(h / 3) as usize].coplanar_id >= 0 {
+			if coplanar_id[(h / 3) as usize] >= 0 {
 				continue;
 			}
 
 			let v = vert_pos[halfedge.end(h) as usize];
 			if (v - base).dot(&normal).abs() < tolerance {
 				let tri = (h / 3) as usize;
-				tri_rel[tri].coplanar_id = tp.tri;
+				coplanar_id[tri] = tp.tri;
 				tri_normal[tri] = normal;
 
 				if interior_halfedges.is_empty()
@@ -199,6 +206,14 @@ pub fn set_normals_and_coplanar(
 				let h_next = next_halfedge(h);
 				interior_halfedges.push(h_next);
 			}
+		}
+	}
+
+	//assign coplanar id as face id if user didn't provide a face id
+	for (tri, coplanar_id) in coplanar_id.into_iter().enumerate() {
+		let tri_rel = &mut tri_rel[tri];
+		if !instance_rel[tri_rel.instance_id as usize].user_provided_face_id {
+			tri_rel.face_id = coplanar_id;
 		}
 	}
 
@@ -336,6 +351,7 @@ pub fn collapse_short_edges(
 	vert_pos: &mut Vec<Point3<f64>>,
 	tri_normal: &[Vector3<f64>],
 	tri_rel: &[TriRelation],
+	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
 	precision: Precision,
 	first_new_vert: i32,
@@ -393,6 +409,7 @@ pub fn collapse_short_edges(
 				halfedge,
 				tri_normal,
 				tri_rel,
+				instance_rel,
 				vert_pos,
 				&mut scratch_buffer,
 				prop_stride,
@@ -415,6 +432,7 @@ pub fn collapse_colinear_edges(
 	vert_pos: &mut Vec<Point3<f64>>,
 	tri_normal: &[Vector3<f64>],
 	tri_rel: &[TriRelation],
+	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
 	epsilon: f64,
 	first_new_vert: i32,
@@ -442,12 +460,12 @@ pub fn collapse_colinear_edges(
 			let ref0 = tri_rel[(edge / 3) as usize];
 			let mut current = next_halfedge(pair);
 			let mut ref1 = tri_rel[(current / 3) as usize];
-			let mut ref1_updated = !ref0.same_face(&ref1);
+			let mut ref1_updated = ref0 != ref1;
 			while current != edge {
 				current = next_halfedge(halfedge.pair(current));
 				let tri = current / 3;
 				let tri_rel = tri_rel[tri as usize];
-				if !tri_rel.same_face(&ref0) && !tri_rel.same_face(&ref1) {
+				if tri_rel != ref0 && tri_rel != ref1 {
 					if !ref1_updated {
 						ref1 = tri_rel;
 						ref1_updated = true;
@@ -470,6 +488,7 @@ pub fn collapse_colinear_edges(
 					halfedge,
 					tri_normal,
 					tri_rel,
+					instance_rel,
 					vert_pos,
 					&mut scratch_buffer,
 					prop_stride,
@@ -498,6 +517,7 @@ pub fn swap_degenerates(
 	tri: &mut Triangles,
 	vert_pos: &mut Vec<Point3<f64>>,
 	properties: &mut Properties,
+	instance_rel: &[InstanceRelation],
 	precision: Precision,
 	first_new_vert: i32,
 ) {
@@ -566,6 +586,7 @@ pub fn swap_degenerates(
 				&mut visited,
 				&mut edge_swap_stack,
 				&mut scratch_buffer,
+				instance_rel,
 				precision,
 			);
 			while !edge_swap_stack.is_empty() {
@@ -579,6 +600,7 @@ pub fn swap_degenerates(
 					&mut visited,
 					&mut edge_swap_stack,
 					&mut scratch_buffer,
+					instance_rel,
 					precision,
 				);
 			}

@@ -33,7 +33,7 @@ impl MeshBool {
 	where
 		F: LossyFrom<f64> + Copy + 'static,
 		f64: From<F>,
-		I: LossyFrom<usize> + Copy,
+		I: LossyFrom<i32> + LossyFrom<usize> + Copy,
 		usize: LossyFrom<I>,
 	{
 		if normal_idx < 0 && all_instances_have_normals(&self.instance_relation) {
@@ -53,10 +53,10 @@ impl MeshBool {
 			tolerance =
 				tolerance.max((f32::EPSILON as f64) * self.collider.get_bounding_box().scale());
 		}
-		let mut tri_verts: Vec<I> = vec![I::lossy_from(0); 3 * num_tri];
+		let mut tri_verts = vec![I::lossy_from(0); 3 * num_tri];
 
 		// Sort the triangles into runs
-		let mut face_id: Vec<I> = vec![I::lossy_from(0); num_tri];
+		let mut face_id = vec![I::lossy_from(0); num_tri];
 		let mut tri_new2old: Vec<_> = (0..num_tri).map(|i| i as i32).collect();
 		let tri_rel = &self.tri.relation;
 		// Don't sort originals - keep them in order
@@ -69,10 +69,10 @@ impl MeshBool {
 			});
 		}
 
-		let mut run_index: Vec<I> = Vec::new();
-		let mut run_original_id: Vec<u32> = Vec::new();
-		let mut run_transform: Vec<F> = Vec::new();
-		let mut run_flags: Vec<u8> = Vec::new();
+		let mut run_index = Vec::new();
+		let mut run_original_id = Vec::new();
+		let mut run_transform = Vec::new();
+		let mut run_flags = Vec::new();
 
 		// runFlags layout: bit 0 = backSide, bit 1 = hasNormals (slot 0..2 of the
 		// extra properties is world-frame vertex normals; consumers should skip
@@ -94,7 +94,7 @@ impl MeshBool {
 			}
 		};
 
-		let mut unhandled_instance: DeterministicSet<u32> =
+		let mut unhandled_instance: DeterministicSet<_> =
 			(0..self.instance_relation.len() as u32).collect();
 		let mut last_id = None;
 		for tri in 0..num_tri {
@@ -102,14 +102,13 @@ impl MeshBool {
 			let tri_rel = tri_rel[old_tri as usize];
 			let instance_id = tri_rel.instance_id;
 
-			face_id[tri] = I::lossy_from(if tri_rel.face_id >= 0 {
-				tri_rel.face_id as usize
-			} else {
-				tri_rel.coplanar_id as usize
-			});
+			#[cfg(feature = "test_thoroughly")]
+			debug_assert!(tri_rel.face_id >= 0);
+
+			face_id[tri] = I::lossy_from(tri_rel.face_id);
 			for i in 0..3 {
 				tri_verts[3 * tri + (i as usize)] =
-					I::lossy_from(self.tri.halfedge.start(3 * old_tri + i) as usize);
+					I::lossy_from(self.tri.halfedge.start(3 * old_tri + i));
 			}
 
 			if Some(instance_id) != last_id {
@@ -128,7 +127,7 @@ impl MeshBool {
 
 		// Early return for no props
 		if prop_stride == 0 {
-			let mut vert_properties: Vec<F> = vec![F::lossy_from(0.0); 3 * num_vert];
+			let mut vert_properties = vec![F::lossy_from(0.0); 3 * num_vert];
 			for i in 0..num_vert {
 				let v = self.vert_pos[i];
 				vert_properties[3 * i] = F::lossy_from(v.x);
@@ -152,12 +151,12 @@ impl MeshBool {
 		}
 
 		// Duplicate verts with different props
-		let mut vert2idx: Vec<i32> = vec![-1; self.num_vert()];
+		let mut vert2idx = vec![-1; self.num_vert()];
 		let mut vert_prop_pair: Vec<Vec<Vector2<i32>>> = vec![Vec::new(); self.num_vert()];
-		let mut vert_properties: Vec<F> = Vec::with_capacity(num_vert * out_prop_stride);
+		let mut vert_properties = Vec::with_capacity(num_vert * out_prop_stride);
 
-		let mut merge_from_vert: Vec<I> = Vec::new();
-		let mut merge_to_vert: Vec<I> = Vec::new();
+		let mut merge_from_vert = Vec::new();
+		let mut merge_to_vert = Vec::new();
 
 		for run in 0..run_original_id.len() {
 			for tri in
@@ -172,7 +171,7 @@ impl MeshBool {
 					for b in bin.iter() {
 						if b.x == prop {
 							b_found = true;
-							tri_verts[3 * tri + i] = I::lossy_from(b.y as usize);
+							tri_verts[3 * tri + i] = I::lossy_from(b.y);
 							break;
 						}
 					}
@@ -233,7 +232,7 @@ impl MeshBool {
 						vert2idx[vert] = idx as i32;
 					} else {
 						merge_from_vert.push(I::lossy_from(idx));
-						merge_to_vert.push(I::lossy_from(vert2idx[vert] as usize));
+						merge_to_vert.push(I::lossy_from(vert2idx[vert]));
 					}
 				}
 			}

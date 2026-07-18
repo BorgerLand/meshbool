@@ -541,8 +541,20 @@ impl MeshBool {
 		)
 		.unwrap();
 		let mut tri_rel = vec![TriRelation::default(); halfedge.num_tri()];
-		let tri_normal =
-			pp::set_normals_and_coplanar(&mut tri_rel, &halfedge, &vert_pos, precision.tolerance);
+		let instance_rel = vec![InstanceRelation {
+			original_id,
+			transform: Matrix3x4::identity(),
+			back_side: false,
+			has_normals: false,
+			user_provided_face_id: false,
+		}];
+		let tri_normal = pp::set_normals_and_coplanar(
+			&mut tri_rel,
+			&instance_rel,
+			&halfedge,
+			&vert_pos,
+			precision.tolerance,
+		);
 
 		MeshBool {
 			original_id: Some(original_id),
@@ -554,12 +566,7 @@ impl MeshBool {
 				normal: tri_normal,
 				relation: tri_rel,
 			},
-			instance_relation: vec![InstanceRelation {
-				original_id,
-				transform: Matrix3x4::identity(),
-				back_side: false,
-				has_normals: false,
-			}],
+			instance_relation: instance_rel,
 			collider,
 		}
 	}

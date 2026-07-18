@@ -15,8 +15,17 @@ impl MeshBool {
 	pub fn as_original(&self) -> Self {
 		let original_id = reserve_original_id();
 		let mut tri_rel = vec![TriRelation::default(); self.num_tri()];
-		pp::set_normals_and_coplanar(
+		let instance_rel = vec![InstanceRelation {
+			original_id,
+			transform: Matrix3x4::identity(),
+			back_side: false,
+			has_normals: all_instances_have_normals(&self.instance_relation),
+			user_provided_face_id: false,
+		}];
+
+		let tri_normal = pp::set_normals_and_coplanar(
 			&mut tri_rel,
+			&instance_rel,
 			&self.tri.halfedge,
 			&self.vert_pos,
 			self.precision.tolerance,
@@ -29,15 +38,10 @@ impl MeshBool {
 			properties: self.properties.clone(),
 			tri: Triangles {
 				halfedge: self.tri.halfedge.clone(),
-				normal: self.tri.normal.clone(),
+				normal: tri_normal,
 				relation: tri_rel,
 			},
-			instance_relation: vec![InstanceRelation {
-				original_id,
-				transform: Matrix3x4::identity(),
-				back_side: false,
-				has_normals: all_instances_have_normals(&self.instance_relation),
-			}],
+			instance_relation: instance_rel,
 			collider: self.collider.clone(),
 		}
 	}
@@ -62,20 +66,25 @@ impl MeshBool {
 		let tolerance = tolerance.unwrap_or(precision.tolerance);
 		let mut tri_rel = self.tri.relation.clone();
 
-		if tolerance > precision.tolerance {
+		let tri_normal = if tolerance > precision.tolerance {
+			simplify = true;
 			precision.tolerance = tolerance;
 			pp::set_normals_and_coplanar(
 				&mut tri_rel,
+				&self.instance_relation,
 				&self.tri.halfedge,
 				&self.vert_pos,
 				tolerance,
-			);
-			simplify = true;
-		} else if !simplify {
-			// for reducing tolerance, we need to make sure it is still at least
-			// equal to epsilon.
-			precision.tolerance = precision.epsilon.max(tolerance);
-		}
+			)
+		} else {
+			if !simplify {
+				// for reducing tolerance, we need to make sure it is still at least
+				// equal to epsilon.
+				precision.tolerance = precision.epsilon.max(tolerance);
+			}
+
+			self.tri.normal.clone()
+		};
 
 		if self.is_empty() {
 			return Self::decimated(
@@ -90,7 +99,7 @@ impl MeshBool {
 		let mut properties = self.properties.clone();
 		let mut tri = Triangles {
 			halfedge: self.tri.halfedge.clone(),
-			normal: self.tri.normal.clone(),
+			normal: tri_normal,
 			relation: tri_rel,
 		};
 
@@ -102,6 +111,7 @@ impl MeshBool {
 				&mut vert_pos,
 				&tri.normal,
 				&tri.relation,
+				&self.instance_relation,
 				self.properties.stride,
 				precision,
 				0,
@@ -111,11 +121,19 @@ impl MeshBool {
 				&mut vert_pos,
 				&tri.normal,
 				&tri.relation,
+				&self.instance_relation,
 				properties.stride,
 				precision.epsilon,
 				0,
 			);
-			pp::swap_degenerates(&mut tri, &mut vert_pos, &mut properties, precision, 0);
+			pp::swap_degenerates(
+				&mut tri,
+				&mut vert_pos,
+				&mut properties,
+				&self.instance_relation,
+				precision,
+				0,
+			);
 			let bbox = Box3D::from_cloud(&vert_pos);
 			let Some(collider) =
 				pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)

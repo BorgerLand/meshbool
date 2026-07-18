@@ -10,7 +10,7 @@ mod crate
 			fn invalid() -> MeshBoolTestWrapper;
 			fn clone(&self) -> MeshBoolTestWrapper;
 			fn simplify(&self, f64) -> MeshBoolTestWrapper;
-			fn genus(&self) -> usize;
+			fn genus(&self) -> i32;
 			fn surface_area(&self) -> f64;
 			fn volume(&self) -> f64;
 			fn original_id(&self) -> i32;

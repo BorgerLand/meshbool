@@ -422,7 +422,7 @@ impl MeshBoolTestWrapper {
 		self.status_error().mesh.set_tolerance(tolerance).into()
 	}
 
-	pub fn genus(&self) -> usize {
+	pub fn genus(&self) -> i32 {
 		self.status_error().mesh.genus()
 	}
 

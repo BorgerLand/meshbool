@@ -9,9 +9,9 @@ impl MeshBool {
 	///The genus is a topological property of the manifold, representing the number
 	///of "handles". A sphere is 0, torus 1, etc. It is only meaningful for a single
 	///mesh, so it is best to call Decompose() first.
-	pub fn genus(&self) -> usize {
-		let chi = self.num_vert() as i32 - self.num_edge() as i32 + self.num_tri() as i32;
-		(1 - chi / 2) as usize
+	pub fn genus(&self) -> i32 {
+		let chi = (self.num_vert() as i32) - (self.num_edge() as i32) + (self.num_tri() as i32);
+		1 - chi / 2
 	}
 
 	///The number of triangles that are colinear within tolerance. This library

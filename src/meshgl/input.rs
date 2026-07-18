@@ -50,7 +50,6 @@ where
 	fn try_from(mesh_gl: &MeshGL<F, I>) -> Result<Self, Self::Error> {
 		let num_vert = usize::lossy_from(mesh_gl.num_vert());
 		let num_tri = usize::lossy_from(mesh_gl.num_tri());
-		let mut instance_relation = Vec::new();
 
 		if num_vert == 0 && num_tri == 0 {
 			return Ok(MeshBool {
@@ -62,7 +61,7 @@ where
 				vert_pos: Vec::default(),
 				tri: Triangles::default(),
 				properties: Properties::default(),
-				instance_relation,
+				instance_relation: Vec::default(),
 				collider: BVHCollider::default(),
 			});
 		}
@@ -144,6 +143,7 @@ where
 			run_index.push(I::lossy_from(run_end));
 		}
 
+		let mut instance_relation = Vec::new();
 		let mut run_original_id = mesh_gl.run_original_id.clone();
 		let original_id = if run_original_id.is_empty() {
 			let original_id = reserve_original_id();
@@ -170,26 +170,24 @@ where
 					} else {
 						i32::lossy_from(mesh_gl.face_id[tri])
 					},
-					coplanar_id: -1,
 				};
 			}
 
-			if mesh_gl.run_transform.is_empty() {
-				instance_relation.push(InstanceRelation {
-					original_id,
-					transform: Matrix3x4::identity(),
-					back_side,
-					has_normals: run_has_n,
-				});
+			let transform = if mesh_gl.run_transform.is_empty() {
+				Matrix3x4::identity()
 			} else {
-				let m: [_; 12] = array::from_fn(|j| f64::from(mesh_gl.run_transform[i * 12 + j]));
-				instance_relation.push(InstanceRelation {
-					original_id,
-					transform: Matrix3x4::from_column_slice(&m),
-					back_side,
-					has_normals: run_has_n,
-				});
-			}
+				Matrix3x4::from_column_slice(&array::from_fn::<_, 12, _>(|j| {
+					f64::from(mesh_gl.run_transform[i * 12 + j])
+				}))
+			};
+
+			instance_relation.push(InstanceRelation {
+				original_id,
+				transform,
+				back_side,
+				has_normals: run_has_n,
+				user_provided_face_id: !mesh_gl.face_id.is_empty(),
+			});
 		}
 
 		let prop2vert = (!mesh_gl.merge_from_vert.is_empty())
@@ -261,8 +259,13 @@ where
 		// the algorithm doesn't work with pinched verts
 		pp::split_pinched_verts(&mut halfedge, &mut vert_pos);
 		pp::dedupe_prop_verts(&mut halfedge, &tri_rel, &properties);
-		let tri_normal =
-			pp::set_normals_and_coplanar(&mut tri_rel, &halfedge, &vert_pos, precision.tolerance);
+		let tri_normal = pp::set_normals_and_coplanar(
+			&mut tri_rel,
+			&instance_relation,
+			&halfedge,
+			&vert_pos,
+			precision.tolerance,
+		);
 		let mut tri = Triangles {
 			halfedge,
 			normal: tri_normal,
@@ -274,11 +277,19 @@ where
 			&mut vert_pos,
 			&tri.normal,
 			&tri.relation,
+			&instance_relation,
 			prop_stride,
 			precision,
 			0,
 		);
-		pp::swap_degenerates(&mut tri, &mut vert_pos, &mut properties, precision, 0);
+		pp::swap_degenerates(
+			&mut tri,
+			&mut vert_pos,
+			&mut properties,
+			&instance_relation,
+			precision,
+			0,
+		);
 		pp::mark_unreferenced_verts(&mut tri.halfedge, &mut vert_pos);
 		let Some(collider) =
 			pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
