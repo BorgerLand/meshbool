@@ -1,6 +1,7 @@
 use crate::util::math::{atomic_add, next3_usize};
 use crate::util::vec_ext;
 use nalgebra::Vector3;
+use std::array;
 
 ///Temporary or value-style halfedge record. Persistent Manifold storage uses
 ///Halfedges below, which derives endVert from the next halfedge in each face.
@@ -31,118 +32,76 @@ impl Halfedges {
 		tri_prop: Option<Vec<Vector3<i32>>>,
 	) -> Self {
 		let num_tri = tri_vert.len();
-		let has_prop = tri_prop.is_some();
 		let num_halfedge = 3 * num_tri;
-		let mut halfedge = unsafe { vec_ext::uninit(num_halfedge) };
-
 		let vert_count = vert_count as i32;
 
 		//PrepHalfedges start
-		let mut ids = {
-			let ids = if vert_count < (1 << 18) {
-				// For small vertex count, it is faster to just do sorting
-				let mut edge: Vec<u64> = unsafe { vec_ext::uninit(num_halfedge) };
-				let mut set_edge = |e: usize, v0: i32, v1: i32| {
-					edge[e] = (if v0 < v1 { 1 } else { 0 }) << 63
-						| (v0.min(v1) as u64) << 32
-						| (v0.max(v1) as u64);
-				};
+		let (halfedge, mut ids) = if vert_count < (1 << 18) {
+			// For small vertex count, it is faster to just do sorting
+			let mut edge = unsafe { vec_ext::uninit(num_halfedge) };
+			let halfedge = prep_halfedges(tri_vert, tri_prop, |e, v0, v1| {
+				edge[e] = (if v0 < v1 { 1 } else { 0 }) << 63
+					| (v0.min(v1) as u64) << 32
+					| (v0.max(v1) as u64);
+			});
 
-				let mut job = PrepHalfedges {
-					halfedges: &mut halfedge,
-					tri_vert,
-					tri_prop: tri_prop.unwrap_or(Vec::new()),
-					f: &mut set_edge,
-				};
+			let mut ids: Vec<i32> = (0..num_halfedge as i32).collect();
+			ids.sort_unstable_by_key(|&i| edge[i as usize]);
+			(halfedge, ids)
+		} else {
+			// For larger vertex count, we separate the ids into slices for halfedges
+			// with the same smaller vertex.
+			// We first copy them there (as HalfedgePairData), and then do sorting
+			// locally for each slice.
+			// This helps with memory locality, and is faster for larger meshes.
 
-				if has_prop {
-					for i in 0..num_tri {
-						job.call::<true>(i);
-					}
-				} else {
-					for i in 0..num_tri {
-						job.call::<false>(i);
-					}
-				}
+			let mut offsets = vec![0; (vert_count * 2) as usize];
+			let halfedge = prep_halfedges(tri_vert, tri_prop, |_, v0, v1| {
+				let offset = if v0 > v1 { 0 } else { vert_count };
+				atomic_add(&mut offsets[(v0.min(v1) + offset) as usize], 1);
+			});
 
-				drop(job);
-				let mut ids: Vec<i32> = (0..num_halfedge as i32).collect();
-				ids.sort_by_key(|&i| edge[i as usize]);
-				ids
-			} else {
-				// For larger vertex count, we separate the ids into slices for halfedges
-				// with the same smaller vertex.
-				// We first copy them there (as HalfedgePairData), and then do sorting
-				// locally for each slice.
-				// This helps with memory locality, and is faster for larger meshes.
-				let mut entries = unsafe { vec_ext::uninit(num_halfedge) };
-				let mut offsets: Vec<i32> = vec![0; (vert_count * 2) as usize];
-				let mut set_offset = |_, v0: i32, v1: i32| {
+			vec_ext::exclusive_scan_in_place(&mut offsets, 0);
+
+			let mut entries = unsafe { vec_ext::uninit(num_halfedge) };
+			for tri in 0..num_tri {
+				let tri = tri as i32;
+				for i in 0..3 {
+					let e = 3 * tri + i;
+					let e_usize = e as usize;
+					let v0 = halfedge[e_usize].start_vert;
+					let v1 = halfedge[e_usize].end_vert;
 					let offset = if v0 > v1 { 0 } else { vert_count };
-					atomic_add(&mut offsets[(v0.min(v1) + offset) as usize], 1);
-				};
+					let start = v0.min(v1);
+					let index = atomic_add(&mut offsets[(start + offset) as usize], 1) as usize;
+					entries[index] = HalfedgePairData {
+						large_vert: v0.max(v1),
+						tri,
+						edge_index: e,
+					};
+				}
+			}
 
-				let mut job = PrepHalfedges {
-					halfedges: &mut halfedge,
-					tri_vert,
-					tri_prop: tri_prop.unwrap_or(Vec::new()),
-					f: &mut set_offset,
-				};
-
-				if has_prop {
-					for i in 0..num_tri {
-						job.call::<true>(i);
-					}
-				} else {
-					for i in 0..num_tri {
-						job.call::<false>(i);
-					}
+			let mut ids = unsafe { vec_ext::uninit(num_halfedge) };
+			for v in 0..offsets.len() {
+				let start = if v == 0 { 0 } else { offsets[v - 1] };
+				let end = offsets[v];
+				for i in start..end {
+					ids[i as usize] = i;
 				}
 
-				drop(job);
-				vec_ext::exclusive_scan_in_place(&mut offsets, 0);
+				ids[start as usize..end as usize].sort_unstable_by_key(|&i| {
+					let entry = &entries[i as usize];
+					(entry.large_vert, entry.tri)
+				});
 
-				for tri in 0..num_tri {
-					let tri = tri as i32;
-					for i in 0..3 {
-						let e = 3 * tri + i;
-						let e_usize = e as usize;
-						let v0 = halfedge[e_usize].start_vert;
-						let v1 = halfedge[e_usize].end_vert;
-						let offset = if v0 > v1 { 0 } else { vert_count };
-						let start = v0.min(v1);
-						let index = atomic_add(&mut offsets[(start + offset) as usize], 1);
-						entries[index as usize] = HalfedgePairData {
-							large_vert: v0.max(v1),
-							tri,
-							edge_index: e,
-						};
-					}
+				for i in start..end {
+					let i = i as usize;
+					ids[i] = entries[ids[i] as usize].edge_index;
 				}
+			}
 
-				let mut ids: Vec<i32> = unsafe { vec_ext::uninit(num_halfedge) };
-				for v in 0..offsets.len() {
-					let start = if v == 0 { 0 } else { offsets[v - 1] };
-					let end = offsets[v];
-					for i in start..end {
-						ids[i as usize] = i;
-					}
-
-					ids[start as usize..end as usize].sort_unstable_by_key(|&i| {
-						let entry = &entries[i as usize];
-						(entry.large_vert, entry.tri)
-					});
-
-					for i in start..end {
-						let i = i as usize;
-						ids[i] = entries[ids[i] as usize].edge_index;
-					}
-				}
-
-				ids
-			};
-
-			ids
+			(halfedge, ids)
 		};
 
 		//PrepHalfedges end
@@ -177,8 +136,7 @@ impl Halfedges {
 						let dir = if i + num_edge < k { 1 } else { -1 };
 						let mut a = k;
 						let mut b = k + dir;
-						let is_removed =
-							|x: i32, ids: &mut [i32]| removed[ids[x as usize] as usize];
+						let is_removed = |x: i32, ids: &[i32]| removed[ids[x as usize] as usize];
 						let in_range = |a: i32| {
 							if dir > 0 {
 								a >= i + num_edge
@@ -189,7 +147,7 @@ impl Halfedges {
 						loop {
 							loop {
 								a -= dir;
-								if !(in_range(a) && is_removed(a, &mut ids)) {
+								if !(in_range(a) && is_removed(a, &ids)) {
 									break;
 								}
 							}
@@ -198,7 +156,7 @@ impl Halfedges {
 							}
 							loop {
 								b -= dir;
-								if !(is_removed(b, &mut ids) && b != k) {
+								if !(is_removed(b, &ids) && b != k) {
 									break;
 								}
 							}
@@ -262,12 +220,6 @@ impl Halfedges {
 	}
 }
 
-struct HalfedgePairData {
-	large_vert: i32,
-	tri: i32,
-	edge_index: i32,
-}
-
 #[derive(Copy, Clone)]
 struct CreateHalfedge {
 	start_vert: i32,
@@ -275,38 +227,54 @@ struct CreateHalfedge {
 	prop_vert: i32,
 }
 
-struct PrepHalfedges<'a, F: FnMut(usize, i32, i32)> {
-	halfedges: &'a mut Vec<CreateHalfedge>,
+fn prep_halfedges(
 	tri_vert: Vec<Vector3<i32>>,
-	tri_prop: Vec<Vector3<i32>>,
-	f: &'a mut F,
+	tri_prop: Option<Vec<Vector3<i32>>>,
+	f: impl FnMut(usize, i32, i32),
+) -> Vec<CreateHalfedge> {
+	if let Some(tri_prop) = tri_prop {
+		prep_halfedges_impl::<true>(tri_vert, tri_prop, f)
+	} else {
+		prep_halfedges_impl::<false>(tri_vert, Vec::new(), f)
+	}
 }
 
-impl<'a, F: FnMut(usize, i32, i32)> PrepHalfedges<'a, F> {
-	fn call<const HAS_PROP: bool>(&mut self, tri: usize) {
-		let verts = self.tri_vert[tri];
-		let props = if HAS_PROP {
-			self.tri_prop[tri]
-		} else {
-			//should compile out
-			Vector3::default()
-		};
-
-		for i in 0..3 {
-			let j = next3_usize(i);
-			let e = 3 * tri + i;
-			let v0 = verts[i];
-			let v1 = verts[j];
-			debug_assert!(v0 != v1, "topological degeneracy");
-			self.halfedges[e] = CreateHalfedge {
-				start_vert: v0,
-				end_vert: v1,
-				prop_vert: if HAS_PROP { props[i as usize] } else { 0 },
+fn prep_halfedges_impl<const HAS_PROP: bool>(
+	tri_vert: Vec<Vector3<i32>>,
+	tri_prop: Vec<Vector3<i32>>,
+	mut f: impl FnMut(usize, i32, i32),
+) -> Vec<CreateHalfedge> {
+	(0..tri_vert.len())
+		.flat_map(|tri| {
+			let verts = tri_vert[tri];
+			let props = if HAS_PROP {
+				tri_prop[tri]
+			} else {
+				Vector3::default()
 			};
 
-			(self.f)(e, v0, v1);
-		}
-	}
+			array::from_fn::<_, 3, _>(|i| {
+				let j = next3_usize(i);
+				let e = 3 * tri + i;
+				let v0 = verts[i];
+				let v1 = verts[j];
+				debug_assert!(v0 != v1, "topological degeneracy");
+				f(e, v0, v1);
+
+				CreateHalfedge {
+					start_vert: v0,
+					end_vert: v1,
+					prop_vert: if HAS_PROP { props[i as usize] } else { 0 },
+				}
+			})
+		})
+		.collect()
+}
+
+struct HalfedgePairData {
+	large_vert: i32,
+	tri: i32,
+	edge_index: i32,
 }
 
 impl Halfedges {
@@ -498,11 +466,7 @@ impl Halfedges {
 
 	#[cfg(feature = "test_thoroughly")]
 	fn to_data(&self) -> Vec<Halfedge> {
-		let mut data = unsafe { vec_ext::uninit(self.len()) };
-		for idx in 0..self.len() {
-			data[idx] = self.get(idx as i32);
-		}
-		data
+		(0..self.len()).map(|idx| self.get(idx as i32)).collect()
 	}
 }
 

@@ -29,7 +29,7 @@ pub fn face2tri(
 	halfedge_rel: Vec<TriRelation>,
 	epsilon: f64,
 ) -> Triangles {
-	let general_triangulation = Some(|face| {
+	let general_triangulation = |face| {
 		let normal = face_normal[face];
 		let projection = get_axis_aligned_projection(normal);
 		let polys = project_polygons(
@@ -43,7 +43,7 @@ pub fn face2tri(
 		);
 
 		triangulate_idx_halfedges(&polys, epsilon, false)
-	});
+	};
 
 	let mut tri_offset: Vec<usize> = unsafe { vec_ext::uninit(face_edge.len()) };
 	*tri_offset.last_mut().unwrap() = 0;
@@ -58,7 +58,7 @@ pub fn face2tri(
 		debug_assert!(num_edge >= 3, "face has less than three edges.");
 		tri_offset[face] = (num_edge - 2) as usize;
 		if num_edge > 4 {
-			let triangulation = (general_triangulation.unwrap())(face);
+			let triangulation = general_triangulation(face);
 			tri_offset[face] = triangulation.num_tri();
 			results.entry(face as i32).or_insert(triangulation);
 		}

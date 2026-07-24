@@ -154,21 +154,17 @@ impl MeshBool {
 			}
 		}
 
-		let num_prop_vert = self.num_prop_vert();
-		let mut properties = unsafe { vec_ext::uninit(prop_stride as usize * num_prop_vert) };
-
 		let mut halfedge = self.tri.halfedge.clone();
-		let mut old_halfedge_prop = unsafe { vec_ext::uninit(self.tri.halfedge.len()) };
-		for i in 0..self.tri.halfedge.len() {
-			old_halfedge_prop[i] = if old_prop_stride > 0 {
-				self.tri.halfedge.prop(i as i32)
+		let old_halfedge_prop = Vec::from_iter((0..self.tri.halfedge.len() as i32).map(|i| {
+			halfedge.set_prop(i, -1);
+			if old_prop_stride > 0 {
+				self.tri.halfedge.prop(i)
 			} else {
 				//workaround for removal of logic here:
 				//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-				self.tri.halfedge.start(i as i32)
-			};
-			halfedge.set_prop(i as i32, -1);
-		}
+				self.tri.halfedge.start(i)
+			}
+		}));
 
 		// Cached per-meshID inverse-normal-transform for the legacy non-zero
 		// normalIdx path. Lazily populated on first lookup; reused across all
@@ -187,6 +183,8 @@ impl MeshBool {
 
 		let num_edge = self.tri.halfedge.len() as i32;
 		let vert_normal = self.calculate_vert_normals_internal();
+		let mut properties =
+			unsafe { vec_ext::uninit(prop_stride as usize * self.num_prop_vert()) };
 		for start_edge in 0..num_edge {
 			if halfedge.prop(start_edge) >= 0 {
 				continue;

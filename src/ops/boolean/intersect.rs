@@ -372,7 +372,7 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		components.insert(u_a.find(v));
 	}
 
-	let verts: Vec<_> = components.into_iter().map(|c| c as i32).collect();
+	let verts = Vec::from_iter(components.into_iter().map(|c| c as i32));
 
 	let k02 = Kernel02::<EXPAND_P, FORWARD> {
 		in_a: a,

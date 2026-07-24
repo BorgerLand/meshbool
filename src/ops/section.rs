@@ -9,7 +9,7 @@ use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicSet;
 use crate::util::math::{get_axis_aligned_projection, next3_i32};
 use crate::util::vec_ext;
-use nalgebra::{Point3, Vector3};
+use nalgebra::Vector3;
 
 impl MeshBool {
 	// This operation returns a vector of Manifolds that are topologically
@@ -35,13 +35,13 @@ impl MeshBool {
 		let num_vert = self.num_vert();
 		let mut meshes: Vec<Self> = Vec::with_capacity(num_components);
 		for i in 0..num_components as i32 {
-			let mut vert_new2old: Vec<i32> = unsafe { vec_ext::uninit(num_vert) };
-			let n_vert = vec_ext::copy_if(0..num_vert as i32, &mut vert_new2old, |v| {
-				vert_label[v as usize] == i
-			});
-			let mut vert_pos = vec![Point3::default(); n_vert];
-			vert_new2old.truncate(n_vert);
-			vec_ext::gather(&vert_new2old, &self.vert_pos, &mut vert_pos);
+			let mut vert_new2old = Vec::with_capacity(num_vert);
+			vert_new2old.extend(
+				(0..num_vert)
+					.filter(|&v| vert_label[v] == i)
+					.map(|v| v as i32),
+			);
+			let mut vert_pos = vec_ext::gather(&self.vert_pos, vert_new2old.iter());
 
 			let mut face_new2old: Vec<i32> = Vec::with_capacity(self.num_tri());
 			let halfedge = &self.tri.halfedge;

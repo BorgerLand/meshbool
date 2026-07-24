@@ -105,13 +105,10 @@ pub fn sort_and_compact_geometry(
 
 ///Sorts the vertices according to their Morton code.
 fn sort_verts(vert_pos: &mut Vec<Point3<f64>>, halfedge: &mut Halfedges, bbox: Box3D) {
-	let vert_morton: Vec<_> = vert_pos
-		.iter()
-		.map(|&vert| morton_code(vert, bbox))
-		.collect();
+	let vert_morton = Vec::from_iter(vert_pos.iter().map(|&vert| morton_code(vert, bbox)));
 
 	let num_vert = vert_pos.len();
-	let mut vert_new2old: Vec<_> = (0..num_vert as i32).collect();
+	let mut vert_new2old = Vec::from_iter(0..num_vert as i32);
 	vert_new2old.sort_unstable_by_key(|&i| vert_morton[i as usize]);
 
 	reindex_verts(halfedge, &vert_new2old, num_vert);
@@ -121,15 +118,14 @@ fn sort_verts(vert_pos: &mut Vec<Point3<f64>>, halfedge: &mut Halfedges, bbox: B
 	let new_num_vert = vert_new2old.partition_point(|&vert| vert_morton[vert as usize] < K_NO_CODE);
 
 	vert_new2old.truncate(new_num_vert);
-	vec_ext::gather_in_place(vert_pos, &vert_new2old);
+	*vert_pos = vec_ext::gather(vert_pos, vert_new2old.iter());
 }
 
 ///Updates the halfedges to point to new vert indices based on a mapping,
 ///vertNew2Old. This may be a subset, so the total number of original verts is
 ///also given.
 pub fn reindex_verts(halfedge: &mut Halfedges, vert_new2old: &[i32], old_num_vert: usize) {
-	let mut vert_old2new: Vec<i32> = unsafe { vec_ext::uninit(old_num_vert) };
-	vec_ext::scatter(vert_new2old, &mut vert_old2new);
+	let vert_old2new = unsafe { vec_ext::scatter(vert_new2old.iter(), old_num_vert) };
 	for idx in 0..halfedge.len() as i32 {
 		let start_vert = halfedge.start(idx);
 		if start_vert < 0 {
@@ -148,31 +144,36 @@ pub fn get_tri_box_morton(
 	vert_pos: &[Point3<f64>],
 	bbox: Option<Box3D>,
 ) -> (Vec<Box3D>, Option<Vec<u32>>) {
-	let mut tri_box = vec![Box3D::default(); halfedge.num_tri()];
-	let mut tri_morton = bbox.map(|_| unsafe { vec_ext::uninit(halfedge.num_tri()) });
-	for tri in 0..halfedge.num_tri() {
-		// Removed tris are marked by all halfedges having pairedHalfedge
-		// = -1, and this will sort them to the end (the Morton code only
-		// uses the first 30 of 32 bits).
-		if halfedge.pair((3 * tri) as i32) < 0 {
-			if let Some(tri_morton) = &mut tri_morton {
-				tri_morton[tri] = K_NO_CODE;
+	let mut tri_morton = bbox.map(|_| Vec::with_capacity(halfedge.num_tri()));
+	let tri_box = (0..halfedge.num_tri())
+		.map(|tri| {
+			let mut cur_box = Box3D::default();
+
+			// Removed tris are marked by all halfedges having pairedHalfedge
+			// = -1, and this will sort them to the end (the Morton code only
+			// uses the first 30 of 32 bits).
+			if halfedge.pair((3 * tri) as i32) < 0 {
+				if let Some(tri_morton) = &mut tri_morton {
+					tri_morton.push(K_NO_CODE);
+				}
+				return cur_box;
 			}
-			continue;
-		}
 
-		let mut center = Point3::<f64>::new(0.0, 0.0, 0.0);
+			let mut center = Point3::new(0.0, 0.0, 0.0);
 
-		for i in 0..3 {
-			let pos = vert_pos[halfedge.start((3 * tri + i) as i32) as usize];
-			center += pos.coords;
-			tri_box[tri].union_point(pos);
-		}
+			for i in 0..3 {
+				let pos = vert_pos[halfedge.start((3 * tri + i) as i32) as usize];
+				center += pos.coords;
+				cur_box.union_point(pos);
+			}
 
-		if let Some(tri_morton) = &mut tri_morton {
-			tri_morton[tri] = morton_code(center / 3.0, bbox.unwrap());
-		}
-	}
+			if let Some(tri_morton) = &mut tri_morton {
+				tri_morton.push(morton_code(center / 3.0, bbox.unwrap()));
+			}
+
+			cur_box
+		})
+		.collect();
 
 	(tri_box, tri_morton)
 }
@@ -180,7 +181,7 @@ pub fn get_tri_box_morton(
 ///Sorts the faces of this manifold according to their input Morton code. The
 ///bounding box and Morton code arrays are also sorted accordingly.
 fn sort_tris(tri: TrianglesPartial, tri_box: &mut Vec<Box3D>, tri_morton: &mut Vec<u32>) {
-	let mut tri_new2old: Vec<_> = (0..tri.halfedge.num_tri() as i32).collect();
+	let mut tri_new2old = Vec::from_iter(0..tri.halfedge.num_tri() as i32);
 	tri_new2old.sort_unstable_by_key(|&i| tri_morton[i as usize]);
 
 	// Tris were flagged for removal with pairedHalfedge = -1 and assigned kNoCode
@@ -189,8 +190,8 @@ fn sort_tris(tri: TrianglesPartial, tri_box: &mut Vec<Box3D>, tri_morton: &mut V
 
 	tri_new2old.truncate(new_num_tri);
 
-	vec_ext::gather_in_place(tri_box, &tri_new2old);
-	vec_ext::gather_in_place(tri_morton, &tri_new2old);
+	*tri_box = vec_ext::gather(tri_box, tri_new2old.iter());
+	*tri_morton = vec_ext::gather(tri_morton, tri_new2old.iter());
 	gather_tris_in_place(tri, &tri_new2old);
 }
 
@@ -200,15 +201,14 @@ fn sort_tris(tri: TrianglesPartial, tri_box: &mut Vec<Box3D>, tri_morton: &mut V
 fn gather_tris_in_place(mut tri: TrianglesPartial, tri_new2old: &[i32]) {
 	let num_tri = tri_new2old.len();
 	if let Some(tri_rel) = tri.relation.as_deref_mut() {
-		vec_ext::gather_in_place(tri_rel, tri_new2old);
+		*tri_rel = vec_ext::gather(tri_rel, tri_new2old.iter());
 	}
 	if let Some(tri_normal) = tri.normal.as_deref_mut() {
-		vec_ext::gather_in_place(tri_normal, tri_new2old);
+		*tri_normal = vec_ext::gather(tri_normal, tri_new2old.iter());
 	}
 
 	let old_halfedge = mem::replace(tri.halfedge, unsafe { Halfedges::uninit(3 * num_tri) });
-	let mut tri_old2new = unsafe { vec_ext::uninit(old_halfedge.num_tri()) };
-	vec_ext::scatter(tri_new2old, &mut tri_old2new);
+	let tri_old2new = unsafe { vec_ext::scatter(tri_new2old.iter(), old_halfedge.num_tri()) };
 
 	let mut reindex_face = ReindexTri {
 		halfedge: &mut tri.halfedge,
@@ -226,14 +226,11 @@ fn gather_tris_in_place(mut tri: TrianglesPartial, tri_new2old: &[i32]) {
 ///faces to gather into this.
 pub fn gather_tris(old: &Triangles, tri_new2old: &[i32]) -> Triangles {
 	let num_tri = tri_new2old.len();
-	let mut new_tri_rel = unsafe { vec_ext::uninit(tri_new2old.len()) };
-	vec_ext::gather(tri_new2old, &old.relation, &mut new_tri_rel);
-	let mut new_tri_normal = unsafe { vec_ext::uninit(tri_new2old.len()) };
-	vec_ext::gather(tri_new2old, &old.normal, &mut new_tri_normal);
+	let new_tri_rel = vec_ext::gather(&old.relation, tri_new2old.iter());
+	let new_tri_normal = vec_ext::gather(&old.normal, tri_new2old.iter());
 
 	let mut new_halfedge = unsafe { Halfedges::uninit(3 * num_tri) };
-	let mut tri_old2new = unsafe { vec_ext::uninit(old.halfedge.num_tri()) };
-	vec_ext::scatter(tri_new2old, &mut tri_old2new);
+	let tri_old2new = unsafe { vec_ext::scatter(tri_new2old.iter(), old.halfedge.num_tri()) };
 
 	let mut reindex_face = ReindexTri {
 		halfedge: &mut new_halfedge,
@@ -292,8 +289,7 @@ fn compact_props(properties: &mut Properties, halfedge: &mut Halfedges) {
 		keep[halfedge.prop(idx as i32) as usize] = 1;
 	}
 
-	let mut prop_old2new = vec![0_i32; num_prop_verts + 1];
-	vec_ext::inclusive_scan(keep.iter().cloned(), &mut prop_old2new[1..]);
+	let prop_old2new = Vec::from_iter(vec_ext::exclusive_scan_with_total(keep.iter().cloned(), 0));
 
 	let num_verts_new = prop_old2new[num_prop_verts] as usize;
 	let old_prop = mem::replace(&mut properties.data, unsafe {

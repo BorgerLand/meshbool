@@ -2,7 +2,7 @@ use crate::util::math::inverse_normal_transform;
 use nalgebra::{Matrix3, Matrix3x4};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-static ORIGINAL_ID_COUNTER: AtomicU32 = AtomicU32::new(1);
+static ORIGINAL_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 
 ///System for tracking the origin story of every triangle in the output, allowing
 ///rendering materials and properties to be re-applied to the output

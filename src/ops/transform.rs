@@ -122,11 +122,11 @@ impl MeshBool {
 			);
 		}
 
-		let vert_pos: Vec<_> = self
-			.vert_pos
-			.iter()
-			.map(|v| (transform * Vector4::new(v.x, v.y, v.z, 1.0)).into())
-			.collect();
+		let vert_pos = Vec::from_iter(
+			self.vert_pos
+				.iter()
+				.map(|v| (transform * Vector4::new(v.x, v.y, v.z, 1.0)).into()),
+		);
 
 		let normal_transform = normal_transform(transform);
 		let tri_normal = self

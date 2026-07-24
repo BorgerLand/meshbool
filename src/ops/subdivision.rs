@@ -37,36 +37,30 @@ impl MeshBool {
 			half2edge[self.tri.halfedge.pair(idx) as usize] = edge as i32;
 		}
 
-		let face_halfedges: Vec<_> = (0..num_tri)
-			.into_iter()
-			.map(|tri| get_halfedges(&self.tri.halfedge, tri as i32))
-			.collect();
+		let face_halfedges =
+			Vec::from_iter((0..num_tri as i32).map(|tri| get_halfedges(&self.tri.halfedge, tri)));
 
-		let mut edge_added: Vec<_> = (0..num_edge)
-			.into_iter()
-			.map(|i| {
-				let edge = &edges[i];
-				let h_idx = edge.halfedge_idx;
-				if is_marked_inside_quad(h_idx) {
-					0
-				} else {
-					let vec =
-						self.vert_pos[edge.first as usize] - self.vert_pos[edge.second as usize];
-					// let tangent0: Vector4<f64> = if self.halfedge_tangent.empty() {
-					// 	Vector4::repeat(0.0)
-					// } else {
-					// 	self.halfedge_tangent[hIdx as usize]
-					// };
-					//
-					// let tangent1: Vector4<f64> = if self.halfedge_tangent.empty() {
-					// 	Vector4::repeat(0.0)
-					// } else {
-					// 	self.halfedge_tangent[self.halfedge[hIdx as usize].paired_halfedge]
-					// };
-					edge_divisions(vec, Vector4::repeat(0.0), Vector4::repeat(0.0))
-				}
-			})
-			.collect();
+		let mut edge_added = Vec::from_iter((0..num_edge).map(|i| {
+			let edge = &edges[i];
+			let h_idx = edge.halfedge_idx;
+			if is_marked_inside_quad(h_idx) {
+				0
+			} else {
+				let vec = self.vert_pos[edge.first as usize] - self.vert_pos[edge.second as usize];
+				// let tangent0: Vector4<f64> = if self.halfedge_tangent.empty() {
+				// 	Vector4::repeat(0.0)
+				// } else {
+				// 	self.halfedge_tangent[hIdx as usize]
+				// };
+				//
+				// let tangent1: Vector4<f64> = if self.halfedge_tangent.empty() {
+				// 	Vector4::repeat(0.0)
+				// } else {
+				// 	self.halfedge_tangent[self.halfedge[hIdx as usize].paired_halfedge]
+				// };
+				edge_divisions(vec, Vector4::repeat(0.0), Vector4::repeat(0.0))
+			}
+		}));
 
 		if keep_interior {
 			// Triangles where the greatest number of divisions exceeds the sum of the
@@ -119,11 +113,12 @@ impl MeshBool {
 			edge_added = tmp;
 		}
 
-		let edge_offset = vec_ext::exclusive_scan(edge_added.iter().copied(), num_vert as i32);
+		let edge_offset = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+			edge_added.iter().copied(),
+			num_vert as i32,
+		));
 
-		let mut vert_bary = unsafe {
-			vec_ext::uninit((edge_offset.last().unwrap() + edge_added.last().unwrap()) as usize)
-		};
+		let mut vert_bary = unsafe { vec_ext::uninit(*edge_offset.last().unwrap() as usize) };
 		let total_edge_added = vert_bary.len() - num_vert;
 		fill_retained_verts(&self.tri.halfedge, &mut vert_bary);
 		for i in 0..num_edge {
@@ -137,7 +132,7 @@ impl MeshBool {
 			let frac = 1.0 / (n + 1) as f64;
 
 			for j in 0..n {
-				let mut uvw = Vector4::repeat(0.0f64);
+				let mut uvw = Vector4::repeat(0.0);
 				uvw[indices.end4 as usize] = (j + 1) as f64 * frac;
 				uvw[indices.start4 as usize] = 1.0 - uvw[indices.end4 as usize];
 				vert_bary[(offset + j) as usize].uvw = uvw;
@@ -145,35 +140,30 @@ impl MeshBool {
 			}
 		}
 
-		let sub_tris: Vec<_> = (0..num_tri)
-			.into_iter()
-			.map(|tri| {
-				let halfedges = face_halfedges[tri];
-				let mut divisions = Vector4::repeat(0i32);
-				for i in 0..4 {
-					if halfedges[i] >= 0 {
-						divisions[i] = edge_added[half2edge[halfedges[i] as usize] as usize] + 1;
-					}
+		let sub_tris = Vec::from_iter((0..num_tri).map(|tri| {
+			let halfedges = face_halfedges[tri];
+			let mut divisions = Vector4::repeat(0i32);
+			for i in 0..4 {
+				if halfedges[i] >= 0 {
+					divisions[i] = edge_added[half2edge[halfedges[i] as usize] as usize] + 1;
 				}
-				Partition::get_partition(divisions)
-			})
-			.collect();
+			}
+			Partition::get_partition(divisions)
+		}));
 
-		let tri_offset =
-			vec_ext::exclusive_scan(sub_tris.iter().map(|part| part.tri_vert.len() as i32), 0);
+		let tri_offset = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+			sub_tris.iter().map(|part| part.tri_vert.len() as i32),
+			0,
+		));
 
-		let interior_offset = vec_ext::exclusive_scan(
+		let interior_offset = Vec::from_iter(vec_ext::exclusive_scan_with_total(
 			sub_tris.iter().map(|part| part.num_interior() as i32),
 			vert_bary.len() as i32,
-		);
+		));
 
-		let mut tri_verts = unsafe {
-			vec_ext::uninit(
-				*tri_offset.last().unwrap() as usize + sub_tris.last().unwrap().tri_vert.len(),
-			)
-		};
+		let mut tri_verts = unsafe { vec_ext::uninit(*tri_offset.last().unwrap() as usize) };
 		vert_bary.resize(
-			(interior_offset.last().unwrap() + sub_tris.last().unwrap().num_interior()) as usize,
+			*interior_offset.last().unwrap() as usize,
 			Barycentric::default(),
 		);
 		let mut tri_rel = unsafe { vec_ext::uninit(tri_verts.len()) };
@@ -234,32 +224,29 @@ impl MeshBool {
 				});
 		}
 
-		let vert_pos: Vec<_> = (0..vert_bary.len())
-			.into_iter()
-			.map(|vert| {
-				let bary = vert_bary[vert];
-				let halfedges = face_halfedges[bary.tri as usize];
-				Point3::from(if halfedges[3] < 0 {
-					let mut tri_pos = Matrix3::default();
-					for i in 0..3 {
-						tri_pos.set_column(
-							i,
-							&self.vert_pos[self.tri.halfedge.start(halfedges[i]) as usize].coords,
-						);
-					}
-					tri_pos * bary.uvw.xyz()
-				} else {
-					let mut quad_pos = Matrix3x4::default();
-					for i in 0..4 {
-						quad_pos.set_column(
-							i,
-							&self.vert_pos[self.tri.halfedge.start(halfedges[i]) as usize].coords,
-						);
-					}
-					quad_pos * bary.uvw
-				})
+		let vert_pos = Vec::from_iter((0..vert_bary.len()).map(|vert| {
+			let bary = vert_bary[vert];
+			let halfedges = face_halfedges[bary.tri as usize];
+			Point3::from(if halfedges[3] < 0 {
+				let mut tri_pos = Matrix3::default();
+				for i in 0..3 {
+					tri_pos.set_column(
+						i,
+						&self.vert_pos[self.tri.halfedge.start(halfedges[i]) as usize].coords,
+					);
+				}
+				tri_pos * bary.uvw.xyz()
+			} else {
+				let mut quad_pos = Matrix3x4::default();
+				for i in 0..4 {
+					quad_pos.set_column(
+						i,
+						&self.vert_pos[self.tri.halfedge.start(halfedges[i]) as usize].coords,
+					);
+				}
+				quad_pos * bary.uvw
 			})
-			.collect();
+		}));
 
 		let (halfedge, properties) = if self.prop_stride() == 0 {
 			(
@@ -671,24 +658,17 @@ impl Partition {
 		}
 
 		let old = new_verts.len();
-		unsafe { new_verts.set_len(self.vert_bary.len()) };
-		new_verts[old..]
-			.iter_mut()
-			.enumerate()
-			.for_each(|(i, v)| *v = interior_offset + i as i32);
+		new_verts.extend((old..self.vert_bary.len()).map(|i| interior_offset + (i - old) as i32));
 
-		let num_tri = self.tri_vert.len();
-		let mut new_tri_vert: Vec<Vector3<i32>> = unsafe { vec_ext::uninit(num_tri as usize) };
-		new_tri_vert
-			.iter_mut()
-			.enumerate()
-			.for_each(|(tri_idx, tri)| {
+		(0..self.tri_vert.len() as usize)
+			.map(|tri_idx| {
+				let mut coords = [0; 3];
 				for j in 0..3 {
-					tri[out_tri[j] as usize] = new_verts[self.tri_vert[tri_idx][j] as usize];
+					coords[out_tri[j] as usize] = new_verts[self.tri_vert[tri_idx][j] as usize];
 				}
-			});
-
-		return new_tri_vert;
+				coords.into()
+			})
+			.collect()
 	}
 
 	// This triangulation is purely topological - it depends only on the number of

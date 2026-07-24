@@ -204,36 +204,46 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 
 	// Convert winding numbers to inclusion values based on operation type.
 	//reuses existing allocation
-	let i12: Vec<_> = xv12.x12.into_iter().map(|v| c3 * v).collect();
-	let i21: Vec<_> = xv21.x12.into_iter().map(|v| c3 * v).collect();
-	let i03: Vec<_> = w03.into_iter().map(|v| c1 + (c3 as i32) * v).collect();
-	let i30: Vec<_> = w30.into_iter().map(|v| c2 + (c3 as i32) * v).collect();
+	let i12 = Vec::from_iter(xv12.x12.into_iter().map(|v| c3 * v));
+	let i21 = Vec::from_iter(xv21.x12.into_iter().map(|v| c3 * v));
+	let i03 = Vec::from_iter(w03.into_iter().map(|v| c1 + (c3 as i32) * v));
+	let i30 = Vec::from_iter(w30.into_iter().map(|v| c2 + (c3 as i32) * v));
 
-	let abs_sum = |a: i32, b: i32| a.abs() + b.abs();
-
-	let v_p2r = vec_ext::exclusive_scan_transformed(&i03, 0, &abs_sum);
-	let mut num_vert_r = v_p2r.last().unwrap().abs() + i03.last().unwrap().abs();
+	let v_p2r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		i03.iter().map(|v| v.abs()),
+		0,
+	));
+	let mut num_vert_r = *v_p2r.last().unwrap();
 	let n_pv = num_vert_r;
 
-	let v_q2r = vec_ext::exclusive_scan_transformed(&i30, num_vert_r, &abs_sum);
-	num_vert_r = abs_sum(*v_q2r.last().unwrap(), *i30.last().unwrap());
+	let v_q2r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		i30.iter().map(|v| v.abs()),
+		num_vert_r,
+	));
+	num_vert_r = *v_q2r.last().unwrap();
 	let n_qv = num_vert_r - n_pv;
 
-	let v12_r = if xv12.v12.len() == 0 {
+	let v12_r = if i12.len() == 0 {
 		Vec::new()
 	} else {
-		let v12_r = vec_ext::exclusive_scan_transformed(&i12, num_vert_r, &abs_sum);
-		num_vert_r = abs_sum(*v12_r.last().unwrap(), *i12.last().unwrap() as i32);
+		let v12_r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+			i12.iter().map(|v| v.abs() as i32),
+			num_vert_r,
+		));
+		num_vert_r = *v12_r.last().unwrap();
 		v12_r
 	};
 
 	let n12 = num_vert_r - n_pv - n_qv; //new verts from edgesP -> facesQ
 
-	let v21_r = if xv21.v12.len() == 0 {
+	let v21_r = if i21.len() == 0 {
 		Vec::new()
 	} else {
-		let v21_r = vec_ext::exclusive_scan_transformed(&i21, num_vert_r, &abs_sum);
-		num_vert_r = abs_sum(*v21_r.last().unwrap(), *i21.last().unwrap() as i32);
+		let v21_r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+			i21.iter().map(|v| v.abs() as i32),
+			num_vert_r,
+		));
+		num_vert_r = *v21_r.last().unwrap();
 		v21_r
 	};
 
@@ -250,7 +260,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		vert_pos_r: &mut vert_pos,
 		inclusion: &i03,
 		vert_r: &v_p2r,
-		vert_pos_p: &in_p.vert_pos,
+		vert_pos_a: &in_p.vert_pos,
 	};
 	for vert in 0..in_p.num_vert() {
 		retain_p.call(vert);
@@ -259,7 +269,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		vert_pos_r: &mut vert_pos,
 		inclusion: &i30,
 		vert_r: &v_q2r,
-		vert_pos_p: &in_q.vert_pos,
+		vert_pos_a: &in_q.vert_pos,
 	};
 	for vert in 0..in_q.num_vert() {
 		retain_q.call(vert);
@@ -269,7 +279,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		vert_pos_r: &mut vert_pos,
 		inclusion: &i12,
 		vert_r: &v12_r,
-		vert_pos_p: &xv12.v12,
+		vert_pos_a: &xv12.v12,
 	};
 	for vert in 0..i12.len() {
 		new12.call(vert);
@@ -279,7 +289,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		vert_pos_r: &mut vert_pos,
 		inclusion: &i21,
 		vert_r: &v21_r,
-		vert_pos_p: &xv21.v12,
+		vert_pos_a: &xv21.v12,
 	};
 	for vert in 0..i21.len() {
 		new21.call(vert);
@@ -328,8 +338,11 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		xv12.p1q2,
 		xv21.p1q2,
 	);
-	let mut face_pq2r = construct::size_face_pq2r(&sides_per_face_pq);
-	let num_face_r = face_pq2r.pop().unwrap() as usize;
+	let face_pq2r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		sides_per_face_pq.iter().map(|&x| if x > 0 { 1 } else { 0 }),
+		0,
+	));
+	let num_face_r = *face_pq2r.last().unwrap() as usize;
 	let face_normal = construct::size_face_normal(
 		&in_p.tri.normal,
 		&in_q.tri.normal,
@@ -337,7 +350,16 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		num_face_r,
 		invert_q,
 	);
-	let face_edge = construct::size_face_edge(sides_per_face_pq);
+	let mut face_edge = Vec::with_capacity(num_face_r);
+	face_edge.extend(vec_ext::exclusive_scan_with_total(
+		sides_per_face_pq.into_iter().filter(|&v| v > 0),
+		0,
+	));
+
+	let num_halfedge_r = *face_edge.last().unwrap() as usize;
+	if num_halfedge_r == 0 {
+		return decimated();
+	}
 
 	// This gets incremented for each halfedge that's added to a face so that the
 	// next one knows where to slot in.
@@ -345,11 +367,6 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	// Intersected halfedges are marked false.
 	let mut whole_halfedge_p = vec![true; in_p.tri.halfedge.len()];
 	let mut whole_halfedge_q = vec![true; in_q.tri.halfedge.len()];
-
-	let num_halfedge_r = *face_edge.last().unwrap() as usize;
-	if num_halfedge_r == 0 {
-		return decimated();
-	}
 
 	// The face_rel contains the data that will become triRel once the faces
 	// are triangulated.
@@ -466,7 +483,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	};
 
 	let first_new_vert = n_pv + n_qv;
-	let instance_rel: Vec<_> = instance_rel.clone().collect();
+	let instance_rel = Vec::from_iter(instance_rel.clone());
 
 	pp::split_pinched_verts(&mut tri.halfedge, &mut vert_pos);
 	pp::dedupe_edges(&mut tri, &mut vert_pos);

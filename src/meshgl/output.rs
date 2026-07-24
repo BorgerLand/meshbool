@@ -57,7 +57,7 @@ impl MeshBool {
 
 		// Sort the triangles into runs
 		let mut face_id = vec![I::lossy_from(0); num_tri];
-		let mut tri_new2old: Vec<_> = (0..num_tri).map(|i| i as i32).collect();
+		let mut tri_new2old = Vec::from_iter(0..num_tri as i32);
 		let tri_rel = &self.tri.relation;
 		// Don't sort originals - keep them in order
 		if !is_original {
@@ -94,8 +94,8 @@ impl MeshBool {
 			}
 		};
 
-		let mut unhandled_instance: DeterministicSet<_> =
-			(0..self.instance_relation.len() as u32).collect();
+		let mut unhandled_instance =
+			DeterministicSet::from_iter(0..self.instance_relation.len() as u32);
 		let mut last_id = None;
 		for tri in 0..num_tri {
 			let old_tri = tri_new2old[tri];

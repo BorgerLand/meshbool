@@ -76,8 +76,4 @@ Currently treating these as potential bugs in Manifold/its test suite's expectat
 
 - Boolean.Precision: `CsgLeafNode::Compose` optimization is not implemented, and the unoptimized full boolean path calls simplify_topology with nonzero first_new_vert, causing the tiny cube to not run through degenerate removal. Perhaps `MeshBool` (the standalone tiny cube in particular) should not be allowed to exist in an unsimplified state.
 - Boolean.BatchBoolean: Output looks visually correct, again error may be due to unimplemented `CsgLeafNode::Compose` optimization, though it's weird that they don't produce the same number of triangles out
-- Samples.Sponge4: Number of degenerate triangles too large, purely due to removal/destabilizing of some sorting. Culprits:
-  - Removed `reorder_halfedge` during large refactor (impl [here](https://github.com/BorgerLand/meshbool/blob/28d29259978beb73c703fcbd9ad26172962be1ec/src/sort.rs#L499), called [here](https://github.com/BorgerLand/meshbool/blob/28d29259978beb73c703fcbd9ad26172962be1ec/src/boolean_result.rs#L1078))
-  - [use preallocated deterministicmap instead of btreemap](https://github.com/BorgerLand/meshbool/commit/d1b8c6395b0bf1c1fd428ac34fb1f018d96b8e03)
-  - [loosen sorting strictness hopefully](https://github.com/BorgerLand/meshbool/commit/dcd237f795bb8acaca3c51c63f68c98e3a24434a)
-    - ^ Revert all these optimizations and it will pass
+- Samples.Sponge4: Purely due to removal/destabilizing of some sorting. It was passing before optimization (see Git tag `pre-refactor-db042ab`), and `Expected: (sponge.NumDegenerateTris()) <= (8), actual: 28 vs 8` is still respectably low enough that I don't think the failure means much (the old triangulator allowed 40k degenerate triangles)

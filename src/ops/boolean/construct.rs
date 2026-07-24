@@ -7,14 +7,14 @@ use crate::util::math::{atomic_add, get_barycentric, next3_i32, prev3_i32};
 use crate::util::num_convert::OrderedF64;
 use crate::util::vec_ext;
 use nalgebra::{Matrix3, Point3, Vector3, Vector4};
-use std::mem;
 use std::ops::Deref;
+use std::{array, mem};
 
 pub struct DuplicateVerts<'a, T> {
 	pub vert_pos_r: &'a mut [Point3<f64>],
 	pub inclusion: &'a [T],
 	pub vert_r: &'a [i32],
-	pub vert_pos_p: &'a [Point3<f64>],
+	pub vert_pos_a: &'a [Point3<f64>],
 }
 
 impl<'a, T> DuplicateVerts<'a, T>
@@ -24,7 +24,9 @@ where
 	pub fn call(&mut self, vert: usize) {
 		let n: i32 = self.inclusion[vert].into().abs();
 		for i in 0..n {
-			self.vert_pos_r[(self.vert_r[vert] + i) as usize] = self.vert_pos_p[vert];
+			let a = self.vert_r[vert];
+			let b = self.vert_pos_a[vert];
+			self.vert_pos_r[(a + i) as usize] = b;
 		}
 	}
 }
@@ -146,7 +148,7 @@ pub fn size_sides_per_face_pq(
 		count: &mut sides_per_face_p,
 		inclusion: i03,
 	};
-	for i in 0..halfedge_p.len() / 3 {
+	for i in 0..halfedge_p.num_tri() {
 		count_p.call(i);
 	}
 	let mut count_q = CountVerts {
@@ -154,7 +156,7 @@ pub fn size_sides_per_face_pq(
 		count: &mut sides_per_face_q,
 		inclusion: i30,
 	};
-	for i in 0..halfedge_q.len() / 3 {
+	for i in 0..halfedge_q.num_tri() {
 		count_q.call(i);
 	}
 
@@ -184,72 +186,36 @@ pub fn size_sides_per_face_pq(
 	sides_per_face_pq
 }
 
-pub fn size_face_pq2r(sides_per_face_pq: &[i32]) -> Vec<i32> {
-	let mut face_pq2r: Vec<i32> = vec![0; sides_per_face_pq.len() + 1];
-	vec_ext::inclusive_scan(
-		sides_per_face_pq.iter().map(|&x| if x > 0 { 1 } else { 0 }),
-		&mut face_pq2r[1..],
-	);
-
-	face_pq2r
-}
-
 pub fn size_face_normal(
-	face_normal_p: &[Vector3<f64>],
-	face_normal_q: &[Vector3<f64>],
+	tri_normal_p: &[Vector3<f64>],
+	tri_normal_q: &[Vector3<f64>],
 	sides_per_face_pq: &[i32],
 	num_face_r: usize,
 	invert_q: bool,
 ) -> Vec<Vector3<f64>> {
-	let mut face_normal = unsafe { vec_ext::uninit(num_face_r) };
-	let mut tmp_buffer = unsafe { vec_ext::uninit(num_face_r) };
+	let tri_normal_p_iter = sides_per_face_pq[..tri_normal_p.len()]
+		.iter()
+		.cloned()
+		.enumerate()
+		.filter(|&(_, sides)| sides > 0)
+		.map(|(i, _)| tri_normal_p[i]);
+	let tri_normal_q_iter = sides_per_face_pq[tri_normal_p.len()..]
+		.iter()
+		.cloned()
+		.enumerate()
+		.filter(|&(_, sides)| sides > 0)
+		.map(|(i, _)| tri_normal_q[i]);
 
-	let face_ids_p = (0..face_normal_p.len()).map(|i| {
-		if sides_per_face_pq[i] > 0 {
-			i
-		} else {
-			usize::MAX
-		}
-	});
+	let mut face_normal = Vec::with_capacity(num_face_r);
 
-	let next = vec_ext::copy_if(face_ids_p, &mut tmp_buffer, |v| v != usize::MAX);
-
-	vec_ext::gather(&tmp_buffer[..next], face_normal_p, &mut face_normal);
-
-	let face_ids_q = (0..face_normal_q.len()).map(|i| {
-		if sides_per_face_pq[i + face_normal_p.len()] > 0 {
-			i
-		} else {
-			usize::MAX
-		}
-	});
-
-	let end = next + vec_ext::copy_if(face_ids_q, &mut tmp_buffer[next..], &|v| v != usize::MAX);
-
+	face_normal.extend(tri_normal_p_iter);
 	if invert_q {
-		vec_ext::gather_transformed(
-			&tmp_buffer[next..end],
-			face_normal_q,
-			&mut face_normal[next..],
-			|normal: Vector3<f64>| -normal,
-		);
+		face_normal.extend(tri_normal_q_iter.map(|normal| -normal));
 	} else {
-		vec_ext::gather(
-			&tmp_buffer[next..end],
-			face_normal_q,
-			&mut face_normal[next..],
-		);
+		face_normal.extend(tri_normal_q_iter);
 	}
 
 	face_normal
-}
-
-pub fn size_face_edge(mut sides_per_face_pq: Vec<i32>) -> Vec<i32> {
-	sides_per_face_pq.retain(|&v| v != 0);
-	let mut face_edge = vec![0; sides_per_face_pq.len() + 1];
-	vec_ext::inclusive_scan(sides_per_face_pq.into_iter(), &mut face_edge[1..]);
-
-	face_edge
 }
 
 fn sort_edge_pos(edge_pos: &mut [EdgePos]) {
@@ -532,53 +498,6 @@ pub fn append_whole_edges(
 	}
 }
 
-struct Barycentric<'a> {
-	uvw: &'a mut [Vector3<f64>],
-	halfedge_r: &'a Halfedges,
-	tri_rel_r: &'a [TriRelation],
-	instance_id_offset_q: u32,
-	vert_pos_p: &'a [Point3<f64>],
-	vert_pos_q: &'a [Point3<f64>],
-	vert_pos_r: &'a [Point3<f64>],
-	halfedge_p: &'a Halfedges,
-	halfedge_q: &'a Halfedges,
-	epsilon: f64,
-}
-
-impl<'a> Barycentric<'a> {
-	fn call(&mut self, tri: i32) {
-		let ref_pq = self.tri_rel_r[tri as usize];
-		if self.halfedge_r.start(3 * tri) < 0 {
-			return;
-		}
-
-		let tri_pq = ref_pq.face_id;
-		let pq = ref_pq.instance_id < self.instance_id_offset_q;
-		let vert_pos = if pq {
-			&self.vert_pos_p
-		} else {
-			&self.vert_pos_q
-		};
-		let halfedge = if pq {
-			&self.halfedge_p
-		} else {
-			&self.halfedge_q
-		};
-
-		let mut tri_pos = Matrix3::default();
-		for j in 0..3 {
-			*tri_pos.column_mut(j as usize) =
-				*vert_pos[halfedge.start(3 * tri_pq + j) as usize].deref();
-		}
-
-		for i in 0..3 {
-			let vert = self.halfedge_r.start(3 * tri + i);
-			self.uvw[(3 * tri + i) as usize] =
-				get_barycentric(self.vert_pos_r[vert as usize], tri_pos, self.epsilon);
-		}
-	}
-}
-
 pub fn create_properties(
 	halfedge_r: &mut Halfedges,
 	tri_rel_r: &mut [TriRelation],
@@ -597,22 +516,17 @@ pub fn create_properties(
 	}
 
 	let num_tri = halfedge_r.num_tri();
-	let mut bary = unsafe { vec_ext::uninit(halfedge_r.len()) };
-	let mut bary_closure = Barycentric {
-		uvw: &mut bary,
+	let bary = barycentric(
 		halfedge_r,
 		tri_rel_r,
 		instance_id_offset_q,
-		vert_pos_p: &in_p.vert_pos,
-		vert_pos_q: &in_q.vert_pos,
+		&in_p.vert_pos,
+		&in_q.vert_pos,
 		vert_pos_r,
-		halfedge_p: &in_p.tri.halfedge,
-		halfedge_q: &in_q.tri.halfedge,
+		&in_p.tri.halfedge,
+		&in_q.tri.halfedge,
 		epsilon,
-	};
-	for tri in 0..num_tri {
-		bary_closure.call(tri as i32);
-	}
+	);
 
 	let id_miss_prop = vert_pos_r.len() as i32;
 	let mut prop_idx: Vec<Vec<(Vector3<i32>, i32)>> = vec![Vec::new(); vert_pos_r.len() + 1];
@@ -745,4 +659,41 @@ pub fn create_properties(
 	}
 
 	properties
+}
+
+fn barycentric(
+	halfedge_r: &Halfedges,
+	tri_rel_r: &[TriRelation],
+	instance_id_offset_q: u32,
+	vert_pos_p: &[Point3<f64>],
+	vert_pos_q: &[Point3<f64>],
+	vert_pos_r: &[Point3<f64>],
+	halfedge_p: &Halfedges,
+	halfedge_q: &Halfedges,
+	epsilon: f64,
+) -> Vec<Vector3<f64>> {
+	(0..halfedge_r.num_tri() as i32)
+		.flat_map(|tri| {
+			let ref_pq = tri_rel_r[tri as usize];
+			if halfedge_r.start(3 * tri) < 0 {
+				return [Vector3::default(); 3];
+			}
+
+			let tri_pq = ref_pq.face_id;
+			let pq = ref_pq.instance_id < instance_id_offset_q;
+			let vert_pos = if pq { vert_pos_p } else { vert_pos_q };
+			let halfedge = if pq { halfedge_p } else { halfedge_q };
+
+			let mut tri_pos = Matrix3::default();
+			for j in 0..3 {
+				*tri_pos.column_mut(j as usize) =
+					*vert_pos[halfedge.start(3 * tri_pq + j) as usize].deref();
+			}
+
+			array::from_fn::<_, 3, _>(|i| {
+				let vert = halfedge_r.start(3 * tri + (i as i32));
+				get_barycentric(vert_pos_r[vert as usize], tri_pos, epsilon)
+			})
+		})
+		.collect()
 }

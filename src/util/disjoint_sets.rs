@@ -1,5 +1,4 @@
 use crate::util::hash_table::DeterministicMap;
-use crate::util::vec_ext;
 use std::mem;
 
 ///from https://github.com/wjakob/dset, changed to add connected component
@@ -65,26 +64,26 @@ impl DisjointSets {
 	}
 
 	pub fn connected_components(&mut self) -> (Vec<i32>, usize) {
-		let mut components = unsafe { vec_ext::uninit(self.data.len()) };
 		let mut lonely_nodes = 0;
 		let mut to_label: DeterministicMap<u32, i32> = DeterministicMap::new();
-		for i in 0..self.data.len() {
-			// we optimize for connected component of size 1
-			// no need to put them into the hashmap
-			let i_parent = self.find_impl(DisjointSets::to_index(i as usize));
-			if self.rank(i_parent) == 0 {
-				components[i] = to_label.len() as i32 + lonely_nodes as i32;
-				lonely_nodes += 1;
-				continue;
-			}
-			if let Some(value) = to_label.get(&i_parent) {
-				components[i] = *value;
-			} else {
-				let s = to_label.len() as u32 + lonely_nodes as u32;
-				to_label.entry(i_parent).or_insert(s as i32);
-				components[i] = s as i32;
-			}
-		}
+		let components = (0..self.data.len())
+			.map(|i| {
+				// we optimize for connected component of size 1
+				// no need to put them into the hashmap
+				let i_parent = self.find_impl(DisjointSets::to_index(i as usize));
+				if self.rank(i_parent) == 0 {
+					let component = to_label.len() as i32 + lonely_nodes as i32;
+					lonely_nodes += 1;
+					component
+				} else if let Some(value) = to_label.get(&i_parent) {
+					*value
+				} else {
+					let s = to_label.len() as u32 + lonely_nodes as u32;
+					to_label.entry(i_parent).or_insert(s as i32);
+					s as i32
+				}
+			})
+			.collect();
 		return (components, to_label.len() + lonely_nodes);
 	}
 

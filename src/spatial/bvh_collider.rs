@@ -2,7 +2,7 @@ use crate::spatial::aabb::{Box3D, Overlap};
 use crate::util::math::{atomic_add, is_axis_aligned};
 use crate::util::vec_ext;
 use nalgebra::{Matrix3x4, Point3, Vector3};
-use std::any::TypeId;
+use std::any::Any;
 use std::fmt::Debug;
 use std::mem;
 
@@ -308,8 +308,7 @@ where
 		let query = (self.f)(query_idx);
 
 		// early exit for empty boxes
-		if TypeId::of::<OverlapT>() == TypeId::of::<Box3D>() {
-			let query: &Box3D = unsafe { mem::transmute(&query) };
+		if let Some(query) = (&query as &dyn Any).downcast_ref::<Box3D>() {
 			if query.min.x == f64::INFINITY {
 				return;
 			}

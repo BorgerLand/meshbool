@@ -70,7 +70,8 @@ where
 			return Err(MeshGLError::NotManifold);
 		}
 
-		if usize::lossy_from(mesh_gl.prop_stride) < 3 {
+		let gl_prop_stride = usize::lossy_from(mesh_gl.prop_stride);
+		if gl_prop_stride < 3 {
 			return Err(MeshGLError::MissingPositionProperties);
 		}
 
@@ -115,23 +116,23 @@ where
 		let tolerance = f64::from(mesh_gl.tolerance);
 		// This will have unreferenced duplicate positions that will be removed by
 		// Impl::remove_unreferenced_verts().
-		let mut vert_pos: Vec<Point3<f64>> = unsafe { vec_ext::uninit(num_vert) };
-		let prop_stride = usize::lossy_from(mesh_gl.prop_stride) - 3;
-		let mut properties = unsafe { vec_ext::uninit(num_vert * prop_stride) };
+		let mut vert_pos: Vec<Point3<f64>> = Vec::with_capacity(num_vert);
+		let prop_stride = gl_prop_stride - 3;
+		let mut properties: Vec<f64> = Vec::with_capacity(num_vert * prop_stride);
 
 		for i in 0..num_vert {
-			for j in 0..3 {
-				vert_pos[i][j] =
-					mesh_gl.vert_properties[usize::lossy_from(mesh_gl.prop_stride) * i + j].into();
-			}
-			for j in 0..prop_stride {
-				properties[i * prop_stride + j] = mesh_gl.vert_properties
-					[usize::lossy_from(mesh_gl.prop_stride) * i + 3 + j]
-					.into();
-			}
+			let base = gl_prop_stride * i;
+			vert_pos.push(Point3::new(
+				mesh_gl.vert_properties[base].into(),
+				mesh_gl.vert_properties[base + 1].into(),
+				mesh_gl.vert_properties[base + 2].into(),
+			));
+			properties.extend(
+				mesh_gl.vert_properties[base + 3..base + gl_prop_stride]
+					.iter()
+					.map(|&x| f64::from(x)),
+			);
 		}
-
-		let mut tri_rel_unfiltered: Vec<TriRelation> = unsafe { vec_ext::uninit(num_tri) };
 
 		let mut run_index = mesh_gl.run_index.clone();
 		let run_end = mesh_gl.tri_verts.len();
@@ -143,7 +144,6 @@ where
 			run_index.push(I::lossy_from(run_end));
 		}
 
-		let mut instance_relation = Vec::new();
 		let mut run_original_id = mesh_gl.run_original_id.clone();
 		let original_id = if run_original_id.is_empty() {
 			let original_id = reserve_original_id();
@@ -153,7 +153,8 @@ where
 			None
 		};
 
-		for i in 0..run_original_id.len() {
+		let mut tri_rel_unfiltered = unsafe { vec_ext::uninit(num_tri) };
+		let instance_relation = Vec::from_iter((0..run_original_id.len()).map(|i| {
 			let instance_id = i as u32;
 			let original_id = run_original_id[i];
 			let back_side = mesh_gl.back_side(i);
@@ -181,18 +182,18 @@ where
 				}))
 			};
 
-			instance_relation.push(InstanceRelation {
+			InstanceRelation {
 				original_id,
 				transform,
 				back_side,
 				has_normals: run_has_n,
 				user_provided_face_id: !mesh_gl.face_id.is_empty(),
-			});
-		}
+			}
+		}));
 
 		let prop2vert = (!mesh_gl.merge_from_vert.is_empty())
 			.then(|| {
-				let mut prop2vert: Vec<_> = (0..num_vert as i32).collect();
+				let mut prop2vert = Vec::from_iter(0..num_vert as i32);
 				for i in 0..mesh_gl.merge_from_vert.len() {
 					let from = usize::lossy_from(mesh_gl.merge_from_vert[i]);
 					let to = usize::lossy_from(mesh_gl.merge_to_vert[i]);
@@ -392,15 +393,16 @@ where
 		}
 
 		let num_open_vert = open_edges.len();
-		let mut open_verts: Vec<_> = open_edges.iter().map(|&(vert, _)| vert).collect();
+		let mut open_verts = Vec::from_iter(open_edges.iter().map(|&(vert, _)| vert));
 
 		let vert_prop_d = self.vert_properties.clone();
+		let gl_prop_stride = usize::lossy_from(self.prop_stride);
 		let mut bbox = Box3D::default();
 		for i in 0..3 {
 			let min_max = vert_prop_d[i..vert_prop_d.len()]
 				.iter()
 				.cloned()
-				.step_by(usize::lossy_from(self.prop_stride))
+				.step_by(gl_prop_stride)
 				.map(|f| (f64::lossy_from(f), f64::lossy_from(f)))
 				.reduce(|acc, b| (acc.0.min(b.0), acc.1.max(b.1)))
 				.unwrap_or((core::f64::INFINITY, core::f64::NEG_INFINITY));
@@ -416,40 +418,33 @@ where
 			}) * bbox.scale(),
 		);
 
-		// let mut policy = autoPolicy(numOpenVert, 1e5);
-		let mut vert_box: Vec<Box3D> = unsafe { vec_ext::uninit(num_open_vert) };
-		let mut vert_morton = unsafe { vec_ext::uninit(num_open_vert) };
+		let (mut vert_box, mut vert_morton): (Vec<_>, Vec<_>) = (0..num_open_vert)
+			.map(|i| {
+				let vert = open_verts[i];
+				let base = gl_prop_stride * vert as usize;
 
-		(0..num_open_vert).for_each(|i| {
-			let vert = open_verts[i];
+				let center = Point3::from(array::from_fn(|j| {
+					self.vert_properties[base + j].lossy_into()
+				}));
 
-			let center: Vector3<f64> = Vector3::new(
-				self.vert_properties[usize::lossy_from(self.prop_stride) * vert as usize]
-					.lossy_into(),
-				self.vert_properties[usize::lossy_from(self.prop_stride) * vert as usize + 1]
-					.lossy_into(),
-				self.vert_properties[usize::lossy_from(self.prop_stride) * vert as usize + 2]
-					.lossy_into(),
-			);
+				let mut min = center;
+				min.iter_mut().for_each(|v| *v -= tolerance / 2.0);
 
-			vert_box[i].min = center.into();
-			vert_box[i].min.iter_mut().for_each(|v| {
-				*v -= tolerance / 2.0;
-			});
-			vert_box[i].max = center.into();
-			vert_box[i].max.iter_mut().for_each(|v| {
-				*v += tolerance / 2.0;
-			});
+				let mut max = center;
+				max.iter_mut().for_each(|v| *v += tolerance / 2.0);
 
-			vert_morton[i] = morton_code(center.into(), bbox);
-		});
+				let morton = morton_code(center.into(), bbox);
 
-		let mut vert_new2old: Vec<_> = (0..num_open_vert as i32).into_iter().collect();
+				(Box3D { min, max }, morton)
+			})
+			.unzip();
+
+		let mut vert_new2old = Vec::from_iter(0..num_open_vert as i32);
 		vert_new2old.sort_unstable_by_key(|&i| vert_morton[i as usize]);
 
-		vec_ext::gather_in_place(&mut vert_morton, &vert_new2old);
-		vec_ext::gather_in_place(&mut vert_box, &vert_new2old);
-		vec_ext::gather_in_place(&mut open_verts, &vert_new2old);
+		vert_morton = vec_ext::gather(&vert_morton, vert_new2old.iter());
+		vert_box = vec_ext::gather(&vert_box, vert_new2old.iter());
+		open_verts = vec_ext::gather(&open_verts, vert_new2old.iter());
 
 		let collider = BVHCollider::new(&vert_box, &vert_morton);
 		let mut uf = DisjointSets::new(num_vert);
