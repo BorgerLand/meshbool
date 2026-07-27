@@ -79,7 +79,7 @@ impl MeshBool {
 		// re-applying runTransform to those channels).
 		let mut add_run = |tri, rel: InstanceRelation| {
 			run_index.push(I::lossy_from(3 * tri));
-			run_original_id.push(rel.original_id as u32);
+			run_original_id.push(rel.original_id);
 			// runFlags carries hasNormals (bit 1) which we want on originals too;
 			// runTransform is just metadata so skip it for originals where it would
 			// always be identity.
@@ -98,8 +98,8 @@ impl MeshBool {
 			DeterministicSet::from_iter(0..self.instance_relation.len() as u32);
 		let mut last_id = None;
 		for tri in 0..num_tri {
-			let old_tri = tri_new2old[tri];
-			let tri_rel = tri_rel[old_tri as usize];
+			let old_tri = tri_new2old[tri] as usize;
+			let tri_rel = tri_rel[old_tri];
 			let instance_id = tri_rel.instance_id;
 
 			#[cfg(feature = "test_thoroughly")]
@@ -107,8 +107,7 @@ impl MeshBool {
 
 			face_id[tri] = I::lossy_from(tri_rel.face_id);
 			for i in 0..3 {
-				tri_verts[3 * tri + (i as usize)] =
-					I::lossy_from(self.tri.halfedge.start(3 * old_tri + i));
+				tri_verts[3 * tri + i] = I::lossy_from(self.tri.halfedge.start[3 * old_tri + i]);
 			}
 
 			if Some(instance_id) != last_id {
@@ -163,7 +162,7 @@ impl MeshBool {
 				(usize::lossy_from(run_index[run]) / 3)..(usize::lossy_from(run_index[run + 1]) / 3)
 			{
 				for i in 0..3 {
-					let prop = self.tri.halfedge.prop(3 * tri_new2old[tri] + (i as i32));
+					let prop = self.tri.halfedge.prop[3 * (tri_new2old[tri] as usize) + i];
 					let vert = usize::lossy_from(tri_verts[3 * tri + i]);
 
 					let bin = &mut vert_prop_pair[vert];

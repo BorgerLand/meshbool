@@ -21,17 +21,17 @@ impl MeshBool {
 		if self.is_empty() {
 			return 1;
 		}
-		(0..self.num_tri() as i32)
+		(0..self.num_tri())
 			.filter(|&tri| {
-				if self.tri.halfedge.pair(3 * tri) < 0 {
+				if self.tri.halfedge.pair[3 * tri] < 0 {
 					return true;
 				}
 
-				let projection = get_axis_aligned_projection(self.tri.normal[tri as usize]);
+				let projection = get_axis_aligned_projection(self.tri.normal[tri]);
 				let mut v = [Point2::default(); 3];
 				for i in 0..3 {
-					v[i as usize] =
-						projection * self.vert_pos[self.tri.halfedge.start(3 * tri + i) as usize];
+					v[i] =
+						projection * self.vert_pos[self.tri.halfedge.start[3 * tri + i] as usize];
 				}
 
 				let ccw = ccw(v[0], v[1], v[2], self.precision.tolerance / 2.0);
@@ -43,13 +43,10 @@ impl MeshBool {
 	///Returns the surface area of the manifold.
 	pub fn surface_area(&self) -> f64 {
 		self.get_property(|tri| {
-			let v = self.vert_pos[self.tri.halfedge.start((3 * tri) as i32) as usize].coords;
-			(self.vert_pos[self.tri.halfedge.start((3 * tri + 1) as i32) as usize] - v)
+			let v = self.vert_pos[self.tri.halfedge.start[3 * tri] as usize].coords;
+			(self.vert_pos[self.tri.halfedge.start[3 * tri + 1] as usize] - v)
 				.coords
-				.cross(
-					&(self.vert_pos[self.tri.halfedge.start((3 * tri + 2) as i32) as usize] - v)
-						.coords,
-				)
+				.cross(&(self.vert_pos[self.tri.halfedge.start[3 * tri + 2] as usize] - v).coords)
 				.norm() / 2.0
 		})
 	}
@@ -57,14 +54,10 @@ impl MeshBool {
 	///Returns the volume of the manifold.
 	pub fn volume(&self) -> f64 {
 		self.get_property(|tri| {
-			let v = self.vert_pos[self.tri.halfedge.start((3 * tri) as i32) as usize].coords;
-			let cross_p = (self.vert_pos[self.tri.halfedge.start((3 * tri + 1) as i32) as usize]
-				- v)
+			let v = self.vert_pos[self.tri.halfedge.start[3 * tri] as usize].coords;
+			let cross_p = (self.vert_pos[self.tri.halfedge.start[3 * tri + 1] as usize] - v)
 				.coords
-				.cross(
-					&(self.vert_pos[self.tri.halfedge.start((3 * tri + 2) as i32) as usize] - v)
-						.coords,
-				);
+				.cross(&(self.vert_pos[self.tri.halfedge.start[3 * tri + 2] as usize] - v).coords);
 			cross_p.dot(&v) / 6.0
 		})
 	}
@@ -115,9 +108,8 @@ impl MeshBool {
 				let mut q: [Point3<f64>; 3] = Default::default();
 
 				for j in 0..3 {
-					p[j as usize] = self.vert_pos[self.tri.halfedge.start(3 * tri + j) as usize];
-					q[j as usize] =
-						other.vert_pos[other.tri.halfedge.start(3 * tri_other + j) as usize];
+					p[j] = self.vert_pos[self.tri.halfedge.start[3 * tri + j] as usize];
+					q[j] = other.vert_pos[other.tri.halfedge.start[3 * tri_other + j] as usize];
 				}
 				min_distance = min_distance.min(distance_triangle_triangle_squared(&p, &q));
 			},
@@ -126,9 +118,7 @@ impl MeshBool {
 		);
 		min_distance.min(search_length * search_length).sqrt()
 	}
-}
 
-impl MeshBool {
 	///The triangle normal vectors are saved over the course of operations rather
 	///than recalculated to avoid rounding error. This checks that triangles still
 	///match their normal vectors within Precision(), and if all triangles are CCW
@@ -139,7 +129,7 @@ impl MeshBool {
 			return true;
 		}
 		return (0..self.num_tri()).all(|face| {
-			if self.tri.halfedge.pair((3 * face) as i32) < 0 {
+			if self.tri.halfedge.pair[3 * face] < 0 {
 				return true;
 			}
 
@@ -148,7 +138,7 @@ impl MeshBool {
 			let mut max = -f64::INFINITY;
 			let mut min = f64::INFINITY;
 			for i in 0..3 {
-				let p = self.vert_pos[self.tri.halfedge.start((3 * face + i) as i32) as usize];
+				let p = self.vert_pos[self.tri.halfedge.start[3 * face + i] as usize];
 				v[i] = projection * p;
 				let d = p.coords.dot(&self.tri.normal[face]);
 				if !d.is_finite() {

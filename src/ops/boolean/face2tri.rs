@@ -106,7 +106,7 @@ pub fn face2tri(
 			pair_tri >= 0,
 			"boundary edge did not triangulate with its pair"
 		);
-		tris.halfedge.set_pair(tri_edge, pair_tri);
+		tris.halfedge.pair[tri_edge as usize] = pair_tri;
 	}
 
 	tris
@@ -323,12 +323,12 @@ fn write_local_triangles(
 	let mut num_edge = 0;
 	for tri in 0..num_tri {
 		for i in 0..3 {
-			let out = (first_out + num_edge) as i32;
+			let out = first_out + num_edge;
 			let start = triangles[tri * 3 + i];
 			let end = triangles[tri * 3 + next3_usize(i)];
-			local_edges[num_edge] = Vector3::new(start, end, out);
-			output.set_start(out, face_halfedge[start as usize].start_vert);
-			output.set_pair(out, -1);
+			local_edges[num_edge] = Vector3::new(start, end, out as i32);
+			output.start[out] = face_halfedge[start as usize].start_vert;
+			output.pair[out] = -1;
 			num_edge += 1;
 		}
 	}
@@ -343,7 +343,7 @@ fn write_local_triangles(
 			}
 		}
 		if pair >= 0 {
-			output.set_pair(edge[2], pair);
+			output.pair[edge[2] as usize] = pair;
 		} else {
 			contour2tri[edge[0] as usize] = edge[2];
 		}
@@ -360,16 +360,14 @@ fn write_general_triangulation(
 	let first_out = 3 * first_tri;
 	let num_tri_halfedge = 3 * triangulation.num_tri();
 	for local in 0..num_tri_halfedge {
-		let out = (first_out + local) as i32;
+		let out = first_out + local;
 		let edge = &triangulation.halfedges[triangulation.contour_end + local];
-		output.set_start(out, face_halfedge[edge.start_vert as usize].start_vert);
+		output.start[out] = face_halfedge[edge.start_vert as usize].start_vert;
 		if edge.paired_halfedge >= triangulation.contour_end as i32 {
-			output.set_pair(
-				out,
-				(first_out + (edge.paired_halfedge as usize) - triangulation.contour_end) as i32,
-			);
+			output.pair[out] =
+				(first_out + (edge.paired_halfedge as usize) - triangulation.contour_end) as i32;
 		} else {
-			output.set_pair(out, -1);
+			output.pair[out] = -1;
 		}
 	}
 

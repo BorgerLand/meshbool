@@ -31,11 +31,11 @@ pub fn split_pinched_verts(halfedge: &mut Halfedges, vert_pos: &mut Vec<Point3<f
 
 	let mut vert_processed = vec![false; vert_pos.len()];
 	let mut halfedge_processed = vec![false; nb_edges];
-	for i in 0..nb_edges as i32 {
-		if halfedge_processed[i as usize] {
+	for i in 0..nb_edges {
+		if halfedge_processed[i] {
 			continue;
 		}
-		let mut vert = halfedge.start(i);
+		let mut vert = halfedge.start[i];
 		if vert == -1 {
 			continue;
 		}
@@ -43,14 +43,14 @@ pub fn split_pinched_verts(halfedge: &mut Halfedges, vert_pos: &mut Vec<Point3<f
 			vert_pos.push(vert_pos[vert as usize]);
 			vert = (vert_pos.len() - 1) as i32;
 			halfedge.for_vert_mut(i, |halfedge, current| {
-				halfedge_processed[current as usize] = true;
-				halfedge.set_start(current, vert);
-				halfedge.set_end(halfedge.pair(current), vert);
+				halfedge_processed[current] = true;
+				halfedge.start[current] = vert;
+				halfedge.set_end(halfedge.pair[current] as usize, vert);
 			});
 		} else {
 			vert_processed[vert as usize] = true;
 			halfedge.for_vert(i, |current| {
-				halfedge_processed[current as usize] = true;
+				halfedge_processed[current] = true;
 			});
 		}
 	}
@@ -70,19 +70,20 @@ pub fn dedupe_prop_verts(
 
 	let mut vert2vert: Vec<(i32, i32)> = vec![(-1, -1); halfedge.len()];
 	for edge_idx in 0..halfedge.len() {
-		let pair = halfedge.pair(edge_idx as i32);
+		let pair = halfedge.pair[edge_idx];
 		if pair < 0 {
 			continue;
 		}
+		let pair = pair as usize;
 		let edge_face = edge_idx / 3;
 		let pair_face = pair / 3;
 
-		if tri_rel[edge_face].instance_id != tri_rel[pair_face as usize].instance_id {
+		if tri_rel[edge_face].instance_id != tri_rel[pair_face].instance_id {
 			continue;
 		}
 
-		let prop0 = halfedge.prop(edge_idx as i32);
-		let prop1 = halfedge.prop(next_halfedge(pair));
+		let prop0 = halfedge.prop[edge_idx];
+		let prop1 = halfedge.prop[next_halfedge(pair)];
 		let mut prop_equal = true;
 		for p in 0..prop_stride {
 			if properties.data[prop_stride * prop0 as usize + p]
@@ -113,11 +114,8 @@ pub fn dedupe_prop_verts(
 	for v in 0..num_prop_vert {
 		label2vert[vert_labels[v] as usize] = v as i32;
 	}
-	for edge in 0..halfedge.len() as i32 {
-		halfedge.set_prop(
-			edge,
-			label2vert[vert_labels[halfedge.prop(edge) as usize] as usize],
-		);
+	for edge in 0..halfedge.len() {
+		halfedge.prop[edge] = label2vert[vert_labels[halfedge.prop[edge] as usize] as usize];
 	}
 }
 
@@ -136,7 +134,7 @@ pub fn set_normals_and_coplanar(
 
 	let (mut tri_normal, mut tri_priority): (Vec<_>, Vec<_>) = (0..num_tri)
 		.map(|tri| {
-			if halfedge.start((3 * tri) as i32) < 0 {
+			if halfedge.start[3 * tri] < 0 {
 				return (
 					Vector3::new(0.0, 0.0, 1.0),
 					TriPriority {
@@ -146,9 +144,9 @@ pub fn set_normals_and_coplanar(
 				);
 			}
 
-			let v = vert_pos[halfedge.start((3 * tri) as i32) as usize];
-			let mut n = (vert_pos[halfedge.end(3 * (tri as i32)) as usize] - v)
-				.cross(&(vert_pos[halfedge.end((3 * tri + 1) as i32) as usize] - v));
+			let v = vert_pos[halfedge.start[3 * tri] as usize];
+			let mut n = (vert_pos[halfedge.end(3 * tri) as usize] - v)
+				.cross(&(vert_pos[halfedge.end(3 * tri + 1) as usize] - v));
 
 			let priority = TriPriority {
 				area2: n.magnitude_squared(),
@@ -174,37 +172,38 @@ pub fn set_normals_and_coplanar(
 		}
 
 		coplanar_id[tp.tri as usize] = tp.tri;
-		if halfedge.start(3 * tp.tri) < 0 {
+		if halfedge.start[3 * (tp.tri as usize)] < 0 {
 			continue;
 		}
-		let base = vert_pos[halfedge.start(3 * tp.tri) as usize];
+		let base = vert_pos[halfedge.start[3 * (tp.tri as usize)] as usize];
 		let normal = tri_normal[tp.tri as usize];
 		interior_halfedges.resize(3, 0);
 		interior_halfedges[0] = 3 * tp.tri;
 		interior_halfedges[1] = 3 * tp.tri + 1;
 		interior_halfedges[2] = 3 * tp.tri + 2;
 		while !interior_halfedges.is_empty() {
-			let h = next_halfedge(halfedge.pair(interior_halfedges.pop().unwrap()));
-			if coplanar_id[(h / 3) as usize] >= 0 {
+			let h =
+				next_halfedge(halfedge.pair[interior_halfedges.pop().unwrap() as usize] as usize);
+			if coplanar_id[h / 3] >= 0 {
 				continue;
 			}
 
 			let v = vert_pos[halfedge.end(h) as usize];
 			if (v - base).dot(&normal).abs() < tolerance {
-				let tri = (h / 3) as usize;
+				let tri = h / 3;
 				coplanar_id[tri] = tp.tri;
 				tri_normal[tri] = normal;
 
 				if interior_halfedges.is_empty()
-					|| h != halfedge.pair(*interior_halfedges.last().unwrap())
+					|| h != halfedge.pair[*interior_halfedges.last().unwrap() as usize] as usize
 				{
-					interior_halfedges.push(h);
+					interior_halfedges.push(h as i32);
 				} else {
 					interior_halfedges.pop().unwrap();
 				}
 
 				let h_next = next_halfedge(h);
-				interior_halfedges.push(h_next);
+				interior_halfedges.push(h_next as i32);
 			}
 		}
 	}
@@ -250,8 +249,8 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 					if local[i] {
 						continue;
 					}
-					let start_vert = tri.halfedge.start(i as i32);
-					let end_vert = tri.halfedge.end(i as i32);
+					let start_vert = tri.halfedge.start[i];
+					let end_vert = tri.halfedge.end(i);
 					if start_vert == -1 || end_vert == -1 {
 						continue;
 					}
@@ -261,9 +260,9 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 
 					// first iteration, populate entries
 					// this makes sure we always report the same set of entries
-					tri.halfedge.for_vert(i as i32, |current| {
-						local[current as usize] = true;
-						let start_vert = tri.halfedge.start(current);
+					tri.halfedge.for_vert(i, |current| {
+						local[current] = true;
+						let start_vert = tri.halfedge.start[current];
 						let end_v = tri.halfedge.end(current);
 						if start_vert == -1 || end_v == -1 {
 							return;
@@ -272,9 +271,9 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 							let iter = end_verts.iter_mut().find(|pair| pair.0 == end_v);
 
 							if let Some(iter) = iter {
-								iter.1 = iter.1.min(current);
+								iter.1 = iter.1.min(current as i32);
 							} else {
-								end_verts.push((end_v, current));
+								end_verts.push((end_v, current as i32));
 								if end_verts.len() > 32 {
 									for &(k, v) in end_verts.iter() {
 										end_vert_set.entry(k).or_insert(v);
@@ -285,12 +284,12 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 							}
 						} else {
 							let pair = match end_vert_set.entry(end_v) {
-								Entry::Vacant(entry) => (entry.insert(current), true),
+								Entry::Vacant(entry) => (entry.insert(current as i32), true),
 								Entry::Occupied(entry) => (entry.into_mut(), false),
 							};
 
 							if !pair.1 {
-								*pair.0 = (*pair.0).min(current);
+								*pair.0 = (*pair.0).min(current as i32);
 							}
 						}
 					});
@@ -298,8 +297,8 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 					// second iteration, actually check for duplicates
 					// we always report the same set of duplicates, excluding the smallest
 					// halfedge in the set of duplicates
-					tri.halfedge.for_vert(i as i32, |current| {
-						let start_vert = tri.halfedge.start(current);
+					tri.halfedge.for_vert(i, |current| {
+						let start_vert = tri.halfedge.start[current];
 						let end_v = tri.halfedge.end(current);
 						if start_vert == -1 || end_v == -1 {
 							return;
@@ -307,13 +306,13 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 						if end_vert_set.is_empty() {
 							let iter = end_verts.iter().find(|pair| pair.0 == end_v).unwrap();
 
-							if iter.1 != current {
-								results.push(current as usize);
+							if iter.1 != current as i32 {
+								results.push(current);
 							}
 						} else {
 							let iter = *end_vert_set.get(&end_v).unwrap();
-							if iter != current {
-								results.push(current as usize);
+							if iter != current as i32 {
+								results.push(current);
 							}
 						}
 					});
@@ -327,7 +326,7 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 
 		let mut num_flagged = 0;
 		for i in duplicates {
-			edge::dedupe(vert_pos, tri, i as i32);
+			edge::dedupe(vert_pos, tri, i);
 			num_flagged += 1;
 		}
 
@@ -354,7 +353,7 @@ pub fn collapse_short_edges(
 	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
 	precision: Precision,
-	first_new_vert: i32,
+	first_new_vert: usize,
 ) {
 	let mut s = FlagStore::default();
 	let mut num_flagged = 0;
@@ -375,18 +374,17 @@ pub fn collapse_short_edges(
 	};
 
 	let short_edge = |(halfedge, vert_pos): &mut (&mut Halfedges, &mut Vec<Point3<f64>>), edge| {
-		let edge = edge as i32;
-		let pair = halfedge.pair(edge);
+		let pair = halfedge.pair[edge];
 		if pair < 0 {
 			return false;
 		}
-		let start = halfedge.start(edge);
-		let end = halfedge.end(edge);
+		let start = halfedge.start[edge] as usize;
+		let end = halfedge.end(edge) as usize;
 		if start < first_new_vert && end < first_new_vert {
 			return false;
 		}
 		// Flag short edges
-		let delta = vert_pos[end as usize] - vert_pos[start as usize];
+		let delta = vert_pos[end] - vert_pos[start];
 		let len_sq = delta.magnitude_squared();
 		// To ensure tolerance_-scale errors don't stack, only collapse these edges
 		// if they connect a new vert to an old vert, since old verts are only
@@ -405,7 +403,7 @@ pub fn collapse_short_edges(
 		short_edge,
 		|(halfedge, vert_pos), i| {
 			let did_collapse = edge::collapse(
-				i as i32,
+				i,
 				halfedge,
 				tri_normal,
 				tri_rel,
@@ -435,7 +433,7 @@ pub fn collapse_colinear_edges(
 	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
 	epsilon: f64,
-	first_new_vert: i32,
+	first_new_vert: usize,
 ) {
 	let mut s = FlagStore::default();
 	let nb_edges = halfedge.len();
@@ -450,21 +448,20 @@ pub fn collapse_colinear_edges(
 		// local check, but by the global MarkCoplanar function, which keeps this
 		// from being vulnerable to error stacking.
 		let colinear_edge = |(halfedge, _): &mut (&mut Halfedges, &mut Vec<Point3<f64>>), edge| {
-			let edge = edge as i32;
-			let pair = halfedge.pair(edge);
-			if pair < 0 || halfedge.start(edge) < first_new_vert {
+			let pair = halfedge.pair[edge];
+			if pair < 0 || (halfedge.start[edge] as usize) < first_new_vert {
 				return false;
 			}
 			// Flag redundant edges - those where the startVert is surrounded by only
 			// two original triangles.
-			let ref0 = tri_rel[(edge / 3) as usize];
-			let mut current = next_halfedge(pair);
-			let mut ref1 = tri_rel[(current / 3) as usize];
+			let ref0 = tri_rel[edge / 3];
+			let mut current = next_halfedge(pair as usize);
+			let mut ref1 = tri_rel[current / 3];
 			let mut ref1_updated = ref0 != ref1;
 			while current != edge {
-				current = next_halfedge(halfedge.pair(current));
+				current = next_halfedge(halfedge.pair[current] as usize);
 				let tri = current / 3;
-				let tri_rel = tri_rel[tri as usize];
+				let tri_rel = tri_rel[tri];
 				if tri_rel != ref0 && tri_rel != ref1 {
 					if !ref1_updated {
 						ref1 = tri_rel;
@@ -484,7 +481,7 @@ pub fn collapse_colinear_edges(
 			colinear_edge,
 			|(halfedge, vert_pos), i| {
 				let did_collapse = edge::collapse(
-					i as i32,
+					i,
 					halfedge,
 					tri_normal,
 					tri_rel,
@@ -519,7 +516,7 @@ pub fn swap_degenerates(
 	properties: &mut Properties,
 	instance_rel: &[InstanceRelation],
 	precision: Precision,
-	first_new_vert: i32,
+	first_new_vert: usize,
 ) {
 	//RecursiveEdgeSwap
 	let mut s = FlagStore::default();
@@ -528,28 +525,28 @@ pub fn swap_degenerates(
 	let mut scratch_buffer = Vec::with_capacity(10);
 
 	let swappable_edge = |(tri, vert_pos): &mut (&mut Triangles, &mut Vec<Point3<f64>>),
-	                      edge|
+	                      mut edge|
 	 -> bool {
-		let mut edge = edge as i32;
-		let pair = tri.halfedge.pair(edge);
+		let pair = tri.halfedge.pair[edge];
 		if pair < 0 {
 			return false;
 		}
+		let pair = pair as usize;
 		let tri_edge = edge::tri_of(edge);
 		let pair_tri_edge = edge::tri_of(pair);
-		if tri.halfedge.start(tri_edge[0]) < first_new_vert
-			&& tri.halfedge.start(tri_edge[1]) < first_new_vert
-			&& tri.halfedge.start(tri_edge[2]) < first_new_vert
-			&& tri.halfedge.start(pair_tri_edge[2]) < first_new_vert
+		if (tri.halfedge.start[tri_edge[0] as usize] as usize) < first_new_vert
+			&& (tri.halfedge.start[tri_edge[1] as usize] as usize) < first_new_vert
+			&& (tri.halfedge.start[tri_edge[2] as usize] as usize) < first_new_vert
+			&& (tri.halfedge.start[pair_tri_edge[2] as usize] as usize) < first_new_vert
 		{
 			return false;
 		}
 
 		let mut tri_idx = edge / 3;
-		let mut projection = get_axis_aligned_projection(tri.normal[tri_idx as usize]);
+		let mut projection = get_axis_aligned_projection(tri.normal[tri_idx]);
 		let mut v = [Point2::<f64>::default(); 3];
 		for i in 0..3 {
-			v[i] = projection * vert_pos[tri.halfedge.start(tri_edge[i]) as usize];
+			v[i] = projection * vert_pos[tri.halfedge.start[tri_edge[i] as usize] as usize];
 		}
 		if ccw(v[0], v[1], v[2], precision.tolerance) > 0 || !edge::is_01_longest(v[0], v[1], v[2])
 		{
@@ -559,9 +556,9 @@ pub fn swap_degenerates(
 		// Switch to neighbor's projection.
 		edge = pair;
 		tri_idx = edge / 3;
-		projection = get_axis_aligned_projection(tri.normal[tri_idx as usize]);
+		projection = get_axis_aligned_projection(tri.normal[tri_idx]);
 		for i in 0..3 {
-			v[i] = projection * vert_pos[tri.halfedge.start(pair_tri_edge[i]) as usize];
+			v[i] = projection * vert_pos[tri.halfedge.start[pair_tri_edge[i] as usize] as usize];
 		}
 
 		ccw(v[0], v[1], v[2], precision.tolerance) > 0 || edge::is_01_longest(v[0], v[1], v[2])
@@ -578,7 +575,7 @@ pub fn swap_degenerates(
 			num_flagged += 1;
 			tag += 1;
 			edge::recursive_swap(
-				i as i32,
+				i,
 				tri,
 				vert_pos,
 				properties,
@@ -591,8 +588,15 @@ pub fn swap_degenerates(
 			);
 			while !edge_swap_stack.is_empty() {
 				let last = edge_swap_stack.pop().unwrap();
+				// The stack is fed from halfedge.pair, which uses -1 as the
+				// "unpaired" sentinel. recursive_swap used to filter these out
+				// itself; now that it takes a usize, the check has to happen
+				// before the cast or -1 becomes usize::MAX.
+				if last < 0 {
+					continue;
+				}
 				edge::recursive_swap(
-					last,
+					last as usize,
 					tri,
 					vert_pos,
 					properties,
@@ -647,7 +651,7 @@ impl FlagStore {
 pub fn mark_unreferenced_verts(halfedge: &Halfedges, vert_pos: &mut [Point3<f64>]) {
 	let mut keep = vec![false; vert_pos.len()];
 	for edge in 0..halfedge.len() {
-		let start_vert = halfedge.start(edge as i32);
+		let start_vert = halfedge.start[edge];
 		if start_vert >= 0 {
 			keep[start_vert as usize] = true;
 		}

@@ -156,7 +156,7 @@ impl MeshBool {
 				FlipTris {
 					halfedge: &mut halfedge,
 				}
-				.call(tri as i32);
+				.call(tri);
 			}
 		}
 
@@ -228,7 +228,7 @@ fn eager_transform_prop_normals(
 		if !tri_has_normals(instance_rel, tri_rel[e / 3]) {
 			continue;
 		}
-		let prop = halfedge.prop(e as i32);
+		let prop = halfedge.prop[e];
 		if prop < 0 || prop_visited[prop as usize] {
 			continue;
 		}
@@ -253,7 +253,7 @@ pub struct FlipTris<'a> {
 }
 
 impl<'a> FlipTris<'a> {
-	pub fn call(&mut self, tri: i32) {
+	pub fn call(&mut self, tri: usize) {
 		let mut face = [
 			self.halfedge.get(3 * tri + 2),
 			self.halfedge.get(3 * tri + 1),
@@ -264,12 +264,9 @@ impl<'a> FlipTris<'a> {
 			face[i].paired_halfedge = flip_halfedge(face[i].paired_halfedge);
 		}
 		for i in 0..3 {
-			self.halfedge
-				.set_start(3 * tri + i, face[i as usize].start_vert);
-			self.halfedge
-				.set_pair(3 * tri + i, face[i as usize].paired_halfedge);
-			self.halfedge
-				.set_prop(3 * tri + i, face[i as usize].prop_vert);
+			self.halfedge.start[3 * tri + i] = face[i].start_vert;
+			self.halfedge.pair[3 * tri + i] = face[i].paired_halfedge;
+			self.halfedge.prop[3 * tri + i] = face[i].prop_vert;
 		}
 	}
 }

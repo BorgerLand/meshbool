@@ -213,14 +213,14 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		i03.iter().map(|v| v.abs()),
 		0,
 	));
-	let mut num_vert_r = *v_p2r.last().unwrap();
+	let mut num_vert_r = *v_p2r.last().unwrap() as usize;
 	let n_pv = num_vert_r;
 
 	let v_q2r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
 		i30.iter().map(|v| v.abs()),
-		num_vert_r,
+		num_vert_r as i32,
 	));
-	num_vert_r = *v_q2r.last().unwrap();
+	num_vert_r = *v_q2r.last().unwrap() as usize;
 	let n_qv = num_vert_r - n_pv;
 
 	let v12_r = if i12.len() == 0 {
@@ -228,9 +228,9 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	} else {
 		let v12_r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
 			i12.iter().map(|v| v.abs() as i32),
-			num_vert_r,
+			num_vert_r as i32,
 		));
-		num_vert_r = *v12_r.last().unwrap();
+		num_vert_r = *v12_r.last().unwrap() as usize;
 		v12_r
 	};
 
@@ -241,9 +241,9 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	} else {
 		let v21_r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
 			i21.iter().map(|v| v.abs() as i32),
-			num_vert_r,
+			num_vert_r as i32,
 		));
-		num_vert_r = *v21_r.last().unwrap();
+		num_vert_r = *v21_r.last().unwrap() as usize;
 		v21_r
 	};
 

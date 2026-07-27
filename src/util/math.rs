@@ -37,7 +37,7 @@ pub const fn next3_usize(i: usize) -> usize {
 }
 
 #[inline(always)]
-pub const fn prev3_i32(i: i32) -> i32 {
+pub const fn prev3_usize(i: usize) -> usize {
 	prev3!(i)
 }
 

@@ -3,7 +3,7 @@ use crate::halfedge::{Halfedge, Halfedges, next_halfedge};
 use crate::mesh_relations::{TriRelation, tri_has_normals};
 use crate::spatial::aabb::Box3D;
 use crate::util::hash_table::DeterministicMap;
-use crate::util::math::{atomic_add, get_barycentric, next3_i32, prev3_i32};
+use crate::util::math::{atomic_add, get_barycentric, next3_usize, prev3_usize};
 use crate::util::num_convert::OrderedF64;
 use crate::util::vec_ext;
 use nalgebra::{Matrix3, Point3, Vector3, Vector4};
@@ -59,7 +59,7 @@ pub fn add_new_edge_verts(
 		let vert = v12_r[i];
 		let inclusion = i12[i];
 
-		let mut key_right = (halfedge_p.pair(edge_p) / 3, face_q);
+		let mut key_right = (halfedge_p.pair[edge_p as usize] / 3, face_q);
 		if !forward {
 			mem::swap(&mut key_right.0, &mut key_right.1);
 		}
@@ -101,8 +101,7 @@ struct CountVerts<'a> {
 impl<'a> CountVerts<'a> {
 	fn call(&mut self, i: usize) {
 		for j in 0..3 {
-			self.count[i] +=
-				(self.inclusion[self.halfedges.start((3 * i + j) as i32) as usize]).abs();
+			self.count[i] += (self.inclusion[self.halfedges.start[3 * i + j] as usize]).abs();
 		}
 	}
 }
@@ -117,13 +116,13 @@ struct CountNewVerts<'a, const INVERTED: bool> {
 
 impl<'a, const INVERTED: bool> CountNewVerts<'a, INVERTED> {
 	fn call(&mut self, idx: usize) {
-		let edge_p = self.pq[idx][if INVERTED { 1 } else { 0 }];
-		let face_q = self.pq[idx][if INVERTED { 0 } else { 1 }];
+		let edge_p = self.pq[idx][if INVERTED { 1 } else { 0 }] as usize;
+		let face_q = self.pq[idx][if INVERTED { 0 } else { 1 }] as usize;
 		let inclusion = (self.i12[idx] as i32).abs();
 
-		self.count_q[face_q as usize] += inclusion;
-		self.count_p[(edge_p / 3) as usize] += inclusion;
-		self.count_p[(self.halfedges.pair(edge_p) / 3) as usize] += inclusion;
+		self.count_q[face_q] += inclusion;
+		self.count_p[edge_p / 3] += inclusion;
+		self.count_p[(self.halfedges.pair[edge_p] / 3) as usize] += inclusion;
 	}
 }
 
@@ -274,11 +273,12 @@ pub fn append_partial_edges(
 	// partial outR.
 	for (edge_a, mut edge_pos_a) in edges_a {
 		sort_edge_pos(&mut edge_pos_a);
-		let pair_a = halfedge_a.pair(edge_a);
-		whole_halfedge_a[edge_a as usize] = false;
-		whole_halfedge_a[pair_a as usize] = false;
+		let edge_a = edge_a as usize;
+		let pair_a = halfedge_a.pair[edge_a] as usize;
+		whole_halfedge_a[edge_a] = false;
+		whole_halfedge_a[pair_a] = false;
 
-		let v_start = halfedge_a.start(edge_a) as usize;
+		let v_start = halfedge_a.start[edge_a] as usize;
 		let v_end = halfedge_a.end(edge_a) as usize;
 		let edge_vec = vert_pos_a[v_end] - vert_pos_a[v_start];
 		// Fill in the edge positions of the old points.
@@ -312,21 +312,21 @@ pub fn append_partial_edges(
 
 		// add halfedges to result
 		let face_left_a = edge_a / 3;
-		let face_left = face_pq2r[face_left_a as usize] as usize;
+		let face_left = face_pq2r[face_left_a] as usize;
 		let face_right_a = pair_a / 3;
-		let face_right = face_pq2r[face_right_a as usize] as usize;
+		let face_right = face_pq2r[face_right_a] as usize;
 		// Negative inclusion means the halfedges are reversed, which means our
 		// reference is now to the endVert instead of the startVert, which is one
 		// position advanced CCW. This is only valid if this is a retained vert; it
 		// will be ignored later if the vert is new.
-		let mut forward_rel = tri_rel_a[face_left_a as usize];
+		let mut forward_rel = tri_rel_a[face_left_a];
 		forward_rel.instance_id += instance_id_offset;
-		let mut backward_rel = tri_rel_a[face_right_a as usize];
+		let mut backward_rel = tri_rel_a[face_right_a];
 		backward_rel.instance_id += instance_id_offset;
 
 		if write_tri2face {
-			forward_rel.face_id = face_left_a;
-			backward_rel.face_id = face_right_a;
+			forward_rel.face_id = face_left_a as i32;
+			backward_rel.face_id = face_right_a as i32;
 		}
 
 		pair_up(&mut edge_pos_a, |mut e| {
@@ -432,13 +432,13 @@ pub fn append_whole_edges(
 	write_tri2face: bool,
 ) {
 	//(struct DuplicateHalfedges is inlined here)
-	for idx in 0..halfedge_a.len() as i32 {
-		if !whole_halfedge_a[idx as usize] {
+	for idx in 0..halfedge_a.len() {
+		if !whole_halfedge_a[idx] {
 			continue;
 		}
 
-		let mut start_vert = halfedge_a.start(idx);
-		let mut end_vert = halfedge_a.start(next_halfedge(idx));
+		let mut start_vert = halfedge_a.start[idx];
+		let mut end_vert = halfedge_a.start[next_halfedge(idx)];
 		if start_vert >= end_vert {
 			continue;
 		}
@@ -454,22 +454,22 @@ pub fn append_whole_edges(
 
 		start_vert = v_p2r[start_vert as usize];
 		end_vert = v_p2r[end_vert as usize];
-		let pair = halfedge_a.pair(idx);
+		let pair = halfedge_a.pair[idx] as usize;
 		let face_left_a = idx / 3;
-		let new_face = face_pq2r[face_left_a as usize] as usize;
+		let new_face = face_pq2r[face_left_a] as usize;
 		let face_right_a = pair / 3;
-		let face_right = face_pq2r[face_right_a as usize] as usize;
+		let face_right = face_pq2r[face_right_a] as usize;
 		// Negative inclusion means the halfedges are reversed, which means our
 		// reference is now to the endVert instead of the startVert, which is one
 		// position advanced CCW.
-		let mut forward_rel = tri_rel_a[face_left_a as usize];
+		let mut forward_rel = tri_rel_a[face_left_a];
 		forward_rel.instance_id += instance_id_offset;
-		let mut backward_rel = tri_rel_a[face_right_a as usize];
+		let mut backward_rel = tri_rel_a[face_right_a];
 		backward_rel.instance_id += instance_id_offset;
 
 		if write_tri2face {
-			forward_rel.face_id = face_left_a;
-			backward_rel.face_id = face_right_a;
+			forward_rel.face_id = face_left_a as i32;
+			backward_rel.face_id = face_right_a as i32;
 		}
 
 		for _ in 0..inclusion.abs() {
@@ -538,21 +538,21 @@ pub fn create_properties(
 	let mut properties = Vec::with_capacity(vert_pos_r.len() * prop_stride);
 	let mut idx = 0;
 
-	for tri in 0..num_tri as i32 {
+	for tri in 0..num_tri {
 		// Skip collapsed triangles
-		if halfedge_r.start(3 * tri) < 0 {
+		if halfedge_r.start[3 * tri] < 0 {
 			continue;
 		}
 
-		let tri_rel = &mut tri_rel_r[tri as usize];
+		let tri_rel = &mut tri_rel_r[tri];
 		//append_x_edges wrote a triangle id instead of a face id (write_tri2face
 		//was true), purely for create_properties to consume and overwrite
-		let tri_id = tri_rel.face_id;
+		let tri_id = tri_rel.face_id as usize;
 		let pq = tri_rel.instance_id < instance_id_offset_q;
 		tri_rel.face_id = if pq {
-			in_p.tri.relation[tri_id as usize].face_id
+			in_p.tri.relation[tri_id].face_id
 		} else {
-			in_q.tri.relation[tri_id as usize].face_id
+			in_q.tri.relation[tri_id].face_id
 		};
 		let old_prop_stride = (if pq { prop_stride_p } else { prop_stride_q }) as i32;
 		let properties_pq = if pq {
@@ -574,11 +574,11 @@ pub fn create_properties(
 		let negate_normals = !pq
 			&& invert_q
 			&& old_prop_stride >= 3
-			&& tri_has_normals(&in_q.instance_relation, in_q.tri.relation[tri_id as usize]);
+			&& tri_has_normals(&in_q.instance_relation, in_q.tri.relation[tri_id]);
 
 		for i in 0..3 {
-			let vert = halfedge_r.start(3 * tri + i);
-			let uvw = &bary[(3 * tri + i) as usize];
+			let vert = halfedge_r.start[3 * tri + i];
+			let uvw = &bary[3 * tri + i];
 
 			let mut key = Vector4::new(pq as i32, id_miss_prop, -1, -1);
 			if old_prop_stride > 0 {
@@ -586,7 +586,7 @@ pub fn create_properties(
 				for j in 0..3 {
 					if uvw[j as usize] == 1.0 {
 						// On a retained vert, the propVert must also match
-						key[2] = halfedge_pq.prop(3 * tri_id + j);
+						key[2] = halfedge_pq.prop[3 * tri_id + (j as usize)];
 						edge = -1;
 						break;
 					}
@@ -598,8 +598,8 @@ pub fn create_properties(
 
 				if edge >= 0 {
 					// On an edge, both propVerts must match
-					let p0 = halfedge_pq.prop(3 * tri_id + next3_i32(edge));
-					let p1 = halfedge_pq.prop(3 * tri_id + prev3_i32(edge));
+					let p0 = halfedge_pq.prop[3 * tri_id + next3_usize(edge as usize)];
+					let p1 = halfedge_pq.prop[3 * tri_id + prev3_usize(edge as usize)];
 					key[1] = vert;
 					key[2] = p0.min(p1);
 					key[3] = p0.max(p1);
@@ -612,7 +612,7 @@ pub fn create_properties(
 				// only key.x/key.z matters
 				let entry = &mut prop_miss_idx[key.x as usize][key.z as usize];
 				if *entry >= 0 {
-					halfedge_r.set_prop(3 * tri + i, *entry);
+					halfedge_r.prop[3 * tri + i] = *entry;
 					continue;
 				}
 
@@ -623,7 +623,7 @@ pub fn create_properties(
 				for b in bin.iter() {
 					if b.0 == Vector3::new(key.x, key.z, key.w) {
 						b_found = true;
-						halfedge_r.set_prop(3 * tri + i, b.1);
+						halfedge_r.prop[3 * tri + i] = b.1;
 						break;
 					}
 				}
@@ -634,7 +634,7 @@ pub fn create_properties(
 				bin.push((Vector3::new(key.x, key.z, key.w), idx));
 			}
 
-			halfedge_r.set_prop(3 * tri + i, idx);
+			halfedge_r.prop[3 * tri + i] = idx;
 			idx += 1;
 			for p in 0..prop_stride {
 				let p = p as i32;
@@ -642,8 +642,8 @@ pub fn create_properties(
 				if p < old_prop_stride {
 					let mut old_props = Vector3::default();
 					for j in 0..3 {
-						old_props[j as usize] = properties_pq
-							[(old_prop_stride * halfedge_pq.prop(3 * tri_id + j) + p) as usize];
+						old_props[j] = properties_pq
+							[(old_prop_stride * halfedge_pq.prop[3 * tri_id + j] + p) as usize];
 					}
 
 					let mut val = uvw.dot(&old_props);
@@ -672,27 +672,26 @@ fn barycentric(
 	halfedge_q: &Halfedges,
 	epsilon: f64,
 ) -> Vec<Vector3<f64>> {
-	(0..halfedge_r.num_tri() as i32)
+	(0..halfedge_r.num_tri())
 		.flat_map(|tri| {
-			let ref_pq = tri_rel_r[tri as usize];
-			if halfedge_r.start(3 * tri) < 0 {
+			let ref_pq = tri_rel_r[tri];
+			if halfedge_r.start[3 * tri] < 0 {
 				return [Vector3::default(); 3];
 			}
 
-			let tri_pq = ref_pq.face_id;
+			let tri_pq = ref_pq.face_id as usize;
 			let pq = ref_pq.instance_id < instance_id_offset_q;
 			let vert_pos = if pq { vert_pos_p } else { vert_pos_q };
 			let halfedge = if pq { halfedge_p } else { halfedge_q };
 
 			let mut tri_pos = Matrix3::default();
 			for j in 0..3 {
-				*tri_pos.column_mut(j as usize) =
-					*vert_pos[halfedge.start(3 * tri_pq + j) as usize].deref();
+				*tri_pos.column_mut(j) = *vert_pos[halfedge.start[3 * tri_pq + j] as usize].deref();
 			}
 
 			array::from_fn::<_, 3, _>(|i| {
-				let vert = halfedge_r.start(3 * tri + (i as i32));
-				get_barycentric(vert_pos_r[vert as usize], tri_pos, epsilon)
+				let vert = halfedge_r.start[3 * tri + i] as usize;
+				get_barycentric(vert_pos_r[vert], tri_pos, epsilon)
 			})
 		})
 		.collect()

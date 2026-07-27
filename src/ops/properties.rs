@@ -44,14 +44,14 @@ impl MeshBool {
 		let properties = if prop_stride == 0 {
 			Vec::new()
 		} else {
-			let mut properties = vec![0.0; prop_stride as usize * self.num_prop_vert()];
+			let mut properties = vec![0.0; prop_stride * self.num_prop_vert()];
 
 			if let Some(mut prop_func) = prop_func {
 				for tri in 0..self.num_tri() {
 					for i in 0..3 {
-						let edge = (3 * tri + i) as i32;
-						let vert = halfedge.start(edge) as usize;
-						let prop_vert = halfedge.prop(edge) as usize;
+						let edge = 3 * tri + i;
+						let vert = halfedge.start[edge] as usize;
+						let prop_vert = halfedge.prop[edge] as usize;
 						prop_func(
 							&mut properties
 								[(prop_stride * prop_vert)..(prop_stride * (prop_vert + 1))],
@@ -138,32 +138,32 @@ impl MeshBool {
 		min_sharp_angle = min_sharp_angle.max(K_MIN_SHARP_ANGLE);
 
 		let mut vert_num_sharp = vec![0; self.num_vert()];
-		for e in 0..self.tri.halfedge.len() as i32 {
+		for e in 0..self.tri.halfedge.len() {
 			if !self.tri.halfedge.is_forward(e) {
 				continue;
 			}
-			let pair = self.tri.halfedge.pair(e);
+			let pair = self.tri.halfedge.pair[e] as usize;
 			let tri1 = e / 3;
 			let tri2 = pair / 3;
-			let dihedral = self.tri.normal[tri1 as usize]
-				.angle(&self.tri.normal[tri2 as usize])
+			let dihedral = self.tri.normal[tri1]
+				.angle(&self.tri.normal[tri2])
 				.to_degrees();
 			if dihedral > min_sharp_angle {
-				vert_num_sharp[self.tri.halfedge.start(e) as usize] += 1;
+				vert_num_sharp[self.tri.halfedge.start[e] as usize] += 1;
 				vert_num_sharp[self.tri.halfedge.end(e) as usize] += 1;
 			}
 		}
 
 		let mut halfedge = self.tri.halfedge.clone();
-		let old_halfedge_prop = Vec::from_iter((0..self.tri.halfedge.len() as i32).map(|i| {
-			halfedge.set_prop(i, -1);
-			if old_prop_stride > 0 {
-				self.tri.halfedge.prop(i)
+		let old_halfedge_prop = Vec::from_iter((0..self.tri.halfedge.len()).map(|i| {
+			halfedge.prop[i] = -1;
+			(if old_prop_stride > 0 {
+				&self.tri.halfedge.prop
 			} else {
 				//workaround for removal of logic here:
 				//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-				self.tri.halfedge.start(i)
-			}
+				&self.tri.halfedge.start
+			})[i]
 		}));
 
 		// Cached per-meshID inverse-normal-transform for the legacy non-zero
@@ -181,15 +181,14 @@ impl MeshBool {
 				.clone()
 		};
 
-		let num_edge = self.tri.halfedge.len() as i32;
+		let num_edge = self.tri.halfedge.len();
 		let vert_normal = self.calculate_vert_normals_internal();
-		let mut properties =
-			unsafe { vec_ext::uninit(prop_stride as usize * self.num_prop_vert()) };
+		let mut properties = unsafe { vec_ext::uninit(prop_stride * self.num_prop_vert()) };
 		for start_edge in 0..num_edge {
-			if halfedge.prop(start_edge) >= 0 {
+			if halfedge.prop[start_edge] >= 0 {
 				continue;
 			}
-			let vert = self.tri.halfedge.start(start_edge) as usize;
+			let vert = self.tri.halfedge.start[start_edge] as usize;
 
 			if vert_num_sharp[vert] < 2 {
 				// vertex has single normal
@@ -206,13 +205,12 @@ impl MeshBool {
 				let normal = if normal_idx == 0 {
 					world_normal
 				} else {
-					get_transform(self.tri.relation[(start_edge / 3) as usize].instance_id)
-						* world_normal
+					get_transform(self.tri.relation[start_edge / 3].instance_id) * world_normal
 				};
 				let mut last_prop = None;
 				halfedge.for_vert_mut(start_edge, |halfedge, current| {
-					let prop = old_halfedge_prop[current as usize];
-					halfedge.set_prop(current, prop);
+					let prop = old_halfedge_prop[current];
+					halfedge.prop[current] = prop;
 					let prop = prop as usize;
 					if Some(prop) == last_prop {
 						return;
@@ -241,11 +239,11 @@ impl MeshBool {
 
 			loop {
 				// find a sharp edge to start on
-				let next = next_halfedge(self.tri.halfedge.pair(current));
+				let next = next_halfedge(self.tri.halfedge.pair[current] as usize);
 				let face = next / 3;
 
-				let dihedral = self.tri.normal[face as usize]
-					.angle(&self.tri.normal[prev_face as usize])
+				let dihedral = self.tri.normal[face]
+					.angle(&self.tri.normal[prev_face])
 					.to_degrees();
 				if dihedral > min_sharp_angle {
 					break;
@@ -270,7 +268,7 @@ impl MeshBool {
 				|current| {
 					let vert = self.tri.halfedge.end(current);
 					FaceEdge {
-						face: current / 3,
+						face: (current / 3) as i32,
 						normalized_edge: safe_normalize3(
 							(self.vert_pos[vert as usize] - center_pos).coords,
 						),
@@ -310,7 +308,7 @@ impl MeshBool {
 			let mut new_prop_vert = 0;
 			let mut idx = 0;
 			halfedge.for_vert_mut(end_edge, |halfedge, current1| {
-				let prop = old_halfedge_prop[current1 as usize] as usize;
+				let prop = old_halfedge_prop[current1] as usize;
 				let start = &self.properties.data[(prop * old_prop_stride)..];
 
 				if groups[idx] != last_group && groups[idx] != 0 && Some(prop) == last_prop {
@@ -338,7 +336,7 @@ impl MeshBool {
 				}
 
 				// point to updated property vertex
-				halfedge.set_prop(current1, new_prop_vert as i32);
+				halfedge.prop[current1] = new_prop_vert as i32;
 				idx += 1;
 			});
 		}
@@ -382,8 +380,8 @@ impl MeshBool {
 			}
 		};
 
-		for i in 0..self.tri.halfedge.len() as i32 {
-			atomic_min(i, self.tri.halfedge.start(i));
+		for i in 0..self.tri.halfedge.len() {
+			atomic_min(i as i32, self.tri.halfedge.start[i]);
 		}
 
 		for vert in 0..num_vert {
@@ -395,9 +393,9 @@ impl MeshBool {
 			}
 
 			let mut normal = Vector3::from_element(0.0);
-			self.tri.halfedge.for_vert(first_edge, |edge| {
+			self.tri.halfedge.for_vert(first_edge as usize, |edge| {
 				let tri_verts = Vector3::new(
-					self.tri.halfedge.start(edge),
+					self.tri.halfedge.start[edge],
 					self.tri.halfedge.end(edge),
 					self.tri.halfedge.end(next_halfedge(edge)),
 				);
@@ -421,7 +419,7 @@ impl MeshBool {
 				} else {
 					libm::acos(dot)
 				};
-				normal += phi * self.tri.normal[(edge / 3) as usize];
+				normal += phi * self.tri.normal[edge / 3];
 			});
 
 			vert_normal[vert] = safe_normalize3(normal);
@@ -476,7 +474,7 @@ impl MeshBool {
 
 		let old_prop_stride = self.prop_stride();
 		let prop_stride = old_prop_stride.max(gaussian_idx.max(mean_idx).unwrap_or(0) + 1);
-		let mut properties = vec![0.0; prop_stride as usize * self.num_prop_vert()];
+		let mut properties = vec![0.0; prop_stride * self.num_prop_vert()];
 
 		let mut halfedge = self.tri.halfedge.clone();
 		if old_prop_stride == 0 {
@@ -488,9 +486,9 @@ impl MeshBool {
 		let mut counters: Vec<bool> = vec![false; self.num_prop_vert()];
 		for tri in 0..self.num_tri() {
 			for i in 0..3 {
-				let edge = (3 * tri + i) as i32;
-				let vert = halfedge.start(edge) as usize;
-				let prop_vert = halfedge.prop(edge) as usize;
+				let edge = 3 * tri + i;
+				let vert = halfedge.start[edge] as usize;
+				let prop_vert = halfedge.prop[edge] as usize;
 
 				let old = mem::replace(&mut counters[prop_vert], true);
 				if old {
@@ -546,23 +544,23 @@ impl<'a> CurvatureAngles<'a> {
 		let mut edge: [Vector3<f64>; 3] = Default::default();
 		let mut edge_length = Vector3::repeat(0.0_f64);
 		for i in 0..3 {
-			let edge_idx = (3 * tri + i) as i32;
-			let start_vert = self.halfedge.start(edge_idx);
-			let end_vert = self.halfedge.end(edge_idx);
-			edge[i] = self.vert_pos[end_vert as usize] - self.vert_pos[start_vert as usize];
+			let edge_idx = 3 * tri + i;
+			let start_vert = self.halfedge.start[edge_idx] as usize;
+			let end_vert = self.halfedge.end(edge_idx) as usize;
+			edge[i] = self.vert_pos[end_vert] - self.vert_pos[start_vert];
 			edge_length[i] = edge[i].norm();
 			edge[i] /= edge_length[i];
-			let neighbor_tri = self.halfedge.pair(edge_idx) / 3;
+			let neighbor_tri = (self.halfedge.pair[edge_idx] / 3) as usize;
 			let dihedral = 0.25
 				* edge_length[i]
 				* libm::asin(
 					self.tri_normal[tri]
-						.cross(&self.tri_normal[neighbor_tri as usize])
+						.cross(&self.tri_normal[neighbor_tri])
 						.dot(&edge[i]),
 				);
-			atomic_add(&mut self.mean_curvature[start_vert as usize], dihedral);
-			atomic_add(&mut self.mean_curvature[end_vert as usize], dihedral);
-			atomic_add(&mut self.degree[start_vert as usize], 1.0);
+			atomic_add(&mut self.mean_curvature[start_vert], dihedral);
+			atomic_add(&mut self.mean_curvature[end_vert], dihedral);
+			atomic_add(&mut self.degree[start_vert], 1.0);
 		}
 
 		let mut phi = Vector3::<f64>::default();
@@ -572,9 +570,9 @@ impl<'a> CurvatureAngles<'a> {
 		let area3: f64 = edge_length[0] * edge_length[1] * edge[0].cross(&edge[1]).norm() / 6.0;
 
 		for i in 0..3 {
-			let vert: i32 = self.halfedge.start((3 * tri + i) as i32);
-			atomic_add(&mut self.gaussian_curvature[vert as usize], -phi[i]);
-			atomic_add(&mut self.area[vert as usize], area3);
+			let vert = self.halfedge.start[3 * tri + i] as usize;
+			atomic_add(&mut self.gaussian_curvature[vert], -phi[i]);
+			atomic_add(&mut self.area[vert], area3);
 		}
 	}
 }

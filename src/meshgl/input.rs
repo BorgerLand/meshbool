@@ -147,7 +147,7 @@ where
 		let mut run_original_id = mesh_gl.run_original_id.clone();
 		let original_id = if run_original_id.is_empty() {
 			let original_id = reserve_original_id();
-			run_original_id.push(original_id as u32);
+			run_original_id.push(original_id);
 			Some(original_id)
 		} else {
 			None
@@ -164,7 +164,7 @@ where
 			let run_has_n = mesh_gl.has_normals(i) && prop_stride >= 3;
 			for tri in usize::lossy_from(run_index[i]) / 3..usize::lossy_from(run_index[i + 1]) / 3
 			{
-				tri_rel_unfiltered[tri as usize] = TriRelation {
+				tri_rel_unfiltered[tri] = TriRelation {
 					instance_id,
 					face_id: if mesh_gl.face_id.is_empty() {
 						-1
@@ -451,10 +451,7 @@ where
 
 		collider.collisions_from_slice::<true, _>(
 			|a, b| {
-				uf.unite(
-					open_verts[a as usize] as usize,
-					open_verts[b as usize] as usize,
-				);
+				uf.unite(open_verts[a] as usize, open_verts[b] as usize);
 			},
 			&vert_box,
 			false,

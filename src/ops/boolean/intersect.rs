@@ -3,7 +3,7 @@ use crate::halfedge::Halfedges;
 use crate::spatial::aabb::Box3D;
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicSet;
-use crate::util::math::next3_i32;
+use crate::util::math::next3_usize;
 use core::f64;
 use nalgebra::{Point3, Vector2, Vector3, Vector4};
 use std::mem;
@@ -95,10 +95,10 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		k11,
 	};
 	let f = |i| {
-		let start = a.tri.halfedge.start(i);
-		let end = a.tri.halfedge.end(i);
+		let start = a.tri.halfedge.start[i] as usize;
+		let end = a.tri.halfedge.end(i) as usize;
 		if start < end {
-			Box3D::new(a.vert_pos[start as usize], a.vert_pos[end as usize])
+			Box3D::new(a.vert_pos[start], a.vert_pos[end])
 		} else {
 			Box3D::default()
 		}
@@ -109,9 +109,9 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 			let (x12, v12) = k12.call(query_idx, leaf_idx);
 			if v12[0].is_finite() {
 				if FORWARD {
-					xv12.p1q2.push([query_idx, leaf_idx]);
+					xv12.p1q2.push([query_idx as i32, leaf_idx as i32]);
 				} else {
-					xv12.p1q2.push([leaf_idx, query_idx]);
+					xv12.p1q2.push([leaf_idx as i32, query_idx as i32]);
 				}
 
 				xv12.x12.push(x12);
@@ -132,7 +132,7 @@ struct Kernel12<'a, const EXPAND_P: bool, const FORWARD: bool> {
 }
 
 impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWARD> {
-	fn call(&self, a1: i32, b2: i32) -> (i8, Point3<f64>) {
+	fn call(&self, a1: usize, b2: usize) -> (i8, Point3<f64>) {
 		let mut x12: i8 = 0;
 		let mut v12 = Point3::new(f64::NAN, f64::NAN, f64::NAN);
 
@@ -144,8 +144,8 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWA
 		// intersection is between the left and right.
 		let mut shadows_var = false;
 
-		let edge_a_start = self.in_a.tri.halfedge.start(a1);
-		let edge_a_end = self.in_a.tri.halfedge.end(a1);
+		let edge_a_start = self.in_a.tri.halfedge.start[a1] as usize;
+		let edge_a_end = self.in_a.tri.halfedge.end(a1) as usize;
 		let edge_b = load_face_edges(&self.in_b.tri.halfedge, b2);
 
 		for vert_a in [edge_a_start, edge_a_end] {
@@ -159,7 +159,7 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWA
 					})) as i8;
 				if k < 2 && (k == 0 || (s != 0) != shadows_var) {
 					shadows_var = s != 0;
-					xzy_lr0[k] = self.in_a.vert_pos[vert_a as usize];
+					xzy_lr0[k] = self.in_a.vert_pos[vert_a];
 					let switcheroo = xzy_lr0[k].deref_mut();
 					mem::swap(&mut switcheroo.y, &mut switcheroo.z);
 					xzy_lr1[k] = xzy_lr0[k];
@@ -230,7 +230,15 @@ struct Kernel11<'a, const EXPAND_P: bool> {
 }
 
 impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
-	fn call(&self, p1: i32, p1s: i32, p1e: i32, q1: i32, q1s: i32, q1e: i32) -> (i8, Vector4<f64>) {
+	fn call(
+		&self,
+		p1: usize,
+		p1s: usize,
+		p1e: usize,
+		q1: usize,
+		q1s: usize,
+		q1e: usize,
+	) -> (i8, Vector4<f64>) {
 		let xyzz11;
 		let mut s11 = 0;
 
@@ -259,7 +267,7 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 				s11 += s01 * (if i == 0 { -1 } else { 1 });
 				if k < 2 && (k == 0 || (s01 != 0) != shadows_var) {
 					shadows_var = s01 != 0;
-					p_rl[k] = self.in_p.vert_pos[p0[i] as usize];
+					p_rl[k] = self.in_p.vert_pos[p0[i]];
 					q_rl[k] = Point3::new(p_rl[k].x, yz01.x, yz01.y);
 					k += 1;
 				}
@@ -283,7 +291,7 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 				s11 += s10 * (if i == 0 { -1 } else { 1 });
 				if k < 2 && (k == 0 || (s10 != 0) != shadows_var) {
 					shadows_var = s10 != 0;
-					q_rl[k] = self.in_q.vert_pos[q0[i] as usize];
+					q_rl[k] = self.in_q.vert_pos[q0[i]];
 					p_rl[k] = Point3::new(q_rl[k].x, yz10.x, yz10.y);
 					k += 1;
 				}
@@ -298,12 +306,10 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 			debug_assert!(k == 2, "Boolean manifold error: s11");
 			xyzz11 = intersect(&p_rl[0], &p_rl[1], &q_rl[0], &q_rl[1]);
 
-			let p1pair = self.in_p.tri.halfedge.pair(p1);
-			let dir_p = self.in_p.tri.normal[(p1 / 3) as usize].z
-				+ self.in_p.tri.normal[(p1pair / 3) as usize].z;
-			let q1pair = self.in_q.tri.halfedge.pair(q1);
-			let dir_q = self.in_q.tri.normal[(q1 / 3) as usize].z
-				+ self.in_q.tri.normal[(q1pair / 3) as usize].z;
+			let p1pair = self.in_p.tri.halfedge.pair[p1] as usize;
+			let dir_p = self.in_p.tri.normal[p1 / 3].z + self.in_p.tri.normal[p1pair / 3].z;
+			let q1pair = self.in_q.tri.halfedge.pair[q1] as usize;
+			let dir_q = self.in_q.tri.normal[q1 / 3].z + self.in_q.tri.normal[q1pair / 3].z;
 			if !shadows(xyzz11.z, xyzz11.w, with_sign(EXPAND_P, dir_p) - dir_q) {
 				s11 = 0;
 			}
@@ -353,16 +359,16 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 	let index = if FORWARD { 0 } else { 1 };
 
 	let mut u_a = DisjointSets::new(a.vert_pos.len());
-	for edge in 0..a.tri.halfedge.len() as i32 {
-		let start = a.tri.halfedge.start(edge);
-		let end = a.tri.halfedge.end(edge);
+	for edge in 0..a.tri.halfedge.len() {
+		let start = a.tri.halfedge.start[edge] as usize;
+		let end = a.tri.halfedge.end(edge) as usize;
 		if start >= end {
 			continue;
 		}
 		// check if the edge is broken
-		let it = p1q2.partition_point(|collision_pair| collision_pair[index] < edge);
-		if it == p1q2.len() || p1q2[it][index] != edge {
-			u_a.unite(start as usize, end as usize);
+		let it = p1q2.partition_point(|collision_pair| (collision_pair[index] as usize) < edge);
+		if it == p1q2.len() || p1q2[it][index] as usize != edge {
+			u_a.unite(start, end);
 		}
 	}
 
@@ -380,14 +386,14 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		in_b: b,
 		vert_normal_b,
 	};
-	let f = |i| a.vert_pos[verts[i as usize] as usize];
+	let f = |i| a.vert_pos[verts[i] as usize];
 	b.collider.collisions_from_fn::<false, _>(
 		|query_idx, leaf_idx| {
-			let (s02, z02) = k02.call(verts[query_idx as usize], leaf_idx);
+			let (s02, z02) = k02.call(verts[query_idx] as usize, leaf_idx);
 			if z02.is_finite() {
 				// note that i is distinct on each thread, and verts contains unique
 				// elements, so this does not require atomics
-				w03[verts[query_idx as usize] as usize] += s02 * (if FORWARD { 1 } else { -1 });
+				w03[verts[query_idx] as usize] += s02 * (if FORWARD { 1 } else { -1 });
 			}
 		},
 		f,
@@ -412,12 +418,12 @@ struct Kernel02<'a, const EXPAND_P: bool, const FORWARD: bool> {
 }
 
 impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel02<'a, EXPAND_P, FORWARD> {
-	fn call(&self, a0: i32, b2: i32) -> (i32, f64) {
+	fn call(&self, a0: usize, b2: usize) -> (i32, f64) {
 		let edge_b = load_face_edges(&self.in_b.tri.halfedge, b2);
 		self.call_with_edge(a0, b2, &edge_b)
 	}
 
-	fn call_with_edge(&self, a0: i32, b2: i32, edge_b: &[FaceEdge; 3]) -> (i32, f64) {
+	fn call_with_edge(&self, a0: usize, b2: usize, edge_b: &[FaceEdge; 3]) -> (i32, f64) {
 		let mut s02 = 0;
 		let z02;
 
@@ -463,17 +469,17 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel02<'a, EXPAND_P, FORWA
 			z02 = f64::NAN;
 		} else {
 			debug_assert!(k == 2, "Boolean manifold error: s02");
-			let vert_pos_a = self.in_a.vert_pos[a0 as usize];
+			let vert_pos_a = self.in_a.vert_pos[a0];
 			z02 = interpolate(yzz_rl[0], yzz_rl[1], vert_pos_a.y)[1];
 			if FORWARD {
-				if !shadows(vert_pos_a.z, z02, -self.in_b.tri.normal[b2 as usize].z) {
+				if !shadows(vert_pos_a.z, z02, -self.in_b.tri.normal[b2].z) {
 					s02 = 0;
 				}
 			} else {
 				if !shadows(
 					z02,
 					vert_pos_a.z,
-					with_sign(EXPAND_P, self.in_b.tri.normal[b2 as usize].z),
+					with_sign(EXPAND_P, self.in_b.tri.normal[b2].z),
 				) {
 					s02 = 0;
 				}
@@ -486,21 +492,21 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel02<'a, EXPAND_P, FORWA
 
 #[inline(always)]
 fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
-	a0: i32,
-	b1: i32,
-	b1s: i32,
-	b1e: i32,
+	a0: usize,
+	b1: usize,
+	b1s: usize,
+	b1e: usize,
 	in_a: &MeshBool,
 	vert_normal_a: &[Vector3<f64>],
 	in_b: &MeshBool,
 	vert_normal_b: &[Vector3<f64>],
 ) -> (i8, Vector2<f64>) {
-	let a0x = in_a.vert_pos[a0 as usize].x;
-	let b1sx = in_b.vert_pos[b1s as usize].x;
-	let b1ex = in_b.vert_pos[b1e as usize].x;
-	let a0xp = vert_normal_a[a0 as usize].x;
-	let b1sxp = vert_normal_b[b1s as usize].x;
-	let b1exp = vert_normal_b[b1e as usize].x;
+	let a0x = in_a.vert_pos[a0].x;
+	let b1sx = in_b.vert_pos[b1s].x;
+	let b1ex = in_b.vert_pos[b1e].x;
+	let a0xp = vert_normal_a[a0].x;
+	let b1sxp = vert_normal_b[b1s].x;
+	let b1exp = vert_normal_b[b1e].x;
 	let mut s01 = if FORWARD {
 		shadows(a0x, b1ex, with_sign(EXPAND_P, a0xp) - b1exp) as i8
 			- shadows(a0x, b1sx, with_sign(EXPAND_P, a0xp) - b1sxp) as i8
@@ -512,23 +518,15 @@ fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
 	let mut yz01 = Vector2::from_element(f64::NAN);
 
 	if s01 != 0 {
-		yz01 = interpolate(
-			in_b.vert_pos[b1s as usize],
-			in_b.vert_pos[b1e as usize],
-			in_a.vert_pos[a0 as usize].x,
-		);
-		let b1pair = in_b.tri.halfedge.pair(b1);
-		let dir = in_b.tri.normal[(b1 / 3) as usize].y + in_b.tri.normal[(b1pair / 3) as usize].y;
+		yz01 = interpolate(in_b.vert_pos[b1s], in_b.vert_pos[b1e], in_a.vert_pos[a0].x);
+		let b1pair = in_b.tri.halfedge.pair[b1] as usize;
+		let dir = in_b.tri.normal[b1 / 3].y + in_b.tri.normal[b1pair / 3].y;
 		if FORWARD {
-			if !shadows(in_a.vert_pos[a0 as usize].y, yz01[0], -dir) {
+			if !shadows(in_a.vert_pos[a0].y, yz01[0], -dir) {
 				s01 = 0;
 			}
 		} else {
-			if !shadows(
-				yz01[0],
-				in_a.vert_pos[a0 as usize].y,
-				with_sign(EXPAND_P, dir),
-			) {
+			if !shadows(yz01[0], in_a.vert_pos[a0].y, with_sign(EXPAND_P, dir)) {
 				s01 = 0;
 			}
 		}
@@ -539,29 +537,29 @@ fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
 
 #[derive(Default, Copy, Clone)]
 struct FaceEdge {
-	edge: i32,
-	start: i32,
-	end: i32,
+	edge: usize,
+	start: usize,
+	end: usize,
 	is_forward: bool,
 }
 
 #[inline(always)]
-fn load_face_edges(halfedges: &Halfedges, tri: i32) -> [FaceEdge; 3] {
+fn load_face_edges(halfedges: &Halfedges, tri: usize) -> [FaceEdge; 3] {
 	let mut edge = [FaceEdge::default(); 3];
 	for i in 0..3 {
 		let halfedge = 3 * tri + i;
-		let start = halfedges.start(halfedge);
-		let end = halfedges.start(3 * tri + next3_i32(i));
+		let start = halfedges.start[halfedge] as usize;
+		let end = halfedges.start[3 * tri + next3_usize(i)] as usize;
 		if start < end {
-			edge[i as usize] = FaceEdge {
+			edge[i] = FaceEdge {
 				edge: halfedge,
 				start,
 				end,
 				is_forward: true,
 			};
 		} else {
-			edge[i as usize] = FaceEdge {
-				edge: halfedges.pair(halfedge),
+			edge[i] = FaceEdge {
+				edge: halfedges.pair[halfedge] as usize,
 				start: end,
 				end: start,
 				is_forward: false,

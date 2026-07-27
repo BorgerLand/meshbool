@@ -527,10 +527,8 @@ impl MeshBool {
 				let mut tri_verts0: [Point3<f64>; 3] = [Point3::default(); 3];
 				let mut tri_verts1: [Point3<f64>; 3] = [Point3::default(); 3];
 				for i in 0..3 {
-					tri_verts0[i as usize] =
-						self.vert_pos[self.tri.halfedge.start(3 * tri0 + i) as usize];
-					tri_verts1[i as usize] =
-						self.vert_pos[self.tri.halfedge.start(3 * tri1 + i) as usize];
+					tri_verts0[i] = self.vert_pos[self.tri.halfedge.start[3 * tri0 + i] as usize];
+					tri_verts1[i] = self.vert_pos[self.tri.halfedge.start[3 * tri1 + i] as usize];
 				}
 				// if triangles tri0 and tri1 share a vertex, return true to skip the
 				// check. we relax the sharing criteria a bit to allow for at most
@@ -548,25 +546,25 @@ impl MeshBool {
 					let mut tmp0: [Point3<f64>; 3] = [Point3::default(); 3];
 					let mut tmp1: [Point3<f64>; 3] = [Point3::default(); 3];
 					for i in 0..3 {
-						tmp0[i] = tri_verts0[i] + ep * self.tri.normal[tri1 as usize];
+						tmp0[i] = tri_verts0[i] + ep * self.tri.normal[tri1];
 					}
 					if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
 						return;
 					}
 					for i in 0..3 {
-						tmp0[i] = tri_verts0[i] - ep * self.tri.normal[tri1 as usize];
+						tmp0[i] = tri_verts0[i] - ep * self.tri.normal[tri1];
 					}
 					if distance_triangle_triangle_squared(&tmp0, &tri_verts1) > 0.0 {
 						return;
 					}
 					for i in 0..3 {
-						tmp1[i] = tri_verts1[i] + ep * self.tri.normal[tri0 as usize];
+						tmp1[i] = tri_verts1[i] + ep * self.tri.normal[tri0];
 					}
 					if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
 						return;
 					}
 					for i in 0..3 {
-						tmp1[i] = tri_verts1[i] - ep * self.tri.normal[tri0 as usize];
+						tmp1[i] = tri_verts1[i] - ep * self.tri.normal[tri0];
 					}
 					if distance_triangle_triangle_squared(&tri_verts0, &tmp1) > 0.0 {
 						return;

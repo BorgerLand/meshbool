@@ -7,55 +7,55 @@ use std::f64;
 
 // Deduplicate the given 4-manifold edge by duplicating endVert, thus making the
 // edges distinct. Also duplicates startVert if it becomes pinched.
-pub fn dedupe(vert_pos: &mut Vec<Point3<f64>>, tri: &mut Triangles, edge: i32) {
+pub fn dedupe(vert_pos: &mut Vec<Point3<f64>>, tri: &mut Triangles, edge: usize) {
 	// Orbit endVert
 	let next_edge = next_halfedge(edge);
-	let start_vert = tri.halfedge.start(edge);
-	let end_vert = tri.halfedge.start(next_edge);
-	let end_prop = tri.halfedge.prop(next_edge);
-	let mut current = tri.halfedge.pair(next_edge);
+	let start_vert = tri.halfedge.start[edge];
+	let end_vert = tri.halfedge.start[next_edge];
+	let end_prop = tri.halfedge.prop[next_edge];
+	let mut current = tri.halfedge.pair[next_edge] as usize;
 	while current != edge {
-		let vert = tri.halfedge.start(current);
+		let vert = tri.halfedge.start[current];
 		if vert == start_vert {
 			// Single topological unit needs 2 faces added to be split
 			let new_vert = vert_pos.len() as i32;
 			vert_pos.push(vert_pos[end_vert as usize]);
-			current = tri.halfedge.pair(next_halfedge(current));
-			let opposite = tri.halfedge.pair(next_halfedge(edge));
+			current = tri.halfedge.pair[next_halfedge(current)] as usize;
+			let opposite = tri.halfedge.pair[next_halfedge(edge)] as usize;
 
 			tri.halfedge.update_vert(new_vert, current, opposite);
 
-			let mut new_halfedge = tri.halfedge.len() as i32;
+			let mut new_halfedge = tri.halfedge.len();
 			let mut old_face = current / 3;
-			let mut outside_vert = tri.halfedge.start(current);
+			let mut outside_vert = tri.halfedge.start[current];
 			tri.halfedge.push(end_vert, -1, end_prop);
 			tri.halfedge.push(new_vert, -1, end_prop);
 			tri.halfedge
-				.push(outside_vert, -1, tri.halfedge.prop(current));
+				.push(outside_vert, -1, tri.halfedge.prop[current]);
 			tri.halfedge
-				.pair_up(new_halfedge + 2, tri.halfedge.pair(current));
+				.pair_up(new_halfedge + 2, tri.halfedge.pair[current] as usize);
 			tri.halfedge.pair_up(new_halfedge + 1, current);
-			tri.relation.push(tri.relation[old_face as usize]);
-			tri.normal.push(tri.normal[old_face as usize]);
+			tri.relation.push(tri.relation[old_face]);
+			tri.normal.push(tri.normal[old_face]);
 
 			new_halfedge += 3;
 			old_face = opposite / 3;
-			outside_vert = tri.halfedge.start(opposite);
+			outside_vert = tri.halfedge.start[opposite];
 			tri.halfedge.push(new_vert, -1, end_prop); // fix prop
 			tri.halfedge.push(end_vert, -1, end_prop);
 			tri.halfedge
-				.push(outside_vert, -1, tri.halfedge.prop(opposite));
+				.push(outside_vert, -1, tri.halfedge.prop[opposite]);
 			tri.halfedge
-				.pair_up(new_halfedge + 2, tri.halfedge.pair(opposite));
+				.pair_up(new_halfedge + 2, tri.halfedge.pair[opposite] as usize);
 			tri.halfedge.pair_up(new_halfedge + 1, opposite);
 			tri.halfedge.pair_up(new_halfedge, new_halfedge - 3);
-			tri.relation.push(tri.relation[old_face as usize]);
-			tri.normal.push(tri.normal[old_face as usize]);
+			tri.relation.push(tri.relation[old_face]);
+			tri.normal.push(tri.normal[old_face]);
 
 			break;
 		}
 
-		current = tri.halfedge.pair(next_halfedge(current));
+		current = tri.halfedge.pair[next_halfedge(current)] as usize;
 	}
 
 	if current == edge {
@@ -65,21 +65,21 @@ pub fn dedupe(vert_pos: &mut Vec<Point3<f64>>, tri: &mut Triangles, edge: i32) {
 
 		tri.halfedge
 			.for_vert_mut(next_halfedge(current), |halfedge, e| {
-				halfedge.set_start(e, new_vert);
-				halfedge.set_end(halfedge.pair(e), new_vert);
+				halfedge.start[e] = new_vert;
+				halfedge.set_end(halfedge.pair[e] as usize, new_vert);
 			});
 	}
 
 	// Orbit startVert
-	let pair = tri.halfedge.pair(edge);
-	current = tri.halfedge.pair(next_halfedge(pair));
+	let pair = tri.halfedge.pair[edge] as usize;
+	current = tri.halfedge.pair[next_halfedge(pair)] as usize;
 	while current != pair {
-		let vert = tri.halfedge.start(current);
+		let vert = tri.halfedge.start[current];
 		if vert == end_vert {
 			break; //connected: not a pinched vert
 		}
 
-		current = tri.halfedge.pair(next_halfedge(current));
+		current = tri.halfedge.pair[next_halfedge(current)] as usize;
 	}
 
 	if current == pair {
@@ -89,14 +89,14 @@ pub fn dedupe(vert_pos: &mut Vec<Point3<f64>>, tri: &mut Triangles, edge: i32) {
 
 		tri.halfedge
 			.for_vert_mut(next_halfedge(current), |halfedge, e| {
-				halfedge.set_start(e, new_vert);
-				halfedge.set_end(halfedge.pair(e), new_vert);
+				halfedge.start[e] = new_vert;
+				halfedge.set_end(halfedge.pair[e] as usize, new_vert);
 			});
 	}
 }
 
 pub fn recursive_swap(
-	edge: i32,
+	edge: usize,
 	tri: &mut Triangles,
 	vert_pos: &mut Vec<Point3<f64>>,
 	properties: &mut Properties,
@@ -107,26 +107,24 @@ pub fn recursive_swap(
 	instance_rel: &[InstanceRelation],
 	precision: Precision,
 ) {
-	if edge < 0 {
-		return;
-	}
-	let pair = tri.halfedge.pair(edge);
+	let pair = tri.halfedge.pair[edge];
 	if pair < 0 {
 		return;
 	}
+	let pair = pair as usize;
 
 	// avoid infinite recursion
-	if visited[edge as usize] == *tag && visited[pair as usize] == *tag {
+	if visited[edge] == *tag && visited[pair] == *tag {
 		return;
 	}
 
 	let tri0_edge = tri_of(edge);
 	let tri1_edge = tri_of(pair);
 
-	let projection = get_axis_aligned_projection(tri.normal[(edge / 3) as usize]);
+	let projection = get_axis_aligned_projection(tri.normal[edge / 3]);
 	let mut v = [Point2::default(); 4];
 	for i in 0..3 {
-		v[i] = projection * vert_pos[tri.halfedge.start(tri0_edge[i]) as usize];
+		v[i] = projection * vert_pos[tri.halfedge.start[tri0_edge[i] as usize] as usize];
 	}
 
 	// Only operate on the long edge of a degenerate triangle.
@@ -135,26 +133,31 @@ pub fn recursive_swap(
 	}
 
 	// Switch to neighbor's projection.
-	let projection = get_axis_aligned_projection(tri.normal[(pair / 3) as usize]);
+	let projection = get_axis_aligned_projection(tri.normal[pair / 3]);
 	for i in 0..3 {
-		v[i] = projection * vert_pos[tri.halfedge.start(tri0_edge[i]) as usize];
+		v[i] = projection * vert_pos[tri.halfedge.start[tri0_edge[i] as usize] as usize];
 	}
 
-	v[3] = projection * vert_pos[tri.halfedge.start(tri1_edge[2]) as usize];
+	v[3] = projection * vert_pos[tri.halfedge.start[tri1_edge[2] as usize] as usize];
 
 	let mut swap_edge = |tri: &mut Triangles| {
 		// The 0-verts are swapped to the opposite 2-verts.
-		let v0 = tri.halfedge.start(tri0_edge[2]);
-		let v1 = tri.halfedge.start(tri1_edge[2]);
-		tri.halfedge.set_start(tri0_edge[0], v1);
-		tri.halfedge.set_end(tri0_edge[2], v1);
-		tri.halfedge.set_start(tri1_edge[0], v0);
-		tri.halfedge.set_end(tri1_edge[2], v0);
+		let v0 = tri.halfedge.start[tri0_edge[2] as usize];
+		let v1 = tri.halfedge.start[tri1_edge[2] as usize];
+		tri.halfedge.start[tri0_edge[0] as usize] = v1;
+		tri.halfedge.set_end(tri0_edge[2] as usize, v1);
+		tri.halfedge.start[tri1_edge[0] as usize] = v0;
+		tri.halfedge.set_end(tri1_edge[2] as usize, v0);
+		tri.halfedge.pair_up(
+			tri0_edge[0] as usize,
+			tri.halfedge.pair[tri1_edge[2] as usize] as usize,
+		);
+		tri.halfedge.pair_up(
+			tri1_edge[0] as usize,
+			tri.halfedge.pair[tri0_edge[2] as usize] as usize,
+		);
 		tri.halfedge
-			.pair_up(tri0_edge[0], tri.halfedge.pair(tri1_edge[2]));
-		tri.halfedge
-			.pair_up(tri1_edge[0], tri.halfedge.pair(tri0_edge[2]));
-		tri.halfedge.pair_up(tri0_edge[2], tri1_edge[2]);
+			.pair_up(tri0_edge[2] as usize, tri1_edge[2] as usize);
 		// Both triangles are now subsets of the neighboring triangle.
 		let tri0 = (tri0_edge[0] / 3) as usize;
 		let tri1 = (tri1_edge[0] / 3) as usize;
@@ -165,16 +168,13 @@ pub fn recursive_swap(
 		let a = (l02 / l01).clamp(0.0, 1.0);
 		// Update properties if applicable
 		if properties.data.len() > 0 {
-			tri.halfedge
-				.set_prop(tri0_edge[1], tri.halfedge.prop(tri1_edge[0]));
-			tri.halfedge
-				.set_prop(tri0_edge[0], tri.halfedge.prop(tri1_edge[2]));
-			tri.halfedge
-				.set_prop(tri0_edge[2], tri.halfedge.prop(tri1_edge[2]));
+			tri.halfedge.prop[tri0_edge[1] as usize] = tri.halfedge.prop[tri1_edge[0] as usize];
+			tri.halfedge.prop[tri0_edge[0] as usize] = tri.halfedge.prop[tri1_edge[2] as usize];
+			tri.halfedge.prop[tri0_edge[2] as usize] = tri.halfedge.prop[tri1_edge[2] as usize];
 			let prop_stride = properties.stride;
 			let new_prop = properties.data.len() / prop_stride;
-			let prop_idx0 = tri.halfedge.prop(tri1_edge[0]) as usize;
-			let prop_idx1 = tri.halfedge.prop(tri1_edge[1]) as usize;
+			let prop_idx0 = tri.halfedge.prop[tri1_edge[0] as usize] as usize;
+			let prop_idx1 = tri.halfedge.prop[tri1_edge[1] as usize] as usize;
 			for p in 0..prop_stride {
 				properties.data.push(
 					a * properties.data[prop_stride * prop_idx0 + p]
@@ -182,22 +182,22 @@ pub fn recursive_swap(
 				);
 			}
 
-			tri.halfedge.set_prop(tri1_edge[0], new_prop as i32);
-			tri.halfedge.set_prop(tri0_edge[2], new_prop as i32);
+			tri.halfedge.prop[tri1_edge[0] as usize] = new_prop as i32;
+			tri.halfedge.prop[tri0_edge[2] as usize] = new_prop as i32;
 		}
 
 		// if the new edge already exists, duplicate the verts and split the mesh.
-		let mut current = tri.halfedge.pair(tri1_edge[0]);
-		let end_vert = tri.halfedge.end(tri1_edge[1]);
-		while current != tri0_edge[1] {
+		let mut current = tri.halfedge.pair[tri1_edge[0] as usize] as usize;
+		let end_vert = tri.halfedge.end(tri1_edge[1] as usize);
+		while current != tri0_edge[1] as usize {
 			current = next_halfedge(current);
 			if tri.halfedge.end(current) == end_vert {
-				form_loop(&mut tri.halfedge, vert_pos, tri0_edge[2], current);
-				remove_if_folded(tri0_edge[2], &mut tri.halfedge, vert_pos);
+				form_loop(&mut tri.halfedge, vert_pos, tri0_edge[2] as usize, current);
+				remove_if_folded(tri0_edge[2] as usize, &mut tri.halfedge, vert_pos);
 				return;
 			}
 
-			current = tri.halfedge.pair(current);
+			current = tri.halfedge.pair[current] as usize;
 		}
 	};
 
@@ -212,7 +212,7 @@ pub fn recursive_swap(
 		if e23.magnitude_squared() < precision.tolerance * precision.tolerance {
 			*tag += 1;
 			collapse(
-				tri0_edge[2],
+				tri0_edge[2] as usize,
 				&mut tri.halfedge,
 				&tri.normal,
 				&tri.relation,
@@ -228,8 +228,8 @@ pub fn recursive_swap(
 			);
 			edges.truncate(0);
 		} else {
-			visited[edge as usize] = *tag;
-			visited[pair as usize] = *tag;
+			visited[edge] = *tag;
+			visited[pair] = *tag;
 			edge_swap_stack.extend([tri1_edge[1], tri1_edge[0], tri0_edge[1], tri0_edge[0]]);
 		}
 
@@ -242,11 +242,11 @@ pub fn recursive_swap(
 
 	//normal path
 	swap_edge(tri);
-	visited[edge as usize] = *tag;
-	visited[pair as usize] = *tag;
+	visited[edge] = *tag;
+	visited[pair] = *tag;
 	edge_swap_stack.extend([
-		tri.halfedge.pair(tri1_edge[0]),
-		tri.halfedge.pair(tri0_edge[1]),
+		tri.halfedge.pair[tri1_edge[0] as usize],
+		tri.halfedge.pair[tri0_edge[1] as usize],
 	]);
 }
 
@@ -256,7 +256,7 @@ pub fn recursive_swap(
 ///pinched - the vert would be marked NaN, but other edges could still be
 ///pointing to it.
 pub fn collapse(
-	edge: i32,
+	edge: usize,
 	halfedge: &mut Halfedges,
 	tri_normal: &[Vector3<f64>],
 	tri_rel: &[TriRelation],
@@ -265,26 +265,27 @@ pub fn collapse(
 	edges: &mut Vec<i32>,
 	prop_stride: usize,
 	precision: Precision,
-	first_new_vert: i32,
+	first_new_vert: usize,
 ) -> bool {
-	let pair = halfedge.pair(edge);
+	let pair = halfedge.pair[edge];
 	if pair < 0 {
 		return false;
 	}
+	let pair = pair as usize;
 
 	let tri0_edge = tri_of(edge);
 	let tri1_edge = tri_of(pair);
-	let start_vert = halfedge.start(tri0_edge[0]);
-	let end_vert = halfedge.start(tri0_edge[1]);
+	let start_vert = halfedge.start[tri0_edge[0] as usize] as usize;
+	let end_vert = halfedge.start[tri0_edge[1] as usize];
 
 	let p_new = vert_pos[end_vert as usize];
-	let p_old = vert_pos[start_vert as usize];
+	let p_old = vert_pos[start_vert];
 	let delta = p_new - p_old;
 	// We don't check that startVert is still new here - it may have been
 	// collapsed to a different neighbor. However, it's still fine to collapse it
 	// further, as it's still only collapsing its own original neighbors together,
 	// which can't stack errors arbitrarily far.
-	let max_len = if end_vert < first_new_vert {
+	let max_len = if (end_vert as usize) < first_new_vert {
 		precision.tolerance * precision.tolerance
 	} else {
 		precision.epsilon * precision.epsilon
@@ -292,12 +293,12 @@ pub fn collapse(
 	let short_edge = delta.magnitude_squared() < max_len;
 
 	// Orbit startVert
-	let mut start = halfedge.pair(tri1_edge[1]);
+	let mut start = halfedge.pair[tri1_edge[1] as usize] as usize;
 	if !short_edge {
 		let mut current = start;
-		let mut ref_check = tri_rel[(pair / 3) as usize];
-		let mut p_last = vert_pos[halfedge.start(tri1_edge[2]) as usize];
-		while current != tri1_edge[0] {
+		let mut ref_check = tri_rel[pair / 3];
+		let mut p_last = vert_pos[halfedge.start[tri1_edge[2] as usize] as usize];
+		while current != tri1_edge[0] as usize {
 			current = next_halfedge(current);
 			let p_next = vert_pos[halfedge.end(current) as usize];
 			let tri = (current / 3) as usize;
@@ -307,7 +308,7 @@ pub fn collapse(
 			// to the collapse of neighbors).
 			if rel != ref_check {
 				let old_rel = ref_check;
-				ref_check = tri_rel[(edge / 3) as usize];
+				ref_check = tri_rel[edge / 3];
 				if rel != ref_check {
 					return false;
 				}
@@ -317,7 +318,7 @@ pub fn collapse(
 				if rel.instance_id != old_rel.instance_id
 					|| (rel.face_id != old_rel.face_id
 						&& instance_rel[rel.instance_id as usize].user_provided_face_id)
-					|| tri_normal[(pair / 3) as usize].dot(&tri_normal[tri]) < -0.5
+					|| tri_normal[pair / 3].dot(&tri_normal[tri]) < -0.5
 				{
 					// Restrict collapse to colinear edges when the edge separates faces
 					// or the edge is sharp. This ensures large shifts are not introduced
@@ -346,17 +347,17 @@ pub fn collapse(
 			}
 
 			p_last = p_next;
-			current = halfedge.pair(current);
+			current = halfedge.pair[current] as usize;
 		}
 	}
 
 	// Orbit endVert
 	{
-		let mut current = halfedge.pair(tri0_edge[1]);
-		while current != tri1_edge[2] {
+		let mut current = halfedge.pair[tri0_edge[1] as usize] as usize;
+		while current != tri1_edge[2] as usize {
 			current = next_halfedge(current);
-			edges.push(current);
-			current = halfedge.pair(current);
+			edges.push(current as i32);
+			current = halfedge.pair[current] as usize;
 		}
 	}
 
@@ -365,27 +366,27 @@ pub fn collapse(
 	collapse_tri(halfedge, &tri1_edge);
 
 	// Orbit startVert
-	let tri0 = (edge / 3) as usize;
-	let tri1 = (pair / 3) as usize;
+	let tri0 = edge / 3;
+	let tri1 = pair / 3;
 	let mut current = start;
-	while current != tri0_edge[2] {
+	while current != tri0_edge[2] as usize {
 		current = next_halfedge(current);
 
 		if prop_stride > 0 {
 			// Update the shifted triangles to the vertBary of endVert
 			let tri = (current / 3) as usize;
 			if tri_rel[tri] == tri_rel[tri0] {
-				halfedge.set_prop(current, halfedge.prop(next_halfedge(edge)));
+				halfedge.prop[current] = halfedge.prop[next_halfedge(edge)];
 			} else if tri_rel[tri] == tri_rel[tri1] {
-				halfedge.set_prop(current, halfedge.prop(pair));
+				halfedge.prop[current] = halfedge.prop[pair];
 			}
 		}
 
 		let vert = halfedge.end(current);
-		let next = halfedge.pair(current);
+		let next = halfedge.pair[current] as usize;
 		for i in 0..edges.len() {
-			if vert == halfedge.end(edges[i]) {
-				form_loop(halfedge, vert_pos, edges[i], current);
+			if vert == halfedge.end(edges[i] as usize) {
+				form_loop(halfedge, vert_pos, edges[i] as usize, current);
 				start = next;
 				edges.truncate(i);
 				break;
@@ -395,37 +396,47 @@ pub fn collapse(
 		current = next;
 	}
 
-	halfedge.update_vert(end_vert, start, tri0_edge[2]);
+	halfedge.update_vert(end_vert, start, tri0_edge[2] as usize);
 	collapse_tri(halfedge, &tri0_edge);
 	remove_if_folded(start, halfedge, vert_pos);
 	true
 }
 
 fn collapse_tri(halfedges: &mut Halfedges, tri_edge: &Vector3<i32>) {
-	if halfedges.pair(tri_edge[1]) == -1 {
+	if halfedges.pair[tri_edge[1] as usize] == -1 {
 		return;
 	}
-	let pair1 = halfedges.pair(tri_edge[1]);
-	let pair2 = halfedges.pair(tri_edge[2]);
+	let pair1 = halfedges.pair[tri_edge[1] as usize] as usize;
+	let pair2 = halfedges.pair[tri_edge[2] as usize] as usize;
 	halfedges.pair_up(pair1, pair2);
 	for i in 0..3 {
-		halfedges.set(tri_edge[i], -1, -1, halfedges.prop(tri_edge[i]));
+		halfedges.set(
+			tri_edge[i] as usize,
+			-1,
+			-1,
+			halfedges.prop[tri_edge[i] as usize],
+		);
 	}
 }
 
 ///In the event that the edge collapse would create a non-manifold edge,
 ///instead we duplicate the two verts and attach the manifolds the other way
 ///across this edge.
-fn form_loop(halfedge: &mut Halfedges, vert_pos: &mut Vec<Point3<f64>>, current: i32, end: i32) {
+fn form_loop(
+	halfedge: &mut Halfedges,
+	vert_pos: &mut Vec<Point3<f64>>,
+	current: usize,
+	end: usize,
+) {
 	let start_vert = vert_pos.len() as i32;
 	let end_vert = start_vert + 1;
 	vert_pos.extend([
-		vert_pos[halfedge.start(current) as usize],
+		vert_pos[halfedge.start[current] as usize],
 		vert_pos[halfedge.end(current) as usize],
 	]);
 
-	let old_match = halfedge.pair(current);
-	let new_match = halfedge.pair(end);
+	let old_match = halfedge.pair[current] as usize;
+	let new_match = halfedge.pair[end] as usize;
 
 	halfedge.update_vert(start_vert, old_match, new_match);
 	halfedge.update_vert(end_vert, end, current);
@@ -438,45 +449,51 @@ fn form_loop(halfedge: &mut Halfedges, vert_pos: &mut Vec<Point3<f64>>, current:
 
 ///Rather than actually removing the edges, this step merely marks them for
 ///removal, by setting vertPos to NaN and halfedge to {-1, -1, -1, -1}.
-fn remove_if_folded(edge: i32, halfedge: &mut Halfedges, vert_pos: &mut [Point3<f64>]) {
+fn remove_if_folded(edge: usize, halfedge: &mut Halfedges, vert_pos: &mut [Point3<f64>]) {
 	let tri0_edge = tri_of(edge);
-	let tri1_edge = tri_of(halfedge.pair(edge));
-	if halfedge.pair(tri0_edge[1]) == -1 {
+	let tri1_edge = tri_of(halfedge.pair[edge] as usize);
+	if halfedge.pair[tri0_edge[1] as usize] == -1 {
 		return;
 	}
-	if halfedge.start(tri0_edge[2]) == halfedge.start(tri1_edge[2]) {
-		if halfedge.pair(tri0_edge[1]) == tri1_edge[2] {
-			if halfedge.pair(tri0_edge[2]) == tri1_edge[1] {
+	if halfedge.start[tri0_edge[2] as usize] == halfedge.start[tri1_edge[2] as usize] {
+		if halfedge.pair[tri0_edge[1] as usize] == tri1_edge[2] {
+			if halfedge.pair[tri0_edge[2] as usize] == tri1_edge[1] {
 				for i in 0..3 {
-					vert_pos[halfedge.start(tri0_edge[i]) as usize] =
+					vert_pos[halfedge.start[tri0_edge[i] as usize] as usize] =
 						Point3::new(f64::NAN, f64::NAN, f64::NAN);
 				}
 			} else {
-				vert_pos[halfedge.start(tri0_edge[1]) as usize] =
+				vert_pos[halfedge.start[tri0_edge[1] as usize] as usize] =
 					Point3::new(f64::NAN, f64::NAN, f64::NAN);
 			}
 		} else {
-			if halfedge.pair(tri0_edge[2]) == tri1_edge[1] {
-				vert_pos[halfedge.start(tri1_edge[1]) as usize] =
+			if halfedge.pair[tri0_edge[2] as usize] == tri1_edge[1] {
+				vert_pos[halfedge.start[tri1_edge[1] as usize] as usize] =
 					Point3::new(f64::NAN, f64::NAN, f64::NAN);
 			}
 		}
 
-		halfedge.pair_up(halfedge.pair(tri0_edge[1]), halfedge.pair(tri1_edge[2]));
-		halfedge.pair_up(halfedge.pair(tri0_edge[2]), halfedge.pair(tri1_edge[1]));
+		halfedge.pair_up(
+			halfedge.pair[tri0_edge[1] as usize] as usize,
+			halfedge.pair[tri1_edge[2] as usize] as usize,
+		);
+		halfedge.pair_up(
+			halfedge.pair[tri0_edge[2] as usize] as usize,
+			halfedge.pair[tri1_edge[1] as usize] as usize,
+		);
 
 		for i in 0..3 {
-			halfedge.set(tri0_edge[i], -1, -1, -1);
-			halfedge.set(tri1_edge[i], -1, -1, -1);
+			halfedge.set(tri0_edge[i] as usize, -1, -1, -1);
+			halfedge.set(tri1_edge[i] as usize, -1, -1, -1);
 		}
 	}
 }
 
-pub fn tri_of(edge: i32) -> Vector3<i32> {
+pub fn tri_of(edge: usize) -> Vector3<i32> {
 	let mut tri_edge = Vector3::default();
-	tri_edge[0] = edge;
-	tri_edge[1] = next_halfedge(tri_edge[0]);
-	tri_edge[2] = next_halfedge(tri_edge[1]);
+	tri_edge[0] = edge as i32;
+	tri_edge[1] = next_halfedge(tri_edge[0] as usize) as i32;
+	tri_edge[2] = next_halfedge(tri_edge[1] as usize) as i32;
 	tri_edge
 }
 

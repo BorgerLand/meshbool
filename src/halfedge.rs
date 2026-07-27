@@ -15,9 +15,9 @@ pub struct Halfedge {
 
 #[derive(Clone, Debug, Default)]
 pub struct Halfedges {
-	start: Vec<i32>,
-	paired: Vec<i32>,
-	prop_vert: Vec<i32>,
+	pub start: Vec<i32>,
+	pub pair: Vec<i32>,
+	pub prop: Vec<i32>,
 }
 
 impl Halfedges {
@@ -108,37 +108,37 @@ impl Halfedges {
 
 		// Mark opposed triangles for removal - this may strand unreferenced verts
 		// which are removed later by self.remove_unreferenced_verts() and self.finish().
-		let num_edge = (num_halfedge / 2) as i32;
+		let num_edge = num_halfedge / 2;
 		let mut removed = vec![false; num_halfedge];
 
 		let mut consecutive_start = 0;
 		for i in 0..num_edge {
-			let pair0 = ids[i as usize];
-			let h0 = halfedge[pair0 as usize];
+			let pair0 = ids[i] as usize;
+			let h0 = halfedge[pair0];
 			let mut k = num_edge + consecutive_start;
 			loop {
-				let pair1 = ids[k as usize];
-				let h1 = halfedge[pair1 as usize];
+				let pair1 = ids[k] as usize;
+				let h1 = halfedge[pair1];
 				if h0.start_vert != h1.end_vert || h0.end_vert != h1.start_vert {
 					break;
 				}
-				if !removed[pair1 as usize]
-					&& halfedge[next_halfedge(pair0) as usize].end_vert
-						== halfedge[next_halfedge(pair1) as usize].end_vert
+				if !removed[pair1]
+					&& halfedge[next_halfedge(pair0)].end_vert
+						== halfedge[next_halfedge(pair1)].end_vert
 				{
-					removed[pair0 as usize] = true;
-					removed[pair1 as usize] = true;
+					removed[pair0] = true;
+					removed[pair1] = true;
 					if i + num_edge != k {
 						// Reorder so that remaining edges pair up, while preserving relative
 						// order between the edges (triangle id order)
 						// cannot directly use move and move_backward because we need to keep
 						// removed halfedges in-place
-						let dir = if i + num_edge < k { 1 } else { -1 };
+						let dir = i + num_edge < k;
 						let mut a = k;
-						let mut b = k + dir;
-						let is_removed = |x: i32, ids: &[i32]| removed[ids[x as usize] as usize];
-						let in_range = |a: i32| {
-							if dir > 0 {
+						let mut b = if dir { k + 1 } else { k - 1 };
+						let is_removed = |x: usize, ids: &[i32]| removed[ids[x] as usize];
+						let in_range = |a: usize| {
+							if dir {
 								a >= i + num_edge
 							} else {
 								a <= i + num_edge
@@ -146,7 +146,11 @@ impl Halfedges {
 						};
 						loop {
 							loop {
-								a -= dir;
+								if dir {
+									a -= 1;
+								} else {
+									a += 1;
+								}
 								if !(in_range(a) && is_removed(a, &ids)) {
 									break;
 								}
@@ -155,14 +159,18 @@ impl Halfedges {
 								break;
 							}
 							loop {
-								b -= dir;
+								if dir {
+									b -= 1;
+								} else {
+									b += 1;
+								}
 								if !(is_removed(b, &ids) && b != k) {
 									break;
 								}
 							}
-							ids[b as usize] = ids[a as usize];
+							ids[b] = ids[a];
 						}
-						ids[(i + num_edge) as usize] = pair1;
+						ids[i + num_edge] = pair1 as i32;
 					}
 					break;
 				}
@@ -176,7 +184,7 @@ impl Halfedges {
 			if i + 1 == num_edge {
 				continue;
 			}
-			let h1 = halfedge[ids[(i + 1) as usize] as usize];
+			let h1 = halfedge[ids[i + 1] as usize];
 			if h1.start_vert == h0.start_vert && h1.end_vert == h0.end_vert {
 				continue;
 			}
@@ -186,28 +194,30 @@ impl Halfedges {
 
 		let mut out = unsafe { Self::uninit(num_halfedge) };
 		for i in 0..num_edge {
-			let pair0 = ids[i as usize];
-			let pair1 = ids[(i + num_edge) as usize];
-			if !removed[pair0 as usize] {
-				out.set_start(pair0, halfedge[pair0 as usize].start_vert);
-				out.set_prop(pair0, halfedge[pair0 as usize].prop_vert);
-				out.set_pair(pair0, pair1);
-				out.set_start(pair1, halfedge[pair1 as usize].start_vert);
-				out.set_prop(pair1, halfedge[pair1 as usize].prop_vert);
-				out.set_pair(pair1, pair0);
+			let pair0_i32 = ids[i];
+			let pair1_i32 = ids[i + num_edge];
+			let pair0_usize = pair0_i32 as usize;
+			let pair1_usize = pair1_i32 as usize;
+			if !removed[pair0_usize] {
+				out.start[pair0_usize] = halfedge[pair0_usize].start_vert;
+				out.prop[pair0_usize] = halfedge[pair0_usize].prop_vert;
+				out.pair[pair0_usize] = pair1_i32;
+				out.start[pair1_usize] = halfedge[pair1_usize].start_vert;
+				out.prop[pair1_usize] = halfedge[pair1_usize].prop_vert;
+				out.pair[pair1_usize] = pair0_i32;
 			} else {
-				out.set_start(pair0, -1);
-				out.set_prop(pair0, 0);
-				out.set_pair(pair0, -1);
-				out.set_start(pair1, -1);
-				out.set_prop(pair1, 0);
-				out.set_pair(pair1, -1);
+				out.start[pair0_usize] = -1;
+				out.prop[pair0_usize] = 0;
+				out.pair[pair0_usize] = -1;
+				out.start[pair1_usize] = -1;
+				out.prop[pair1_usize] = 0;
+				out.pair[pair1_usize] = -1;
 			}
 		}
 
 		#[cfg(feature = "test_thoroughly")]
 		for edge in 0..num_halfedge {
-			let next = next_halfedge(edge as i32) as usize;
+			let next = next_halfedge(edge);
 			if !removed[edge] && !removed[next] {
 				debug_assert!(
 					halfedge[edge].end_vert == halfedge[next].start_vert,
@@ -264,7 +274,7 @@ fn prep_halfedges_impl<const HAS_PROP: bool>(
 				CreateHalfedge {
 					start_vert: v0,
 					end_vert: v1,
-					prop_vert: if HAS_PROP { props[i as usize] } else { 0 },
+					prop_vert: if HAS_PROP { props[i] } else { 0 },
 				}
 			})
 		})
@@ -282,8 +292,8 @@ impl Halfedges {
 		unsafe {
 			Self {
 				start: vec_ext::uninit(size),
-				paired: vec_ext::uninit(size),
-				prop_vert: vec_ext::uninit(size),
+				pair: vec_ext::uninit(size),
+				prop: vec_ext::uninit(size),
 			}
 		}
 	}
@@ -300,68 +310,44 @@ impl Halfedges {
 		self.len() / 2
 	}
 
-	pub fn start(&self, idx: i32) -> i32 {
-		self.start[idx as usize]
+	pub fn end(&self, idx: usize) -> i32 {
+		self.start[next_halfedge(idx)]
 	}
 
-	pub fn end(&self, idx: i32) -> i32 {
-		self.start[next_halfedge(idx) as usize]
+	pub fn set_end(&mut self, idx: usize, vert: i32) {
+		self.start[next_halfedge(idx)] = vert;
 	}
 
-	pub fn pair(&self, idx: i32) -> i32 {
-		self.paired[idx as usize]
+	pub fn is_forward(&self, idx: usize) -> bool {
+		self.start[idx] < self.end(idx)
 	}
 
-	pub fn prop(&self, idx: i32) -> i32 {
-		self.prop_vert[idx as usize]
-	}
-
-	pub fn set_start(&mut self, idx: i32, vert: i32) {
-		self.start[idx as usize] = vert;
-	}
-
-	pub fn set_end(&mut self, idx: i32, vert: i32) {
-		self.start[next_halfedge(idx) as usize] = vert;
-	}
-
-	pub fn set_pair(&mut self, idx: i32, pair: i32) {
-		self.paired[idx as usize] = pair;
-	}
-
-	pub fn set_prop(&mut self, idx: i32, prop: i32) {
-		self.prop_vert[idx as usize] = prop;
-	}
-
-	pub fn is_forward(&self, idx: i32) -> bool {
-		self.start(idx) < self.end(idx)
-	}
-
-	pub fn get(&self, idx: i32) -> Halfedge {
+	pub fn get(&self, idx: usize) -> Halfedge {
 		Halfedge {
-			start_vert: self.start(idx),
+			start_vert: self.start[idx],
 			end_vert: self.end(idx),
-			paired_halfedge: self.pair(idx),
-			prop_vert: self.prop(idx),
+			paired_halfedge: self.pair[idx],
+			prop_vert: self.prop[idx],
 		}
 	}
 
-	pub fn set(&mut self, idx: i32, start_vert: i32, paired_halfedge: i32, prop_vert: i32) {
-		self.set_start(idx, start_vert);
-		self.set_pair(idx, paired_halfedge);
-		self.set_prop(idx, prop_vert);
+	pub fn set(&mut self, idx: usize, start_vert: i32, paired_halfedge: i32, prop_vert: i32) {
+		self.start[idx] = start_vert;
+		self.pair[idx] = paired_halfedge;
+		self.prop[idx] = prop_vert;
 	}
 
 	pub fn push(&mut self, start_vert: i32, paired_halfedge: i32, prop_vert: i32) {
 		self.start.push(start_vert);
-		self.paired.push(paired_halfedge);
-		self.prop_vert.push(prop_vert);
+		self.pair.push(paired_halfedge);
+		self.prop.push(prop_vert);
 	}
 
 	#[inline(always)]
-	pub fn for_vert(&self, halfedge: i32, mut func: impl FnMut(i32)) {
+	pub fn for_vert(&self, halfedge: usize, mut func: impl FnMut(usize)) {
 		let mut current = halfedge;
 		loop {
-			current = next_halfedge(self.pair(current));
+			current = next_halfedge(self.pair[current] as usize);
 			func(current);
 			if current == halfedge {
 				break;
@@ -370,10 +356,10 @@ impl Halfedges {
 	}
 
 	#[inline(always)]
-	pub fn for_vert_mut(&mut self, halfedge: i32, mut func: impl FnMut(&mut Self, i32)) {
+	pub fn for_vert_mut(&mut self, halfedge: usize, mut func: impl FnMut(&mut Self, usize)) {
 		let mut current = halfedge;
 		loop {
-			current = next_halfedge(self.pair(current));
+			current = next_halfedge(self.pair[current] as usize);
 			func(self, current);
 			if current == halfedge {
 				break;
@@ -384,15 +370,15 @@ impl Halfedges {
 	#[inline(always)]
 	pub fn for_vert_fn<T>(
 		&self,
-		halfedge: i32,
-		mut transform: impl FnMut(i32) -> T,
-		mut binary_op: impl FnMut(i32, &T, &mut T),
+		halfedge: usize,
+		mut transform: impl FnMut(usize) -> T,
+		mut binary_op: impl FnMut(usize, &T, &mut T),
 	) {
-		let mut here: T = transform(halfedge);
-		let mut current: i32 = halfedge;
+		let mut here = transform(halfedge);
+		let mut current = halfedge;
 		loop {
-			let next_halfedge: i32 = next_halfedge(self.pair(current));
-			let mut next: T = transform(next_halfedge);
+			let next_halfedge = next_halfedge(self.pair[current] as usize);
+			let mut next = transform(next_halfedge);
 			binary_op(current, &here, &mut next);
 			here = next;
 			current = next_halfedge;
@@ -402,26 +388,26 @@ impl Halfedges {
 		}
 	}
 
-	pub fn pair_up(&mut self, edge0: i32, edge1: i32) {
-		self.set_pair(edge0, edge1);
-		self.set_pair(edge1, edge0);
+	pub fn pair_up(&mut self, edge0: usize, edge1: usize) {
+		self.pair[edge0] = edge1 as i32;
+		self.pair[edge1] = edge0 as i32;
 	}
 
 	//use when stride increases from 0->more than 0
 	pub fn init_prop_from_start(&mut self) {
-		self.prop_vert = self.start.clone();
+		self.prop = self.start.clone();
 	}
 
 	/// Traverses CW around startEdge.endVert from startEdge to endEdge
 	/// (edgeEdge.endVert must == startEdge.endVert), updating each edge to point
 	/// to vert instead.
-	pub fn update_vert(&mut self, vert: i32, start_edge: i32, end_edge: i32) {
+	pub fn update_vert(&mut self, vert: i32, start_edge: usize, end_edge: usize) {
 		let mut current = start_edge;
 		while current != end_edge {
 			self.set_end(current, vert);
 			current = next_halfedge(current);
-			self.set_start(current, vert);
-			current = self.pair(current);
+			self.start[current] = vert;
+			current = self.pair[current] as usize;
 			debug_assert!(current != start_edge, "infinite loop in decimator!");
 		}
 	}
@@ -436,7 +422,7 @@ impl Halfedges {
 			return false;
 		}
 		let check = CheckHalfedges { halfedges: self };
-		(0..self.len()).all(|edge| check.call(edge as i32))
+		(0..self.len()).all(|edge| check.call(edge))
 	}
 
 	///Returns true if this manifold is in fact an oriented 2-manifold and all of
@@ -466,13 +452,17 @@ impl Halfedges {
 
 	#[cfg(feature = "test_thoroughly")]
 	fn to_data(&self) -> Vec<Halfedge> {
-		(0..self.len()).map(|idx| self.get(idx as i32)).collect()
+		(0..self.len()).map(|idx| self.get(idx)).collect()
 	}
 }
 
 #[inline(always)]
-pub fn next_halfedge(current: i32) -> i32 {
-	current + (if current % 3 == 2 { -2 } else { 1 })
+pub fn next_halfedge(current: usize) -> usize {
+	if current % 3 == 2 {
+		current - 2
+	} else {
+		current + 1
+	}
 }
 
 struct CheckHalfedges<'a> {
@@ -480,15 +470,15 @@ struct CheckHalfedges<'a> {
 }
 
 impl<'a> CheckHalfedges<'a> {
-	fn call(&self, edge: i32) -> bool {
-		let start = self.halfedges.start(edge);
+	fn call(&self, edge: usize) -> bool {
+		let start = self.halfedges.start[edge];
 		let end = self.halfedges.end(edge);
-		let pair = self.halfedges.pair(edge);
+		let pair = self.halfedges.pair[edge];
 		if start == -1 && end == -1 && pair == -1 {
 			return true;
 		}
-		if self.halfedges.start(next_halfedge(edge)) == -1
-			|| self.halfedges.start(next_halfedge(next_halfedge(edge))) == -1
+		if self.halfedges.start[next_halfedge(edge)] == -1
+			|| self.halfedges.start[next_halfedge(next_halfedge(edge))] == -1
 		{
 			return false;
 		}
@@ -497,10 +487,11 @@ impl<'a> CheckHalfedges<'a> {
 		}
 
 		let mut good = true;
-		good &= self.halfedges.pair(pair) == edge;
+		let pair = pair as usize;
+		good &= self.halfedges.pair[pair] == edge as i32;
 		good &= start != end;
 		good &= start == self.halfedges.end(pair);
-		good &= end == self.halfedges.start(pair);
+		good &= end == self.halfedges.start[pair];
 		good
 	}
 }

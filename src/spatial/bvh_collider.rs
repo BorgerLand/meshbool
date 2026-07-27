@@ -3,14 +3,14 @@ use crate::util::math::{atomic_add, is_axis_aligned};
 use crate::util::vec_ext;
 use nalgebra::{Matrix3x4, Point3, Vector3};
 use std::any::Any;
+use std::cmp::Ordering;
 use std::fmt::Debug;
-use std::mem;
 
 // Adjustable parameters
-const K_INITIAL_LENGTH: i32 = 128;
-const K_LENGTH_MULTIPLE: i32 = 4;
+const K_INITIAL_LENGTH: isize = 128;
+const K_LENGTH_MULTIPLE: isize = 4;
 // Fundamental constants
-const K_ROOT: i32 = 1;
+const K_ROOT: usize = 1;
 
 #[derive(Clone, Default, Debug)]
 pub struct BVHCollider {
@@ -44,7 +44,7 @@ impl BVHCollider {
 				internal_children: &mut collider.internal_children,
 				leaf_morton,
 			}
-			.call(internal as i32);
+			.call(internal);
 		}
 
 		collider.update_boxes(leaf_bb);
@@ -72,7 +72,7 @@ impl BVHCollider {
 				node_parent: &self.node_parent,
 				internal_children: &self.internal_children,
 			}
-			.call(leaf as i32)
+			.call(leaf)
 		}
 	}
 
@@ -88,17 +88,17 @@ impl BVHCollider {
 		if self.node_bbox.is_empty() {
 			return Box3D::default();
 		}
-		self.node_bbox[internal2node(0) as usize]
+		self.node_bbox[internal2node(0)]
 	}
 
 	pub fn collisions_from_fn<const SELF_COLLISION: bool, OverlapT>(
 		&self,
-		recorder: impl FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
-		f: impl Fn(i32) -> OverlapT,
+		recorder: impl FnMut(/*query_idx*/ usize, /*leaf_idx*/ usize),
+		f: impl Fn(usize) -> OverlapT,
 		n: usize,
 		_parallel: bool,
 	) where
-		OverlapT: Copy + Debug + 'static,
+		OverlapT: Debug + Copy + 'static,
 		Box3D: Overlap<OverlapT>,
 	{
 		if self.internal_children.is_empty() {
@@ -111,7 +111,7 @@ impl BVHCollider {
 			recorder,
 		};
 		for query_idx in 0..n {
-			find_collision.call(query_idx as i32);
+			find_collision.call(query_idx);
 		}
 	}
 
@@ -126,15 +126,14 @@ impl BVHCollider {
 	///If thread local storage is not needed, use SimpleRecorder.
 	pub fn collisions_from_slice<const SELF_COLLISION: bool, OverlapT>(
 		&self,
-		recorder: impl FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
+		recorder: impl FnMut(/*query_idx*/ usize, /*leaf_idx*/ usize),
 		queries_in: &[OverlapT],
 		parallel: bool,
 	) where
-		OverlapT: Debug + Clone + 'static,
+		OverlapT: Debug + Copy + 'static,
 		Box3D: Overlap<OverlapT>,
-		OverlapT: Copy,
 	{
-		let f = |i: i32| -> OverlapT { queries_in[i as usize].clone() };
+		let f = |i| queries_in[i];
 		self.collisions_from_fn::<SELF_COLLISION, _>(recorder, f, queries_in.len(), parallel);
 	}
 
@@ -170,34 +169,38 @@ struct CreateRadixTree<'a> {
 }
 
 impl<'a> CreateRadixTree<'a> {
-	fn prefix_length_unsigned(&self, a: u32, b: u32) -> i32 {
-		(a ^ b).leading_zeros() as i32
+	fn prefix_length(&self, a: usize, b: usize) -> usize {
+		(a ^ b).leading_zeros() as usize
 	}
 
-	fn prefix_length_signed(&self, i: i32, j: i32) -> i32 {
-		if j < 0 || j >= self.leaf_morton.len() as i32 {
-			-1
-		} else {
-			if self.leaf_morton[i as usize] == self.leaf_morton[j as usize] {
-				// use index to disambiguate
-				32 + self.prefix_length_unsigned(i as u32, j as u32)
-			} else {
-				self.prefix_length_unsigned(
-					self.leaf_morton[i as usize],
-					self.leaf_morton[j as usize],
-				)
+	fn prefix_length_checked(&self, i: usize, j: Option<usize>) -> Option<usize> {
+		match j {
+			Some(j) if j < self.leaf_morton.len() => {
+				Some(if self.leaf_morton[i] == self.leaf_morton[j] {
+					// use index to disambiguate
+					32 + self.prefix_length(i, j)
+				} else {
+					self.prefix_length(self.leaf_morton[i] as usize, self.leaf_morton[j] as usize)
+				})
 			}
+			_ => None,
 		}
 	}
 
-	fn range_end(&self, i: i32) -> i32 {
+	fn range_end(&self, i: usize) -> usize {
 		// Determine direction of range (+1 or -1)
-		let mut dir = self.prefix_length_signed(i, i + 1) - self.prefix_length_signed(i, i - 1);
-		dir = ((dir > 0) as i32) - ((dir < 0) as i32);
+		let forward = self.prefix_length_checked(i, i.checked_add_signed(1));
+		let backward = self.prefix_length_checked(i, i.checked_add_signed(-1));
+		let dir = match forward.cmp(&backward) {
+			Ordering::Greater => 1,
+			Ordering::Less => -1,
+			Ordering::Equal => 0,
+		};
 		// Compute conservative range length with exponential increase
-		let common_prefix = self.prefix_length_signed(i, i - dir);
+		let common_prefix = self.prefix_length_checked(i, i.checked_add_signed(-dir));
 		let mut max_length = K_INITIAL_LENGTH;
-		while self.prefix_length_signed(i, i + dir * max_length) > common_prefix {
+		while self.prefix_length_checked(i, i.checked_add_signed(dir * max_length)) > common_prefix
+		{
 			max_length *= K_LENGTH_MULTIPLE;
 		}
 
@@ -209,18 +212,20 @@ impl<'a> CreateRadixTree<'a> {
 				break;
 			}
 
-			if self.prefix_length_signed(i, i + dir * (length + step)) > common_prefix {
+			if self.prefix_length_checked(i, i.checked_add_signed(dir * (length + step)))
+				> common_prefix
+			{
 				length += step;
 			}
 
 			step /= 2;
 		}
 
-		i + dir * length
+		i.checked_add_signed(dir * length).unwrap()
 	}
 
-	fn find_split(&self, first: i32, last: i32) -> i32 {
-		let common_prefix = self.prefix_length_signed(first, last);
+	fn find_split(&self, first: usize, last: usize) -> usize {
+		let common_prefix = self.prefix_length_checked(first, Some(last));
 		// Find the furthest object that shares more than commonPrefix bits with the
 		// first one, using binary search.
 		let mut split = first;
@@ -229,7 +234,7 @@ impl<'a> CreateRadixTree<'a> {
 			step = (step + 1) >> 1; // divide by 2, rounding up
 			let new_split = split + step;
 			if new_split < last {
-				let split_prefix = self.prefix_length_signed(first, new_split);
+				let split_prefix = self.prefix_length_checked(first, Some(new_split));
 				if split_prefix > common_prefix {
 					split = new_split;
 				}
@@ -243,13 +248,14 @@ impl<'a> CreateRadixTree<'a> {
 		split
 	}
 
-	fn call(&mut self, internal: i32) {
-		let mut first = internal;
+	fn call(&mut self, internal: usize) {
 		// Find the range of objects with a common prefix
-		let mut last = self.range_end(first);
-		if first > last {
-			mem::swap(&mut first, &mut last);
-		}
+		let end = self.range_end(internal);
+		let (first, last) = if internal > end {
+			(end, internal)
+		} else {
+			(internal, end)
+		};
 		// Determine where the next-highest difference occurs
 		let mut split = self.find_split(first, last);
 		let child1 = if split == first {
@@ -264,17 +270,17 @@ impl<'a> CreateRadixTree<'a> {
 			internal2node(split)
 		};
 		// Record parent_child relationships.
-		self.internal_children[internal as usize] = (child1, child2);
+		self.internal_children[internal] = (child1 as i32, child2 as i32);
 		let node = internal2node(internal);
-		self.node_parent[child1 as usize] = node;
-		self.node_parent[child2 as usize] = node;
+		self.node_parent[child1] = node as i32;
+		self.node_parent[child2] = node as i32;
 	}
 }
 
 struct FindCollision<'a, const SELF_COLLISION: bool, F, OverlapT, RecorderT>
 where
-	F: Fn(i32) -> OverlapT,
-	RecorderT: FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
+	F: Fn(usize) -> OverlapT,
+	RecorderT: FnMut(/*query_idx*/ usize, /*leaf_idx*/ usize),
 {
 	f: &'a F,
 	node_bbox: &'a [Box3D],
@@ -285,14 +291,14 @@ where
 impl<'a, const SELF_COLLISION: bool, F, OverlapT, RecorderT>
 	FindCollision<'a, SELF_COLLISION, F, OverlapT, RecorderT>
 where
-	F: Fn(i32) -> OverlapT,
+	F: Fn(usize) -> OverlapT,
 	OverlapT: Copy + Debug + 'static,
-	RecorderT: FnMut(/*query_idx*/ i32, /*leaf_idx*/ i32),
+	RecorderT: FnMut(/*query_idx*/ usize, /*leaf_idx*/ usize),
 	Box3D: Overlap<OverlapT>,
 {
 	#[inline(always)]
-	fn record_collision(&mut self, query: OverlapT, node: i32, query_idx: i32) -> bool {
-		let bbox = self.node_bbox[node as usize];
+	fn record_collision(&mut self, query: OverlapT, node: usize, query_idx: usize) -> bool {
+		let bbox = self.node_bbox[node];
 		let overlaps = bbox.does_overlap(query);
 		if overlaps && is_leaf(node) {
 			let leaf_idx = node2leaf(node);
@@ -304,7 +310,7 @@ where
 		overlaps && is_internal(node) //should traverse into node
 	}
 
-	fn call(&mut self, query_idx: i32) {
+	fn call(&mut self, query_idx: usize) {
 		let query = (self.f)(query_idx);
 
 		// early exit for empty boxes
@@ -317,28 +323,28 @@ where
 		// stack cannot overflow because radix tree has max depth 30 (Morton code) +
 		// 32 (index).
 		let mut stack = [0; 64];
-		let mut top = -1;
+		let mut top = 0;
 		// Depth-first search
 		let mut node = K_ROOT;
 		loop {
 			let internal = node2internal(node);
-			let child1 = self.internal_children[internal as usize].0;
-			let child2 = self.internal_children[internal as usize].1;
+			let child1 = self.internal_children[internal].0 as usize;
+			let child2 = self.internal_children[internal].1 as usize;
 
 			let traverse1 = self.record_collision(query, child1, query_idx);
 			let traverse2 = self.record_collision(query, child2, query_idx);
 
 			if !traverse1 && !traverse2 {
-				if top < 0 {
+				if top == 0 {
 					break;
 				} //done
-				node = stack[top as usize];
-				top -= 1; //get a saved node
+				top -= 1;
+				node = stack[top]; //get a saved node
 			} else {
 				node = if traverse1 { child1 } else { child2 }; //go here next
 				if traverse1 && traverse2 {
+					stack[top] = child2; //save the other for later
 					top += 1;
-					stack[top as usize] = child2; //save the other for later
 				}
 			}
 		}
@@ -353,17 +359,16 @@ struct BuildInternalBoxes<'a> {
 }
 
 impl<'a> BuildInternalBoxes<'a> {
-	fn call(&mut self, leaf: i32) {
+	fn call(&mut self, leaf: usize) {
 		let mut node = leaf2node(leaf);
 		loop {
-			node = self.node_parent[node as usize];
+			node = self.node_parent[node] as usize;
 			let internal = node2internal(node);
-			if atomic_add(&mut self.counter[internal as usize], 1) == 0 {
+			if atomic_add(&mut self.counter[internal], 1) == 0 {
 				return;
 			}
-			self.node_bbox[node as usize] = self.node_bbox
-				[self.internal_children[internal as usize].0 as usize]
-				.union_box3(self.node_bbox[self.internal_children[internal as usize].1 as usize]);
+			self.node_bbox[node] = self.node_bbox[self.internal_children[internal].0 as usize]
+				.union_box3(self.node_bbox[self.internal_children[internal].1 as usize]);
 
 			if node == K_ROOT {
 				break;
@@ -382,26 +387,26 @@ const fn spread_bits3(mut v: u32) -> u32 {
 }
 
 #[inline(always)]
-const fn is_leaf(node: i32) -> bool {
+const fn is_leaf(node: usize) -> bool {
 	node % 2 == 0
 }
 #[inline(always)]
-const fn is_internal(node: i32) -> bool {
+const fn is_internal(node: usize) -> bool {
 	node % 2 == 1
 }
 #[inline(always)]
-const fn node2internal(node: i32) -> i32 {
+const fn node2internal(node: usize) -> usize {
 	(node - 1) / 2
 }
 #[inline(always)]
-const fn internal2node(internal: i32) -> i32 {
+const fn internal2node(internal: usize) -> usize {
 	internal * 2 + 1
 }
 #[inline(always)]
-const fn node2leaf(node: i32) -> i32 {
+const fn node2leaf(node: usize) -> usize {
 	node / 2
 }
 #[inline(always)]
-const fn leaf2node(leaf: i32) -> i32 {
+const fn leaf2node(leaf: usize) -> usize {
 	leaf * 2
 }

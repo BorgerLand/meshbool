@@ -56,22 +56,22 @@ pub fn sort_and_compact_geometry(
 			};
 			let mut tri_idx = 0;
 			let mut extrema = Halfedge::default();
-			for i in 0..tri.halfedge.len() as i32 {
+			for i in 0..tri.halfedge.len() {
 				let start = if tri.halfedge.is_forward(i) {
-					tri.halfedge.start(i)
+					tri.halfedge.start[i]
 				} else {
 					tri.halfedge.end(i)
 				};
 				let end = if tri.halfedge.is_forward(i) {
 					tri.halfedge.end(i)
 				} else {
-					tri.halfedge.start(i)
+					tri.halfedge.start[i]
 				};
 				extrema.start_vert = extrema.start_vert.min(start);
 				extrema.end_vert = extrema.end_vert.min(end);
 				extrema.paired_halfedge =
-					max_or_minus(extrema.paired_halfedge, tri.halfedge.pair(i));
-				tri_idx = max_or_minus(tri_idx, i / 3);
+					max_or_minus(extrema.paired_halfedge, tri.halfedge.pair[i]);
+				tri_idx = max_or_minus(tri_idx, (i / 3) as i32);
 			}
 			debug_assert!(extrema.start_vert >= 0, "Vertex index is negative!");
 			debug_assert!(
@@ -126,13 +126,13 @@ fn sort_verts(vert_pos: &mut Vec<Point3<f64>>, halfedge: &mut Halfedges, bbox: B
 ///also given.
 pub fn reindex_verts(halfedge: &mut Halfedges, vert_new2old: &[i32], old_num_vert: usize) {
 	let vert_old2new = unsafe { vec_ext::scatter(vert_new2old.iter(), old_num_vert) };
-	for idx in 0..halfedge.len() as i32 {
-		let start_vert = halfedge.start(idx);
+	for idx in 0..halfedge.len() {
+		let start_vert = halfedge.start[idx];
 		if start_vert < 0 {
 			continue;
 		}
 		let new_start = vert_old2new[start_vert as usize];
-		halfedge.set_start(idx, new_start);
+		halfedge.start[idx] = new_start;
 	}
 }
 
@@ -152,7 +152,7 @@ pub fn get_tri_box_morton(
 			// Removed tris are marked by all halfedges having pairedHalfedge
 			// = -1, and this will sort them to the end (the Morton code only
 			// uses the first 30 of 32 bits).
-			if halfedge.pair((3 * tri) as i32) < 0 {
+			if halfedge.pair[3 * tri] < 0 {
 				if let Some(tri_morton) = &mut tri_morton {
 					tri_morton.push(K_NO_CODE);
 				}
@@ -162,7 +162,7 @@ pub fn get_tri_box_morton(
 			let mut center = Point3::new(0.0, 0.0, 0.0);
 
 			for i in 0..3 {
-				let pos = vert_pos[halfedge.start((3 * tri + i) as i32) as usize];
+				let pos = vert_pos[halfedge.start[3 * tri + i] as usize];
 				center += pos.coords;
 				cur_box.union_point(pos);
 			}
@@ -217,7 +217,7 @@ fn gather_tris_in_place(mut tri: TrianglesPartial, tri_new2old: &[i32]) {
 		tri_old2new: &tri_old2new,
 	};
 	for new_face in 0..num_tri {
-		reindex_face.call(new_face as i32);
+		reindex_face.call(new_face);
 	}
 }
 
@@ -239,7 +239,7 @@ pub fn gather_tris(old: &Triangles, tri_new2old: &[i32]) -> Triangles {
 		tri_old2new: &tri_old2new,
 	};
 	for new_face in 0..num_tri {
-		reindex_face.call(new_face as i32);
+		reindex_face.call(new_face);
 	}
 
 	Triangles {
@@ -258,8 +258,8 @@ struct ReindexTri<'a> {
 
 impl ReindexTri<'_> {
 	//permute halfedge same as the other tri soa's and simultaneously update paired
-	fn call(&mut self, new_face: i32) {
-		let old_face = self.tri_new2old[new_face as usize];
+	fn call(&mut self, new_face: usize) {
+		let old_face = self.tri_new2old[new_face] as usize;
 		for i in 0..3 {
 			let old_edge = 3 * old_face + i;
 			let mut edge = self.old_halfedge.get(old_edge);
@@ -286,7 +286,7 @@ fn compact_props(properties: &mut Properties, halfedge: &mut Halfedges) {
 	let mut keep = vec![0; num_prop_verts];
 
 	for idx in 0..halfedge.len() {
-		keep[halfedge.prop(idx as i32) as usize] = 1;
+		keep[halfedge.prop[idx] as usize] = 1;
 	}
 
 	let prop_old2new = Vec::from_iter(vec_ext::exclusive_scan_with_total(keep.iter().cloned(), 0));
@@ -305,8 +305,8 @@ fn compact_props(properties: &mut Properties, halfedge: &mut Halfedges) {
 		}
 	}
 
-	for idx in 0..halfedge.len() as i32 {
-		halfedge.set_prop(idx, prop_old2new[halfedge.prop(idx) as usize]);
+	for idx in 0..halfedge.len() {
+		halfedge.prop[idx] = prop_old2new[halfedge.prop[idx] as usize];
 	}
 }
 

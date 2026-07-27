@@ -70,7 +70,7 @@ impl DisjointSets {
 			.map(|i| {
 				// we optimize for connected component of size 1
 				// no need to put them into the hashmap
-				let i_parent = self.find_impl(DisjointSets::to_index(i as usize));
+				let i_parent = self.find_impl(DisjointSets::to_index(i));
 				if self.rank(i_parent) == 0 {
 					let component = to_label.len() as i32 + lonely_nodes as i32;
 					lonely_nodes += 1;

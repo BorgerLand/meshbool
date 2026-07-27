@@ -7,7 +7,7 @@ use crate::spatial::aabb::Box3D;
 use crate::triangulation::{Polygons, SimplePolygon};
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::hash_table::DeterministicSet;
-use crate::util::math::{get_axis_aligned_projection, next3_i32};
+use crate::util::math::{get_axis_aligned_projection, next3_usize};
 use crate::util::vec_ext;
 use nalgebra::Vector3;
 
@@ -17,10 +17,10 @@ impl MeshBool {
 	// containing a copy of the original. It is the inverse operation of Compose().
 	pub fn decompose(&self) -> Vec<Self> {
 		let mut uf = DisjointSets::new(self.num_vert());
-		for edge in 0..self.tri.halfedge.len() as i32 {
+		for edge in 0..self.tri.halfedge.len() {
 			if self.tri.halfedge.is_forward(edge) {
 				uf.unite(
-					self.tri.halfedge.start(edge) as usize,
+					self.tri.halfedge.start[edge] as usize,
 					self.tri.halfedge.end(edge) as usize,
 				);
 			}
@@ -45,9 +45,9 @@ impl MeshBool {
 
 			let mut face_new2old: Vec<i32> = Vec::with_capacity(self.num_tri());
 			let halfedge = &self.tri.halfedge;
-			for face in 0..self.num_tri() as i32 {
-				if vert_label[halfedge.start(3 * face) as usize] == i {
-					face_new2old.push(face);
+			for face in 0..self.num_tri() {
+				if vert_label[halfedge.start[3 * face] as usize] == i {
+					face_new2old.push(face as i32);
 				}
 			}
 
@@ -84,11 +84,11 @@ impl MeshBool {
 		let projection = get_axis_aligned_projection(Vector3::new(0.0, 0.0, 1.0));
 		let mut cusps = Vec::with_capacity(self.num_edge());
 		for i in 0..self.tri.halfedge.len() {
-			let pair = self.tri.halfedge.pair(i as i32);
-			if self.tri.normal[(self.tri.halfedge.pair(pair) / 3) as usize].z >= 0.0
-				&& self.tri.normal[(pair / 3) as usize].z < 0.0
+			let pair = self.tri.halfedge.pair[i] as usize;
+			if self.tri.normal[(self.tri.halfedge.pair[pair] / 3) as usize].z >= 0.0
+				&& self.tri.normal[pair / 3].z < 0.0
 			{
-				cusps.push(self.tri.halfedge.get(i as i32));
+				cusps.push(self.tri.halfedge.get(i));
 			}
 		}
 
@@ -183,7 +183,7 @@ impl MeshBool {
 				let mut min = f64::INFINITY;
 				let mut max = f64::NEG_INFINITY;
 				for j in 0..3 {
-					let z: f64 = self.vert_pos[self.tri.halfedge.start(3 * tri + j) as usize].z;
+					let z: f64 = self.vert_pos[self.tri.halfedge.start[3 * tri + j] as usize].z;
 					min = min.min(z);
 					max = max.max(z);
 				}
@@ -203,11 +203,12 @@ impl MeshBool {
 
 			let mut k = 0;
 			for j in 0..3 {
-				if self.vert_pos[self.tri.halfedge.start(3 * start_tri + j) as usize].z > height
-					&& self.vert_pos[self.tri.halfedge.start(3 * start_tri + next3_i32(j)) as usize]
+				if self.vert_pos[self.tri.halfedge.start[3 * start_tri + j] as usize].z > height
+					&& self.vert_pos
+						[self.tri.halfedge.start[3 * start_tri + next3_usize(j)] as usize]
 						.z <= height
 				{
-					k = next3_i32(j);
+					k = next3_usize(j);
 					break;
 				}
 			}
@@ -217,18 +218,18 @@ impl MeshBool {
 				tris.take(&tri).unwrap();
 				let edge = 3 * tri + k;
 				if self.vert_pos[self.tri.halfedge.end(edge) as usize].z <= height {
-					k = next3_i32(k);
+					k = next3_usize(k);
 				}
 
 				let up = 3 * tri + k;
-				let below = self.vert_pos[self.tri.halfedge.start(up) as usize];
+				let below = self.vert_pos[self.tri.halfedge.start[up] as usize];
 				let above = self.vert_pos[self.tri.halfedge.end(up) as usize];
 				let a = (height - below.z) / (above.z - below.z);
 				poly.push(below.lerp(&above, a).xy().into());
 
-				let pair = self.tri.halfedge.pair(up);
+				let pair = self.tri.halfedge.pair[up] as usize;
 				tri = pair / 3;
-				k = next3_i32(pair % 3);
+				k = next3_usize(pair % 3);
 
 				if tri == start_tri {
 					break;

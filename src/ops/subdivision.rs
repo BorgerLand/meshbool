@@ -32,17 +32,17 @@ impl MeshBool {
 		let num_tri = self.num_tri();
 		let mut half2edge = unsafe { vec_ext::uninit(2 * num_edge) };
 		for edge in 0..num_edge {
-			let idx = edges[edge].halfedge_idx;
-			half2edge[idx as usize] = edge as i32;
-			half2edge[self.tri.halfedge.pair(idx) as usize] = edge as i32;
+			let idx = edges[edge].halfedge_idx as usize;
+			half2edge[idx] = edge as i32;
+			half2edge[self.tri.halfedge.pair[idx] as usize] = edge as i32;
 		}
 
 		let face_halfedges =
-			Vec::from_iter((0..num_tri as i32).map(|tri| get_halfedges(&self.tri.halfedge, tri)));
+			Vec::from_iter((0..num_tri).map(|tri| get_halfedges(&self.tri.halfedge, tri)));
 
 		let mut edge_added = Vec::from_iter((0..num_edge).map(|i| {
 			let edge = &edges[i];
-			let h_idx = edge.halfedge_idx;
+			let h_idx = edge.halfedge_idx as usize;
 			if is_marked_inside_quad(h_idx) {
 				0
 			} else {
@@ -73,16 +73,16 @@ impl MeshBool {
 				.into_iter()
 				.map(|i| {
 					let edge = &edges[i];
-					let h_idx = edge.halfedge_idx;
-					if is_marked_inside_quad(h_idx as i32) {
+					let h_idx = edge.halfedge_idx as usize;
+					if is_marked_inside_quad(h_idx) {
 						edge_added[i]
 					} else {
 						let this_added = edge_added[i];
-						let added = |mut h_idx: i32| {
+						let added = |mut h_idx: usize| {
 							let mut longest = 0;
 							let mut total = 0;
 							for _ in 0..3 {
-								let added = edge_added[half2edge[h_idx as usize] as usize];
+								let added = edge_added[half2edge[h_idx] as usize];
 								longest = longest.max(added);
 								total += added;
 								h_idx = next_halfedge(h_idx);
@@ -106,7 +106,8 @@ impl MeshBool {
 							}
 						};
 
-						edge_added[i] + added(h_idx).max(added(self.tri.halfedge.pair(h_idx)))
+						edge_added[i]
+							+ added(h_idx).max(added(self.tri.halfedge.pair[h_idx] as usize))
 					}
 				})
 				.collect();
@@ -125,7 +126,7 @@ impl MeshBool {
 			let n = edge_added[i];
 			let offset = edge_offset[i];
 
-			let indices = get_indices(&self.tri.halfedge, edges[i].halfedge_idx);
+			let indices = get_indices(&self.tri.halfedge, edges[i].halfedge_idx as usize);
 			if indices.tri < 0 {
 				continue; // inside quad
 			}
@@ -157,7 +158,7 @@ impl MeshBool {
 		));
 
 		let interior_offset = Vec::from_iter(vec_ext::exclusive_scan_with_total(
-			sub_tris.iter().map(|part| part.num_interior() as i32),
+			sub_tris.iter().map(|part| part.num_interior()),
 			vert_bary.len() as i32,
 		));
 
@@ -181,9 +182,9 @@ impl MeshBool {
 					tri3[i] = -1;
 					continue;
 				}
-				tri3[i] = self.tri.halfedge.start(halfedges[i]);
+				tri3[i] = self.tri.halfedge.start[halfedges[i] as usize];
 				edge_offsets[i] = edge_offset[half2edge[halfedges[i] as usize] as usize];
-				edge_fwd[i] = self.tri.halfedge.is_forward(halfedges[i]);
+				edge_fwd[i] = self.tri.halfedge.is_forward(halfedges[i] as usize);
 			}
 
 			let new_tris =
@@ -232,7 +233,8 @@ impl MeshBool {
 				for i in 0..3 {
 					tri_pos.set_column(
 						i,
-						&self.vert_pos[self.tri.halfedge.start(halfedges[i]) as usize].coords,
+						&self.vert_pos[self.tri.halfedge.start[halfedges[i] as usize] as usize]
+							.coords,
 					);
 				}
 				tri_pos * bary.uvw.xyz()
@@ -241,7 +243,8 @@ impl MeshBool {
 				for i in 0..4 {
 					quad_pos.set_column(
 						i,
-						&self.vert_pos[self.tri.halfedge.start(halfedges[i]) as usize].coords,
+						&self.vert_pos[self.tri.halfedge.start[halfedges[i] as usize] as usize]
+							.coords,
 					);
 				}
 				quad_pos * bary.uvw
@@ -272,7 +275,7 @@ impl MeshBool {
 			// copy interior prop verts and forward edge prop verts
 			for i in 0..added_verts {
 				let vert = num_prop_vert + i;
-				let bary = vert_bary[num_vert + i as usize];
+				let bary = vert_bary[num_vert + i];
 				let halfedges = face_halfedges[bary.tri as usize];
 				let prop_stride = self.prop_stride();
 
@@ -280,16 +283,17 @@ impl MeshBool {
 					if halfedges[3] < 0 {
 						let mut tri_prop = Vector3::default();
 						for i in 0..3 {
-							tri_prop[i as usize] =
-								self.properties.data[self.tri.halfedge.prop(3 * bary.tri + i)
-									as usize * prop_stride + p];
+							tri_prop[i] = self.properties.data[self.tri.halfedge.prop
+								[3 * (bary.tri as usize) + i]
+								as usize * prop_stride + p];
 						}
 						prop[vert * prop_stride + p] = tri_prop.dot(&bary.uvw.xyz());
 					} else {
 						let mut quad_prop = Vector4::default();
 						for i in 0..4 {
-							quad_prop[i] = self.properties.data
-								[self.tri.halfedge.prop(halfedges[i]) as usize * prop_stride + p];
+							quad_prop[i] = self.properties.data[self.tri.halfedge.prop
+								[halfedges[i] as usize]
+								as usize * prop_stride + p];
 						}
 						prop[vert * prop_stride + p] = quad_prop.dot(&bary.uvw);
 					}
@@ -304,9 +308,9 @@ impl MeshBool {
 				let prop_stride = self.prop_stride();
 
 				let frac = 1.0 / (n + 1) as f64;
-				let halfedge_idx = self.tri.halfedge.pair(edges[i].halfedge_idx);
-				let prop0 = self.tri.halfedge.prop(halfedge_idx) as usize;
-				let prop1 = self.tri.halfedge.prop(next_halfedge(halfedge_idx)) as usize;
+				let halfedge_idx = self.tri.halfedge.pair[edges[i].halfedge_idx as usize] as usize;
+				let prop0 = self.tri.halfedge.prop[halfedge_idx] as usize;
+				let prop1 = self.tri.halfedge.prop[next_halfedge(halfedge_idx)] as usize;
 				for i in 0..n {
 					for p in 0..prop_stride {
 						prop[(offset + i) * prop_stride + p] = lerp(
@@ -333,14 +337,14 @@ impl MeshBool {
 						tri3[i] = -1;
 						continue;
 					}
-					tri3[i] = self.tri.halfedge.prop(halfedges[i]);
+					tri3[i] = self.tri.halfedge.prop[halfedges[i] as usize];
 					edge_offsets[i] = edge_offset[half2edge[halfedges[i] as usize] as usize];
-					if !self.tri.halfedge.is_forward(halfedges[i]) {
-						let pair = self.tri.halfedge.pair(halfedges[i]);
-						if self.tri.halfedge.prop(pair)
-							!= self.tri.halfedge.prop(next_halfedge(halfedges[i]))
-							|| self.tri.halfedge.prop(next_halfedge(pair))
-								!= self.tri.halfedge.prop(halfedges[i])
+					if !self.tri.halfedge.is_forward(halfedges[i] as usize) {
+						let pair = self.tri.halfedge.pair[halfedges[i] as usize] as usize;
+						if self.tri.halfedge.prop[pair]
+							!= self.tri.halfedge.prop[next_halfedge(halfedges[i] as usize)]
+							|| self.tri.halfedge.prop[next_halfedge(pair)]
+								!= self.tri.halfedge.prop[halfedges[i] as usize]
 						{
 							// if the edge doesn't match, point to the backward edge
 							// propverts.
@@ -409,23 +413,19 @@ impl TmpEdge {
 
 #[inline(always)]
 fn create_tmp_edges(halfedge: &Halfedges) -> Vec<TmpEdge> {
-	let edges: Vec<TmpEdge>;
-	edges = (0..halfedge.len())
-		.into_iter()
-		.map(|idx| {
-			let idx = idx as i32;
-			TmpEdge::new(
-				halfedge.start(idx),
-				halfedge.end(idx),
-				if halfedge.is_forward(idx) { idx } else { -1 },
-			)
-		})
-		.collect();
+	let edges = Vec::from_iter((0..halfedge.len()).into_iter().map(|idx| {
+		TmpEdge::new(
+			halfedge.start[idx],
+			halfedge.end(idx),
+			if halfedge.is_forward(idx) {
+				idx as i32
+			} else {
+				-1
+			},
+		)
+	}));
 
-	let edges: Vec<TmpEdge> = edges
-		.into_iter()
-		.filter(|edge| !(edge.halfedge_idx < 0))
-		.collect();
+	let edges = Vec::from_iter(edges.into_iter().filter(|edge| !(edge.halfedge_idx < 0)));
 	debug_assert_eq!(edges.len(), halfedge.len() / 2, "Not oriented!");
 	return edges;
 }
@@ -434,31 +434,33 @@ fn create_tmp_edges(halfedge: &Halfedges) -> Vec<TmpEdge> {
 ///that triangle and halfedges[3] = -1, or if the triangle is part of a quad, it
 ///returns those four indices. If the triangle is part of a quad and is not the
 ///lower of the two triangle indices, it returns all -1s.
-fn get_halfedges(halfedge: &Halfedges, tri: i32) -> Vector4<i32> {
+fn get_halfedges(halfedge: &Halfedges, tri: usize) -> Vector4<i32> {
 	let mut halfedges = Vector4::repeat(-1i32);
 	for i in 0..3 {
-		halfedges[i as usize] = 3 * tri + i as i32;
+		halfedges[i] = (3 * tri + i) as i32;
 	}
 	let neighbor = get_neighbor(tri);
 	if neighbor >= 0 {
+		let neighbor = neighbor as usize;
+
 		// quad
-		let pair = halfedge.pair(3 * tri + neighbor);
+		let pair = halfedge.pair[3 * tri + neighbor] as usize;
 		if pair / 3 < tri {
 			return Vector4::repeat(-1i32); // only process lower tri index
 		}
 		// The order here matters to keep small quads split the way they started, or
 		// else it can create a 4-manifold edge.
-		halfedges[2] = next_halfedge(halfedges[neighbor as usize]);
-		halfedges[3] = next_halfedge(halfedges[2]);
-		halfedges[0] = next_halfedge(pair);
-		halfedges[1] = next_halfedge(halfedges[0]);
+		halfedges[2] = next_halfedge(halfedges[neighbor] as usize) as i32;
+		halfedges[3] = next_halfedge(halfedges[2] as usize) as i32;
+		halfedges[0] = next_halfedge(pair) as i32;
+		halfedges[1] = next_halfedge(halfedges[0] as usize) as i32;
 	}
 	return halfedges;
 }
 
 ///Returns true if this halfedge is an interior of a quad, as defined by its
 ///halfedge tangent having negative weight.
-fn is_marked_inside_quad(_halfedge: i32) -> bool {
+fn is_marked_inside_quad(_halfedge: usize) -> bool {
 	// if !self.tri.halfedge_tangent.is_empty() {
 	// 	return self.tri.halfedge_tangent[halfedge as usize].w < 0;
 	// }
@@ -470,7 +472,7 @@ fn is_marked_inside_quad(_halfedge: i32) -> bool {
 ///CPU for simplicity for now. Using AtomicCAS on .tri should work for a GPU
 ///version if desired.
 fn fill_retained_verts(halfedge: &Halfedges, vert_bary: &mut [Barycentric]) {
-	for tri in 0..halfedge.num_tri() as i32 {
+	for tri in 0..halfedge.num_tri() {
 		for i in 0..3 {
 			let indices = get_indices(halfedge, 3 * tri + i);
 			if indices.start4 < 0 {
@@ -478,7 +480,7 @@ fn fill_retained_verts(halfedge: &Halfedges, vert_bary: &mut [Barycentric]) {
 			}
 			let mut uvw = Vector4::repeat(0.0f64);
 			uvw[indices.start4 as usize] = 1.0;
-			vert_bary[halfedge.start(3 * tri + i) as usize] = Barycentric {
+			vert_bary[halfedge.start[3 * tri + i] as usize] = Barycentric {
 				tri: indices.tri,
 				uvw,
 			};
@@ -496,9 +498,9 @@ struct BaryIndices {
 ///GetHalfedges(val.tri)[val.start4] points back to this halfedge, and val.end4
 ///will point to the next one. This function handles this for both triangles and
 ///quads. Returns {-1, -1, -1} if the edge is the interior of a quad.
-fn get_indices(halfedge: &Halfedges, edge: i32) -> BaryIndices {
+fn get_indices(halfedge: &Halfedges, edge: usize) -> BaryIndices {
 	let mut tri = edge / 3;
-	let mut idx = edge % 3;
+	let mut idx = (edge % 3) as i32;
 	let neighbor = get_neighbor(tri);
 
 	if idx == neighbor {
@@ -510,13 +512,13 @@ fn get_indices(halfedge: &Halfedges, edge: i32) -> BaryIndices {
 	} else if neighbor < 0 {
 		// tri
 		BaryIndices {
-			tri,
+			tri: tri as i32,
 			start4: idx,
 			end4: next3_i32(idx),
 		}
 	} else {
 		// quad
-		let pair = halfedge.pair(3 * tri + neighbor);
+		let pair = halfedge.pair[3 * tri + (neighbor as usize)] as usize;
 		if pair / 3 < tri {
 			tri = pair / 3;
 			idx = if next3_i32(neighbor) == idx { 0 } else { 1 };
@@ -524,7 +526,7 @@ fn get_indices(halfedge: &Halfedges, edge: i32) -> BaryIndices {
 			idx = if next3_i32(neighbor) == idx { 2 } else { 3 };
 		}
 		BaryIndices {
-			tri,
+			tri: tri as i32,
 			start4: idx,
 			end4: (idx + 1) % 4,
 		}
@@ -533,11 +535,11 @@ fn get_indices(halfedge: &Halfedges, edge: i32) -> BaryIndices {
 
 ///Returns the tri side index (0-2) connected to the other side of this quad if
 ///this tri is part of a quad, or -1 otherwise.
-fn get_neighbor(tri: i32) -> i32 {
+fn get_neighbor(tri: usize) -> i32 {
 	let mut neighbor = -1;
 	for i in 0..3 {
 		if is_marked_inside_quad(3 * tri + i) {
-			neighbor = if neighbor == -1 { i } else { -2 };
+			neighbor = if neighbor == -1 { i as i32 } else { -2 };
 		}
 	}
 	return neighbor;
@@ -660,7 +662,7 @@ impl Partition {
 		let old = new_verts.len();
 		new_verts.extend((old..self.vert_bary.len()).map(|i| interior_offset + (i - old) as i32));
 
-		(0..self.tri_vert.len() as usize)
+		(0..self.tri_vert.len())
 			.map(|tri_idx| {
 				let mut coords = [0; 3];
 				for j in 0..3 {
