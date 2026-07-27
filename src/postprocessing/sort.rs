@@ -23,7 +23,7 @@ pub fn sort_and_compact_geometry(
 	mut tri: TrianglesPartial,
 	bbox: Box3D,
 ) -> Option<BVHCollider> {
-	sort_verts(vert_pos, &mut tri.halfedge, bbox);
+	sort_verts(vert_pos, &mut tri.halfedge, bbox, properties.stride > 0);
 
 	if vert_pos.len() == 0 {
 		//decimated
@@ -104,14 +104,19 @@ pub fn sort_and_compact_geometry(
 }
 
 ///Sorts the vertices according to their Morton code.
-fn sort_verts(vert_pos: &mut Vec<Point3<f64>>, halfedge: &mut Halfedges, bbox: Box3D) {
+fn sort_verts(
+	vert_pos: &mut Vec<Point3<f64>>,
+	halfedge: &mut Halfedges,
+	bbox: Box3D,
+	has_prop: bool,
+) {
 	let vert_morton = Vec::from_iter(vert_pos.iter().map(|&vert| morton_code(vert, bbox)));
 
 	let num_vert = vert_pos.len();
 	let mut vert_new2old = Vec::from_iter(0..num_vert as i32);
 	vert_new2old.sort_unstable_by_key(|&i| vert_morton[i as usize]);
 
-	reindex_verts(halfedge, &vert_new2old, num_vert);
+	reindex_verts(halfedge, &vert_new2old, num_vert, has_prop);
 
 	// Verts were flagged for removal with NaNs and assigned kNoCode to sort
 	// them to the end, which allows them to be removed.
@@ -124,7 +129,12 @@ fn sort_verts(vert_pos: &mut Vec<Point3<f64>>, halfedge: &mut Halfedges, bbox: B
 ///Updates the halfedges to point to new vert indices based on a mapping,
 ///vertNew2Old. This may be a subset, so the total number of original verts is
 ///also given.
-pub fn reindex_verts(halfedge: &mut Halfedges, vert_new2old: &[i32], old_num_vert: usize) {
+pub fn reindex_verts(
+	halfedge: &mut Halfedges,
+	vert_new2old: &[i32],
+	old_num_vert: usize,
+	has_prop: bool,
+) {
 	let vert_old2new = unsafe { vec_ext::scatter(vert_new2old.iter(), old_num_vert) };
 	for idx in 0..halfedge.len() {
 		let start_vert = halfedge.start[idx];
@@ -133,6 +143,9 @@ pub fn reindex_verts(halfedge: &mut Halfedges, vert_new2old: &[i32], old_num_ver
 		}
 		let new_start = vert_old2new[start_vert as usize];
 		halfedge.start[idx] = new_start;
+		if !has_prop {
+			halfedge.prop[idx] = new_start;
+		}
 	}
 }
 

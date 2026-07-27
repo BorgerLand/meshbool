@@ -56,7 +56,12 @@ impl MeshBool {
 			}
 
 			let mut tri = gather_tris(&self.tri, &face_new2old);
-			reindex_verts(&mut tri.halfedge, &vert_new2old, self.num_vert());
+			reindex_verts(
+				&mut tri.halfedge,
+				&vert_new2old,
+				self.num_vert(),
+				self.num_prop_vert() > 0,
+			);
 			let mut properties = self.properties.clone();
 			let bbox = Box3D::from_cloud(&vert_pos);
 			let collider =

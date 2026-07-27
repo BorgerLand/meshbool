@@ -33,14 +33,7 @@ impl MeshBool {
 		prop_func: Option<impl FnMut(&mut [f64], Point3<f64>, &[f64])>,
 	) -> Self {
 		let old_prop_stride = self.prop_stride();
-
-		let mut halfedge = self.tri.halfedge.clone();
-		if old_prop_stride == 0 && prop_stride > 0 {
-			//workaround for removal of logic here:
-			//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-			halfedge.init_prop_from_start();
-		}
-
+		let halfedge = self.tri.halfedge.clone();
 		let properties = if prop_stride == 0 {
 			Vec::new()
 		} else {
@@ -154,17 +147,7 @@ impl MeshBool {
 			}
 		}
 
-		let mut halfedge = self.tri.halfedge.clone();
-		let old_halfedge_prop = Vec::from_iter((0..self.tri.halfedge.len()).map(|i| {
-			halfedge.prop[i] = -1;
-			(if old_prop_stride > 0 {
-				&self.tri.halfedge.prop
-			} else {
-				//workaround for removal of logic here:
-				//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-				&self.tri.halfedge.start
-			})[i]
-		}));
+		let mut prop = vec![-1; self.tri.halfedge.len()];
 
 		// Cached per-meshID inverse-normal-transform for the legacy non-zero
 		// normalIdx path. Lazily populated on first lookup; reused across all
@@ -185,7 +168,7 @@ impl MeshBool {
 		let vert_normal = self.calculate_vert_normals_internal();
 		let mut properties = unsafe { vec_ext::uninit(prop_stride * self.num_prop_vert()) };
 		for start_edge in 0..num_edge {
-			if halfedge.prop[start_edge] >= 0 {
+			if prop[start_edge] >= 0 {
 				continue;
 			}
 			let vert = self.tri.halfedge.start[start_edge] as usize;
@@ -208,20 +191,21 @@ impl MeshBool {
 					get_transform(self.tri.relation[start_edge / 3].instance_id) * world_normal
 				};
 				let mut last_prop = None;
-				halfedge.for_vert_mut(start_edge, |halfedge, current| {
-					let prop = old_halfedge_prop[current];
-					halfedge.prop[current] = prop;
-					let prop = prop as usize;
-					if Some(prop) == last_prop {
+				self.tri.halfedge.for_vert(start_edge, |current| {
+					let old_prop = self.tri.halfedge.prop[current];
+					prop[current] = old_prop;
+					let old_prop = old_prop as usize;
+					if Some(old_prop) == last_prop {
 						return;
 					}
-					last_prop = Some(prop);
+					last_prop = Some(old_prop);
 					// update property vertex
-					let start = &self.properties.data[(prop * old_prop_stride)..];
-					properties[(prop * prop_stride)..(prop * prop_stride + old_prop_stride)]
+					let start = &self.properties.data[(old_prop * old_prop_stride)..];
+					properties
+						[(old_prop * prop_stride)..(old_prop * prop_stride + old_prop_stride)]
 						.copy_from_slice(&start[..old_prop_stride]);
 					for i in 0..3 {
-						properties[prop * prop_stride + normal_idx + i] = normal[i];
+						properties[old_prop * prop_stride + normal_idx + i] = normal[i];
 					}
 				});
 				continue;
@@ -307,11 +291,11 @@ impl MeshBool {
 			let mut last_prop = None;
 			let mut new_prop_vert = 0;
 			let mut idx = 0;
-			halfedge.for_vert_mut(end_edge, |halfedge, current1| {
-				let prop = old_halfedge_prop[current1] as usize;
-				let start = &self.properties.data[(prop * old_prop_stride)..];
+			self.tri.halfedge.for_vert(end_edge, |current1| {
+				let old_prop = self.tri.halfedge.prop[current1] as usize;
+				let start = &self.properties.data[(old_prop * old_prop_stride)..];
 
-				if groups[idx] != last_group && groups[idx] != 0 && Some(prop) == last_prop {
+				if groups[idx] != last_group && groups[idx] != 0 && Some(old_prop) == last_prop {
 					// split property vertex, duplicating but with an updated normal
 					last_group = groups[idx];
 					new_prop_vert = properties.len() / prop_stride;
@@ -323,20 +307,21 @@ impl MeshBool {
 						properties[new_prop_vert * prop_stride + normal_idx + i] =
 							normals[groups[idx] as usize][i];
 					}
-				} else if Some(prop) != last_prop {
+				} else if Some(old_prop) != last_prop {
 					// update property vertex
-					last_prop = Some(prop);
-					new_prop_vert = prop;
-					properties[(prop * prop_stride)..(prop * prop_stride + old_prop_stride)]
+					last_prop = Some(old_prop);
+					new_prop_vert = old_prop;
+					properties
+						[(old_prop * prop_stride)..(old_prop * prop_stride + old_prop_stride)]
 						.copy_from_slice(&start[..old_prop_stride]);
 					for i in 0..3 {
-						properties[prop * prop_stride + normal_idx + i] =
+						properties[old_prop * prop_stride + normal_idx + i] =
 							normals[groups[idx] as usize][i];
 					}
 				}
 
 				// point to updated property vertex
-				halfedge.prop[current1] = new_prop_vert as i32;
+				prop[current1] = new_prop_vert as i32;
 				idx += 1;
 			});
 		}
@@ -350,7 +335,11 @@ impl MeshBool {
 				stride: prop_stride,
 			},
 			tri: Triangles {
-				halfedge,
+				halfedge: Halfedges {
+					start: self.tri.halfedge.start.clone(),
+					pair: self.tri.halfedge.pair.clone(),
+					prop,
+				},
 				normal: self.tri.normal.clone(),
 				relation: self.tri.relation.clone(),
 			},
@@ -476,19 +465,12 @@ impl MeshBool {
 		let prop_stride = old_prop_stride.max(gaussian_idx.max(mean_idx).unwrap_or(0) + 1);
 		let mut properties = vec![0.0; prop_stride * self.num_prop_vert()];
 
-		let mut halfedge = self.tri.halfedge.clone();
-		if old_prop_stride == 0 {
-			//workaround for removal of logic here:
-			//https://github.com/elalish/manifold/blob/51f178f012a2951734bbe4583b384066300e317f/src/sort.cpp#L354-L356
-			halfedge.init_prop_from_start();
-		}
-
 		let mut counters: Vec<bool> = vec![false; self.num_prop_vert()];
 		for tri in 0..self.num_tri() {
 			for i in 0..3 {
 				let edge = 3 * tri + i;
-				let vert = halfedge.start[edge] as usize;
-				let prop_vert = halfedge.prop[edge] as usize;
+				let vert = self.tri.halfedge.start[edge] as usize;
+				let prop_vert = self.tri.halfedge.prop[edge] as usize;
 
 				let old = mem::replace(&mut counters[prop_vert], true);
 				if old {
@@ -518,11 +500,7 @@ impl MeshBool {
 				data: properties,
 				stride: prop_stride,
 			},
-			tri: Triangles {
-				halfedge,
-				normal: self.tri.normal.clone(),
-				relation: self.tri.relation.clone(),
-			},
+			tri: self.tri.clone(),
 			instance_relation: self.instance_relation.clone(),
 			collider: self.collider.clone(),
 		}

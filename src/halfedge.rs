@@ -274,7 +274,7 @@ fn prep_halfedges_impl<const HAS_PROP: bool>(
 				CreateHalfedge {
 					start_vert: v0,
 					end_vert: v1,
-					prop_vert: if HAS_PROP { props[i] } else { 0 },
+					prop_vert: if HAS_PROP { props[i] } else { verts[i] },
 				}
 			})
 		})
@@ -391,11 +391,6 @@ impl Halfedges {
 	pub fn pair_up(&mut self, edge0: usize, edge1: usize) {
 		self.pair[edge0] = edge1 as i32;
 		self.pair[edge1] = edge0 as i32;
-	}
-
-	//use when stride increases from 0->more than 0
-	pub fn init_prop_from_start(&mut self) {
-		self.prop = self.start.clone();
 	}
 
 	/// Traverses CW around startEdge.endVert from startEdge to endEdge

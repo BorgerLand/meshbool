@@ -237,14 +237,8 @@ where
 			}
 		}
 
-		let init_prop_from_start = prop2vert.is_none() && prop_stride > 0;
 		drop(prop2vert);
 		let mut halfedge = Halfedges::from_tri_indices(vert_pos.len(), tri_vert, tri_prop);
-		if init_prop_from_start {
-			//tri_prop was none
-			halfedge.init_prop_from_start();
-		}
-
 		if !halfedge.is_manifold() {
 			return Err(MeshGLError::NotManifold);
 		}
