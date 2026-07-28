@@ -303,7 +303,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 
 	// This key is the forward halfedge index of P or Q. Only includes intersected
 	// edges.
-	let mut edges_p = DeterministicMap::new();
+	let mut edges_p = DeterministicMap::new(); //capacity is unpredictable
 	let mut edges_q = DeterministicMap::with_capacity(xv21.p1q2.len() / 2);
 	// This key is the face index of <P, Q>
 	let mut edges_r = DeterministicMap::with_capacity((n12 + n21) as usize);

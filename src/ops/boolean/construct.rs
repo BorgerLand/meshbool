@@ -5,7 +5,6 @@ use crate::spatial::aabb::Box3D;
 use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{atomic_add, get_barycentric, next3_usize, prev3_usize};
 use crate::util::num_convert::OrderedF64;
-use crate::util::vec_ext;
 use nalgebra::{Matrix3, Point3, Vector3, Vector4};
 use std::ops::Deref;
 use std::{array, mem};
@@ -217,11 +216,7 @@ pub fn size_face_normal(
 	face_normal
 }
 
-fn sort_edge_pos(edge_pos: &mut [EdgePos]) {
-	edge_pos.sort_unstable_by_key(|i| (OrderedF64(i.edge_pos), i.vert));
-}
-
-fn pair_up(edge_pos: &mut [EdgePos], mut f: impl FnMut(Halfedge)) {
+fn pair_up(mut edge_pos: Vec<EdgePos>, mut f: impl FnMut(Halfedge)) {
 	// Pair start vertices with end vertices to form edges. The choice of pairing
 	// is arbitrary for the manifoldness guarantee, but must be ordered to be
 	// geometrically valid. If the order does not go start-end-start-end... then
@@ -231,11 +226,38 @@ fn pair_up(edge_pos: &mut [EdgePos], mut f: impl FnMut(Halfedge)) {
 		edge_pos.len() % 2 == 0,
 		"Non-manifold edge! Not an even number of points."
 	);
+
+	if edge_pos.len() == 2 {
+		debug_assert!(
+			edge_pos[0].is_start != edge_pos[1].is_start,
+			"Non-manifold edge!"
+		);
+
+		//append_new_edges will always run this branch, except when
+		//surfaces/vertices of p are coincident/laying directly on
+		//those of q, causing len of either 4 or 6
+		//append_partial_edges depends on number of times this edge
+		//(represented by edge_pos) is chopped to pieces by the other
+		//mesh
+		//this optimization avoids sorting overhead on the common case
+
+		let (start_i, end_i) = if edge_pos[0].is_start { (0, 1) } else { (1, 0) };
+
+		f(Halfedge {
+			start_vert: edge_pos[start_i].vert,
+			end_vert: edge_pos[end_i].vert,
+			paired_halfedge: -1,
+			prop_vert: 0,
+		});
+		return;
+	}
+
 	let n_edges = edge_pos.len() / 2;
-	let middle = vec_ext::partition(edge_pos, |x| x.is_start);
-	debug_assert!(middle == n_edges, "Non-manifold edge!");
-	sort_edge_pos(&mut edge_pos[..middle]);
-	sort_edge_pos(&mut edge_pos[middle..]);
+	edge_pos.sort_unstable_by_key(|i| (!i.is_start, OrderedF64(i.edge_pos), i.vert));
+	debug_assert!(
+		edge_pos.partition_point(|i| i.is_start) == n_edges,
+		"Non-manifold edge!"
+	);
 	for i in 0..n_edges {
 		f(Halfedge {
 			start_vert: edge_pos[i].vert,
@@ -272,7 +294,6 @@ pub fn append_partial_edges(
 	// Per-iter cancel check; the caller's post-call IsCancelled discards the
 	// partial outR.
 	for (edge_a, mut edge_pos_a) in edges_a {
-		sort_edge_pos(&mut edge_pos_a);
 		let edge_a = edge_a as usize;
 		let pair_a = halfedge_a.pair[edge_a] as usize;
 		whole_halfedge_a[edge_a] = false;
@@ -329,7 +350,7 @@ pub fn append_partial_edges(
 			backward_rel.face_id = face_right_a as i32;
 		}
 
-		pair_up(&mut edge_pos_a, |mut e| {
+		pair_up(edge_pos_a, |mut e| {
 			let forward_edge = face_ptr_r[face_left];
 			face_ptr_r[face_left] += 1;
 			let backward_edge = face_ptr_r[face_right];
@@ -367,8 +388,6 @@ pub fn append_new_edges(
 		let face_p = face_p as usize;
 		let face_q = face_q as usize;
 
-		sort_edge_pos(&mut edge_pos);
-
 		let mut bbox = Box3D::default();
 		for edge in edge_pos.iter() {
 			bbox.union_point(vert_pos_r[edge.vert as usize]);
@@ -400,7 +419,7 @@ pub fn append_new_edges(
 			backward_ref.face_id = face_q as i32;
 		}
 
-		pair_up(&mut edge_pos, |mut e| {
+		pair_up(edge_pos, |mut e| {
 			let forward_edge = face_ptr_r[face_left];
 			face_ptr_r[face_left] += 1;
 			let backward_edge = face_ptr_r[face_right];

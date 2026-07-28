@@ -18,26 +18,6 @@ pub unsafe fn uninit<T>(size: usize) -> Vec<T> {
 	vec
 }
 
-///c++ std::partition
-pub fn partition<T, F>(slice: &mut [T], mut predicate: F) -> usize
-where
-	F: FnMut(&T) -> bool,
-{
-	let mut left = 0;
-	let mut right = slice.len();
-
-	while left < right {
-		if predicate(&slice[left]) {
-			left += 1;
-		} else {
-			right -= 1;
-			slice.swap(left, right);
-		}
-	}
-
-	left
-}
-
 pub fn exclusive_scan_with_total<IO>(
 	input: impl IntoIterator<Item = IO>,
 	init: IO,
