@@ -4,10 +4,10 @@ use crate::mesh_relations::TriRelation;
 use crate::triangulation::{
 	HalfedgeTriangulation, PolyVert, PolygonsIdx, SimplePolygonIdx, triangulate_idx_halfedges,
 };
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{ccw, get_axis_aligned_projection, next3_usize};
 use crate::util::vec_ext;
 use nalgebra::{Matrix2x3, Matrix3x2, Point3, Vector3};
+use rustc_hash::FxHashMap;
 use std::collections::VecDeque;
 use std::collections::hash_map::Entry;
 use std::mem;
@@ -48,7 +48,7 @@ pub fn face2tri(
 	let mut tri_offset: Vec<usize> = unsafe { vec_ext::uninit(face_edge.len()) };
 	*tri_offset.last_mut().unwrap() = 0;
 
-	let mut results: DeterministicMap<i32, HalfedgeTriangulation> = DeterministicMap::new();
+	let mut results: FxHashMap<i32, HalfedgeTriangulation> = FxHashMap::default();
 	for face in 0..face_edge.len() - 1 {
 		let num_edge = face_edge[face + 1] - face_edge[face];
 		if num_edge == 0 {
@@ -268,7 +268,7 @@ fn output_face(
 ///vertex indices into the returned polygons structure, it will use the halfedge
 ///indices instead.
 pub fn assemble_halfedges(edges: &[Halfedge], start_halfedge_idx: i32) -> Vec<Vec<i32>> {
-	let mut vert_edge: DeterministicMap<i32, VecDeque<i32>> = DeterministicMap::new(); //originally a c++ multimap
+	let mut vert_edge: FxHashMap<i32, VecDeque<i32>> = FxHashMap::default(); //originally a c++ multimap
 	for (i, edge) in edges.iter().enumerate() {
 		vert_edge
 			.entry(edge.start_vert)

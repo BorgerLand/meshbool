@@ -1,7 +1,7 @@
 use crate::halfedge::Halfedge;
 use crate::triangulation::ear_clip::triangulate_ear_clip;
-use crate::util::hash_table::DeterministicMap;
 use nalgebra::{Point2, Vector3};
+use rustc_hash::FxHashMap;
 use std::collections::hash_map::Entry;
 
 #[cfg(feature = "test_thoroughly")]
@@ -185,7 +185,7 @@ fn triangulate_convex(polys: &PolygonsIdx) -> HalfedgeTriangulation {
 pub struct HalfedgeTriangulation {
 	pub halfedges: Vec<Halfedge>,
 	pub contour_end: usize,
-	edge2halfedge: DeterministicMap<u64, Vec<i32>>,
+	edge2halfedge: FxHashMap<u64, Vec<i32>>,
 }
 
 impl HalfedgeTriangulation {
@@ -193,7 +193,7 @@ impl HalfedgeTriangulation {
 		Self {
 			halfedges: Vec::default(),
 			contour_end: 0,
-			edge2halfedge: DeterministicMap::default(),
+			edge2halfedge: FxHashMap::default(),
 		}
 	}
 
@@ -232,7 +232,7 @@ impl HalfedgeTriangulation {
 	}
 
 	fn finalize(&mut self) {
-		self.edge2halfedge = DeterministicMap::new();
+		self.edge2halfedge = FxHashMap::default();
 	}
 
 	fn triangles(&self) -> Vec<Vector3<i32>> {
@@ -346,7 +346,7 @@ fn check_topology(halfedges: &[PolyEdge]) {
 
 #[cfg(feature = "test_thoroughly")]
 fn check_geometry(triangles: &[Vector3<i32>], polys: &PolygonsIdx, epsilon: f64) {
-	let mut vert_pos: DeterministicMap<i32, Point2<f64>> = DeterministicMap::new();
+	let mut vert_pos: FxHashMap<i32, Point2<f64>> = FxHashMap::default();
 	for poly in polys {
 		for i in 0..poly.len() {
 			vert_pos.insert(poly[i].idx, poly[i].pos);

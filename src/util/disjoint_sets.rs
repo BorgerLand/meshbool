@@ -1,4 +1,4 @@
-use crate::util::hash_table::DeterministicMap;
+use rustc_hash::FxHashMap;
 use std::mem;
 
 ///from https://github.com/wjakob/dset, changed to add connected component
@@ -65,7 +65,7 @@ impl DisjointSets {
 
 	pub fn connected_components(&mut self) -> (Vec<i32>, usize) {
 		let mut lonely_nodes = 0;
-		let mut to_label: DeterministicMap<u32, i32> = DeterministicMap::new();
+		let mut to_label: FxHashMap<u32, i32> = FxHashMap::default();
 		let components = (0..self.data.len())
 			.map(|i| {
 				// we optimize for connected component of size 1

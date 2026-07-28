@@ -1,10 +1,10 @@
 use crate::MeshBool;
 use crate::mesh_relations::{InstanceRelation, all_instances_have_normals};
 use crate::meshgl::MeshGL;
-use crate::util::hash_table::DeterministicSet;
 use crate::util::math::{normal_transform, safe_normalize3};
 use crate::util::num_convert::LossyFrom;
 use nalgebra::{Matrix3x4, Vector2, Vector3};
+use rustc_hash::FxHashSet;
 use std::any::TypeId;
 use std::array;
 
@@ -94,8 +94,7 @@ impl MeshBool {
 			}
 		};
 
-		let mut unhandled_instance =
-			DeterministicSet::from_iter(0..self.instance_relation.len() as u32);
+		let mut unhandled_instance = FxHashSet::from_iter(0..self.instance_relation.len() as u32);
 		let mut last_id = None;
 		for tri in 0..num_tri {
 			let old_tri = tri_new2old[tri] as usize;

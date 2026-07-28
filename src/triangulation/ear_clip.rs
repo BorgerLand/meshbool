@@ -1,10 +1,10 @@
 use crate::spatial::aabb::Box2D;
 use crate::spatial::tree2d;
 use crate::triangulation::{HalfedgeTriangulation, PolyVert, PolygonsIdx};
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{K_PRECISION, ccw, safe_normalize2};
 use crate::util::multiset::{Handle, MultiSet};
 use nalgebra::{Matrix2, Point2, Vector2};
+use rustc_hash::FxHashMap;
 use std::ops::Range;
 use std::ptr;
 
@@ -42,7 +42,7 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, epsilon: &mut f64) -> HalfedgeT
 	//The set of starting points, one for each simple polygon.
 	let mut simples = Vec::new();
 	//Maps each hole (by way of starting point) to its bounding box.
-	let mut hole2bbox = DeterministicMap::new();
+	let mut hole2bbox = FxHashMap::default();
 
 	let starts = initialize(&mut polygon, &polygon_range, epsilon, &mut result, polys);
 
@@ -194,7 +194,7 @@ fn clip_if_degenerate(
 fn find_start(
 	polygon: &mut Vec<Vert>,
 	polygon_range: &Range<usize>,
-	hole2bbox: &mut DeterministicMap<usize, Box2D>,
+	hole2bbox: &mut FxHashMap<usize, Box2D>,
 	holes: &mut MultiSet<usize>,
 	simples: &mut Vec<usize>,
 	outers: &mut Vec<usize>,
@@ -376,7 +376,7 @@ fn cut_keyhole(
 	polygon: &mut Vec<Vert>,
 	polygon_range: &Range<usize>,
 	outers: &Vec<usize>,
-	hole2bbox: &DeterministicMap<usize, Box2D>,
+	hole2bbox: &FxHashMap<usize, Box2D>,
 	epsilon: f64,
 ) {
 	let bbox = hole2bbox.get(&start).unwrap();

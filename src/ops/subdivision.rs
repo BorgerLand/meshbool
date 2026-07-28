@@ -1,9 +1,9 @@
 use crate::halfedge::{Halfedges, next_halfedge};
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{lerp, next3_i32};
 use crate::util::vec_ext;
 use crate::{MeshBool, Properties, Triangles};
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3, Vector4};
+use rustc_hash::FxHashMap;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
@@ -545,8 +545,8 @@ fn get_neighbor(tri: usize) -> i32 {
 	return neighbor;
 }
 
-static PARTITION_CACHE: LazyLock<Mutex<DeterministicMap<Vector4<i32>, Partition>>> =
-	LazyLock::new(|| Mutex::new(DeterministicMap::new()));
+static PARTITION_CACHE: LazyLock<Mutex<FxHashMap<Vector4<i32>, Partition>>> =
+	LazyLock::new(|| Mutex::new(FxHashMap::default()));
 
 #[derive(Default, Clone)]
 struct Partition {

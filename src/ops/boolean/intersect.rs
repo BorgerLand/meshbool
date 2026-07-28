@@ -2,10 +2,10 @@ use crate::MeshBool;
 use crate::halfedge::Halfedges;
 use crate::spatial::aabb::Box3D;
 use crate::util::disjoint_sets::DisjointSets;
-use crate::util::hash_table::DeterministicSet;
 use crate::util::math::next3_usize;
 use core::f64;
 use nalgebra::{Point3, Vector2, Vector3, Vector4};
+use rustc_hash::FxHashSet;
 use std::mem;
 use std::ops::DerefMut;
 
@@ -373,7 +373,7 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 	}
 
 	// find components, the hope is the number of components should be small
-	let mut components = DeterministicSet::new();
+	let mut components = FxHashSet::default();
 	for v in 0..a.vert_pos.len() {
 		components.insert(u_a.find(v));
 	}

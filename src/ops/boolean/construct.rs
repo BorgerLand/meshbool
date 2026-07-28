@@ -2,10 +2,10 @@ use crate::MeshBool;
 use crate::halfedge::{Halfedge, Halfedges, next_halfedge};
 use crate::mesh_relations::{TriRelation, tri_has_normals};
 use crate::spatial::aabb::Box3D;
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{atomic_add, get_barycentric, next3_usize, prev3_usize};
 use crate::util::num_convert::OrderedF64;
 use nalgebra::{Matrix3, Point3, Vector3, Vector4};
+use rustc_hash::FxHashMap;
 use std::ops::Deref;
 use std::{array, mem};
 
@@ -39,8 +39,8 @@ pub struct EdgePos {
 
 pub fn add_new_edge_verts(
 	// we need concurrent_map because we will be adding things concurrently
-	edges_old: &mut DeterministicMap<i32, Vec<EdgePos>>,
-	edges_new: &mut DeterministicMap<(i32, i32), Vec<EdgePos>>,
+	edges_old: &mut FxHashMap<i32, Vec<EdgePos>>,
+	edges_new: &mut FxHashMap<(i32, i32), Vec<EdgePos>>,
 	p1q2: &[[i32; 2]],
 	i12: &[i8],
 	v12_r: Vec<i32>,
@@ -274,7 +274,7 @@ pub fn append_partial_edges(
 	face_ptr_r: &mut [i32],
 	face_rel_r: &mut [TriRelation],
 	in_a: &MeshBool,
-	edges_a: DeterministicMap<i32, Vec<EdgePos>>,
+	edges_a: FxHashMap<i32, Vec<EdgePos>>,
 	whole_halfedge_a: &mut [bool],
 	i03: &[i32],
 	v_p2r: &[i32],
@@ -374,7 +374,7 @@ pub fn append_new_edges(
 	halfedge_r: &mut [Halfedge],
 	face_ptr_r: &mut [i32],
 	face_rel: &mut [TriRelation],
-	edges_new: DeterministicMap<(i32, i32), Vec<EdgePos>>,
+	edges_new: FxHashMap<(i32, i32), Vec<EdgePos>>,
 	face_pq2r: &[i32],
 	num_face_p: usize,
 	tri_rel_p: &[TriRelation],

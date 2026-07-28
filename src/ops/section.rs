@@ -6,10 +6,10 @@ use crate::postprocessing::sort::{gather_tris, reindex_verts};
 use crate::spatial::aabb::Box3D;
 use crate::triangulation::{Polygons, SimplePolygon};
 use crate::util::disjoint_sets::DisjointSets;
-use crate::util::hash_table::DeterministicSet;
 use crate::util::math::{get_axis_aligned_projection, next3_usize};
 use crate::util::vec_ext;
 use nalgebra::Vector3;
+use rustc_hash::FxHashSet;
 
 impl MeshBool {
 	// This operation returns a vector of Manifolds that are topologically
@@ -181,7 +181,7 @@ impl MeshBool {
 		let mut query = vec![];
 		query.push(plane);
 
-		let mut tris = DeterministicSet::new();
+		let mut tris = FxHashSet::default();
 
 		self.collider.collisions_from_slice::<false, _>(
 			|_, tri| {

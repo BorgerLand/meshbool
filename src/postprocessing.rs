@@ -3,11 +3,11 @@ pub use crate::postprocessing::sort::sort_and_compact_geometry;
 use crate::halfedge::{Halfedges, next_halfedge};
 use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::util::disjoint_sets::DisjointSets;
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{ccw, get_axis_aligned_projection};
 use crate::util::num_convert::OrderedF64;
 use crate::{Precision, Properties, Triangles};
 use nalgebra::{Point2, Point3, Vector3};
+use rustc_hash::FxHashMap;
 use std::cmp::Reverse;
 use std::collections::hash_map::Entry;
 use std::f64;
@@ -244,7 +244,7 @@ pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
 				// repetitive processing. Note that it only approximates the processed
 				// halfedges because it is thread local.
 				let mut end_verts: Vec<(i32, i32)> = Vec::new();
-				let mut end_vert_set: DeterministicMap<i32, i32> = DeterministicMap::new();
+				let mut end_vert_set: FxHashMap<i32, i32> = FxHashMap::default();
 				for i in start..end {
 					if local[i] {
 						continue;

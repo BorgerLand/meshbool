@@ -30,7 +30,6 @@ mod ops {
 
 mod util {
 	pub mod disjoint_sets;
-	pub mod hash_table;
 	pub mod math;
 	pub mod multiset;
 	pub mod num_convert;

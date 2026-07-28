@@ -1,9 +1,9 @@
 use crate::halfedge::{Halfedges, next_halfedge};
-use crate::util::hash_table::DeterministicMap;
 use crate::util::math::{atomic_add, safe_normalize3};
 use crate::util::vec_ext;
 use crate::{MeshBool, Properties, Triangles};
 use nalgebra::{Point3, Vector3};
+use rustc_hash::FxHashMap;
 use std::{f64, mem};
 
 // Minimum sharp angle in degrees, below which edges are considered coplanar.
@@ -154,7 +154,7 @@ impl MeshBool {
 		// verts in the loop below.
 		// TODO: drop this and its only caller below when the non-zero normalIdx
 		// parameter on CalculateNormals is removed.
-		let mut instance_id_to_normal_transform = DeterministicMap::new();
+		let mut instance_id_to_normal_transform = FxHashMap::default();
 		let mut get_transform = |instance_id: u32| {
 			instance_id_to_normal_transform
 				.entry(instance_id)

@@ -1,9 +1,9 @@
 use crate::ops::boolean::intersect::Intersections;
 use crate::postprocessing as pp;
 use crate::spatial::aabb::{Box3D, Overlap};
-use crate::util::hash_table::DeterministicMap;
 use crate::util::vec_ext;
 use crate::{MeshBool, Precision, Properties};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::ptr;
 
 #[cfg(feature = "test_thoroughly")]
@@ -303,10 +303,10 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 
 	// This key is the forward halfedge index of P or Q. Only includes intersected
 	// edges.
-	let mut edges_p = DeterministicMap::new(); //capacity is unpredictable
-	let mut edges_q = DeterministicMap::with_capacity(xv21.p1q2.len() / 2);
+	let mut edges_p = FxHashMap::default(); //capacity is unpredictable
+	let mut edges_q = FxHashMap::with_capacity_and_hasher(xv21.p1q2.len() / 2, FxBuildHasher);
 	// This key is the face index of <P, Q>
-	let mut edges_r = DeterministicMap::with_capacity((n12 + n21) as usize);
+	let mut edges_r = FxHashMap::with_capacity_and_hasher((n12 + n21) as usize, FxBuildHasher);
 
 	construct::add_new_edge_verts(
 		&mut edges_p,
