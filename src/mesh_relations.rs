@@ -10,7 +10,7 @@ static ORIGINAL_ID_COUNTER: AtomicU32 = AtomicU32::new(0);
 pub struct TriRelation {
 	///Each time an instance of an original mesh makes an appearance somewhere in this
 	///mesh, the instance receives its own LOCALLY unique (to this mesh) instance ID.
-	///Not requiring global uniqueness allows faster cloning.
+	///Not requiring global uniqueness allows faster lookup and cloning.
 	pub instance_id: u32,
 	/// If set as an input of MeshGL, it is passed along unchanged. This is how
 	/// the user can tell us not to collapse certain edges: those that divide
