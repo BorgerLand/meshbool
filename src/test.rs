@@ -22,7 +22,7 @@ static SELF_INTERSECTION_CHECKS: AtomicBool = AtomicBool::new(false);
 static PROCESS_OVERLAPS: AtomicBool = AtomicBool::new(true);
 
 //need a wrapper purely so that status can exist
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct MeshBoolTestWrapper {
 	pub mesh: MeshBool,
 	pub status: MeshBoolError,

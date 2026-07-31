@@ -40,27 +40,25 @@ pub struct Intersections {
 }
 
 pub fn intersect12<const FORWARD: bool>(
-	xv12: &mut Intersections,
 	in_p: &MeshBool,
 	vert_normal_p: &[Vector3<f64>],
 	in_q: &MeshBool,
 	vert_normal_q: &[Vector3<f64>],
 	expand_p: bool,
-) {
+) -> Intersections {
 	if expand_p {
-		intersect12_impl::<true, FORWARD>(xv12, in_p, vert_normal_p, in_q, vert_normal_q)
+		intersect12_impl::<true, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q)
 	} else {
-		intersect12_impl::<false, FORWARD>(xv12, in_p, vert_normal_p, in_q, vert_normal_q)
+		intersect12_impl::<false, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q)
 	}
 }
 
 fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
-	xv12: &mut Intersections,
 	in_p: &MeshBool,
 	vert_normal_p: &[Vector3<f64>],
 	in_q: &MeshBool,
 	vert_normal_q: &[Vector3<f64>],
-) {
+) -> Intersections {
 	// a: 1 (edge), b: 2 (face)
 	let a = if FORWARD { in_p } else { in_q };
 	let vert_normal_a = if FORWARD {
@@ -104,6 +102,7 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		}
 	};
 
+	let mut xv12 = Intersections::default();
 	b.collider.collisions_from_fn::<false, _>(
 		|query_idx, leaf_idx| {
 			let (x12, v12) = k12.call(query_idx, leaf_idx);
@@ -122,6 +121,8 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		a.tri.halfedge.len(),
 		true,
 	);
+
+	xv12
 }
 
 struct Kernel12<'a, const EXPAND_P: bool, const FORWARD: bool> {
@@ -320,29 +321,27 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 }
 
 pub fn winding03<const FORWARD: bool>(
-	w03: &mut [i32],
 	in_p: &MeshBool,
 	vert_normal_p: &[Vector3<f64>],
 	in_q: &MeshBool,
 	vert_normal_q: &[Vector3<f64>],
 	p1q2: &[[i32; 2]],
 	expand_p: bool,
-) {
+) -> Vec<i32> {
 	if expand_p {
-		winding03_impl::<true, FORWARD>(w03, in_p, vert_normal_p, in_q, vert_normal_q, p1q2);
+		winding03_impl::<true, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q, p1q2)
 	} else {
-		winding03_impl::<false, FORWARD>(w03, in_p, vert_normal_p, in_q, vert_normal_q, p1q2);
+		winding03_impl::<false, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q, p1q2)
 	}
 }
 
 fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
-	w03: &mut [i32],
 	in_p: &MeshBool,
 	vert_normal_p: &[Vector3<f64>],
 	in_q: &MeshBool,
 	vert_normal_q: &[Vector3<f64>],
 	p1q2: &[[i32; 2]],
-) {
+) -> Vec<i32> {
 	// a: 0 (vert), b: 2 (face)
 	let a = if FORWARD { in_p } else { in_q };
 	let vert_normal_a = if FORWARD {
@@ -386,6 +385,8 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		in_b: b,
 		vert_normal_b,
 	};
+
+	let mut w03 = vec![0; a.num_vert()];
 	let f = |i| a.vert_pos[verts[i] as usize];
 	b.collider.collisions_from_fn::<false, _>(
 		|query_idx, leaf_idx| {
@@ -400,6 +401,7 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		verts.len(),
 		true,
 	);
+
 	// flood fill
 	for i in 0..w03.len() {
 		let root = u_a.find(i);
@@ -408,6 +410,8 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		}
 		w03[i] = w03[root];
 	}
+
+	w03
 }
 
 struct Kernel02<'a, const EXPAND_P: bool, const FORWARD: bool> {

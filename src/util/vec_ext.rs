@@ -18,6 +18,8 @@ pub unsafe fn uninit<T>(size: usize) -> Vec<T> {
 	vec
 }
 
+//it is more beneficial to collect() this for parallelization,
+//but single threaded can sometimes avoid that allocation
 pub fn exclusive_scan_with_total<IO>(
 	input: impl IntoIterator<Item = IO>,
 	init: IO,

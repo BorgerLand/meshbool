@@ -1,10 +1,12 @@
-use crate::ops::boolean::intersect::Intersections;
+use crate::halfedge::Halfedges;
+use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::postprocessing as pp;
 use crate::spatial::aabb::{Box3D, Overlap};
+use crate::util::math::K_PRECISION;
 use crate::util::vec_ext;
-use crate::{MeshBool, Precision, Properties};
+use crate::{MeshBool, Precision, Properties, Triangles};
 use rustc_hash::{FxBuildHasher, FxHashMap};
-use std::ptr;
+use std::{iter, ptr};
 
 #[cfg(feature = "test_thoroughly")]
 use crate::test::{get_intermediate_checks, get_self_intersection_checks};
@@ -52,6 +54,24 @@ impl MeshBool {
 ///	@param second The other Manifold.
 ///	@param op The type of operation to perform.
 fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, BooleanError> {
+	let result = boolean_unchecked(in_p, op, in_q);
+
+	#[cfg(feature = "test_thoroughly")]
+	if get_self_intersection_checks()
+		&& let Ok(result) = &result
+		&& result.is_self_intersecting()
+	{
+		panic!("self intersection detected");
+	}
+
+	result
+}
+
+fn boolean_unchecked(
+	in_p: &MeshBool,
+	op: OpType,
+	in_q: &MeshBool,
+) -> Result<MeshBool, BooleanError> {
 	let prop_stride = in_p.properties.stride.max(in_q.properties.stride);
 	let precision = Precision {
 		epsilon: in_p.precision.epsilon.max(in_q.precision.epsilon),
@@ -115,11 +135,246 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 			return decimated();
 		}
 
-		//else union can be optimized via the same technique as CsgLeafNode::Compose(),
-		//copying and pasting the 2 disjoint meshes into the same buffer.
-		//for now just let the full pipeline run
+		return boolean_disjoint_union(&[in_p, in_q]);
 	}
 
+	match boolean_smith(
+		in_p,
+		op,
+		in_q,
+		prop_stride,
+		precision,
+		invert_q,
+		instance_rel.clone(),
+	) {
+		BooleanSmithResult::Ok(meshbool) => Ok(meshbool),
+		BooleanSmithResult::Err(oops) => Err(oops),
+		BooleanSmithResult::Decimated => decimated(),
+	}
+}
+
+///Efficient union of a set of pairwise disjoint meshes.
+fn boolean_disjoint_union(nodes: &[&MeshBool]) -> Result<MeshBool, BooleanError> {
+	let precision = Precision {
+		epsilon: nodes.iter().fold(-1.0, |epsilon, node| {
+			let mut node_epsilon = node
+				.precision
+				.epsilon
+				.max(K_PRECISION * node.bounding_box().scale());
+			if !node_epsilon.is_finite() {
+				node_epsilon = -1.0;
+			}
+
+			epsilon.max(node_epsilon)
+		}),
+		tolerance: nodes.iter().fold(-1.0, |tolerance, node| {
+			tolerance.max(node.precision.tolerance)
+		}),
+	};
+
+	let mut vert_pos = Vec::with_capacity(nodes.iter().map(|node| node.vert_pos.len()).sum());
+	vert_pos.extend(nodes.iter().flat_map(|node| node.vert_pos.iter().cloned()));
+
+	let pair_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		nodes.iter().map(|node| node.tri.halfedge.len() as i32),
+		0,
+	));
+
+	let halfedge_len = *pair_offsets.last().unwrap() as usize;
+
+	let mut pair = Vec::with_capacity(halfedge_len);
+	pair.extend(
+		nodes
+			.iter()
+			.zip(pair_offsets)
+			.flat_map(|(node, pair_offset)| {
+				node.tri
+					.halfedge
+					.pair
+					.iter()
+					.map(move |pair| pair + pair_offset)
+			}),
+	);
+
+	let start_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		nodes.iter().map(|node| node.vert_pos.len() as i32),
+		0,
+	));
+
+	let mut start = Vec::with_capacity(halfedge_len);
+	start.extend(
+		nodes
+			.iter()
+			.zip(start_offsets)
+			.flat_map(|(node, start_offset)| {
+				node.tri
+					.halfedge
+					.start
+					.iter()
+					.map(move |start| start + start_offset)
+			}),
+	);
+
+	//a node carrying no properties still gets a single, zeroed property vert for
+	//all of its halfedges to point at, in case another node does carry some
+	let num_prop_vert = |node: &&MeshBool| {
+		if node.properties.stride == 0 {
+			1
+		} else {
+			node.properties.data.len() / node.properties.stride
+		}
+	};
+
+	let prop_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		nodes
+			.iter()
+			.map(num_prop_vert)
+			.map(|prop_vert| prop_vert as i32),
+		0,
+	));
+
+	let num_prop_verts = *prop_offsets.last().unwrap() as usize;
+
+	let mut prop = Vec::with_capacity(halfedge_len);
+	prop.extend(
+		nodes
+			.iter()
+			.zip(prop_offsets)
+			.flat_map(|(node, prop_offset)| {
+				node.tri.halfedge.prop.iter().map(move |prop| {
+					if node.properties.stride > 0 {
+						prop + prop_offset
+					} else {
+						prop_offset
+					}
+				})
+			}),
+	);
+
+	let halfedge = Halfedges { start, pair, prop };
+
+	let prop_stride_new = nodes.iter().fold(0, |prop_stride_new, node| {
+		prop_stride_new.max(node.properties.stride)
+	});
+
+	let mut properties_data = Vec::with_capacity(prop_stride_new * num_prop_verts);
+	properties_data.extend(nodes.iter().flat_map(|node| {
+		let prop_stride_old = node.properties.stride;
+		(0..num_prop_vert(node)).flat_map(move |prop_vert| {
+			node.properties.data[prop_stride_old * prop_vert..][..prop_stride_old]
+				.iter()
+				.copied()
+				.chain(iter::repeat(0.0).take(prop_stride_new - prop_stride_old))
+		})
+	}));
+
+	let mut properties = Properties {
+		data: properties_data,
+		stride: prop_stride_new,
+	};
+
+	let mut tri_normal = Vec::with_capacity(halfedge.num_tri());
+	tri_normal.extend(
+		nodes
+			.iter()
+			.flat_map(|node| node.tri.normal.iter().cloned()),
+	);
+
+	let instance_rel_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		nodes.iter().map(|node| node.instance_relation.len() as u32),
+		0,
+	));
+
+	let instance_rel_len = *instance_rel_offsets.last().unwrap() as usize;
+
+	let mut tri_rel = Vec::with_capacity(halfedge.num_tri());
+	tri_rel.extend(nodes.iter().zip(instance_rel_offsets).flat_map(
+		|(node, instance_rel_offset)| {
+			node.tri.relation.iter().map(move |tri_rel| TriRelation {
+				instance_id: tri_rel.instance_id + instance_rel_offset,
+				face_id: tri_rel.face_id,
+			})
+		},
+	));
+
+	let mut instance_relation = Vec::with_capacity(instance_rel_len);
+	instance_relation.extend(
+		nodes
+			.iter()
+			.flat_map(|node| node.instance_relation.iter().cloned()),
+	);
+
+	let mut tri = Triangles {
+		halfedge,
+		normal: tri_normal,
+		relation: tri_rel,
+	};
+
+	pp::split_pinched_verts(&mut tri.halfedge, &mut vert_pos);
+	pp::dedupe_edges(&mut tri, &mut vert_pos);
+	pp::collapse_short_edges(
+		&mut tri.halfedge,
+		&mut vert_pos,
+		&tri.normal,
+		&tri.relation,
+		&instance_relation,
+		prop_stride_new,
+		precision,
+		0,
+	);
+	pp::swap_degenerates(
+		&mut tri,
+		&mut vert_pos,
+		&mut properties,
+		&instance_relation,
+		precision,
+		0,
+	);
+
+	let bbox = nodes.iter().fold(Box3D::default(), |bbox, node| {
+		bbox.union_box3(node.bounding_box())
+	});
+
+	let Some(collider) =
+		pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
+	else {
+		return Ok(MeshBool::decimated(
+			None,
+			instance_relation,
+			prop_stride_new,
+			precision,
+		));
+	};
+
+	Ok(MeshBool {
+		original_id: None,
+		precision,
+		vert_pos,
+		properties,
+		tri,
+		instance_relation,
+		collider,
+	})
+}
+
+enum BooleanSmithResult {
+	Ok(MeshBool),
+	Err(BooleanError),
+	Decimated,
+}
+
+//https://github.com/elalish/manifold/blob/master/docs/RobustBoolean.pdf
+//[Smith 2009] - Cambridge Technical Report 766
+//Towards robust inexact geometric computation
+fn boolean_smith(
+	in_p: &MeshBool,
+	op: OpType,
+	in_q: &MeshBool,
+	prop_stride: usize,
+	precision: Precision,
+	invert_q: bool,
+	instance_rel: impl Iterator<Item = InstanceRelation>,
+) -> BooleanSmithResult {
 	// Symbolic perturbation:
 	// Union -> expand inP, expand inQ
 	// Difference, Intersection -> contract inP, expand inQ
@@ -128,71 +383,43 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	let expand_p = op == OpType::Union;
 	const INT_MAX_SZ: usize = i32::MAX as usize;
 
-	let mut w03 = vec![0; in_p.num_vert()];
-	let mut w30 = vec![0; in_q.num_vert()];
-	let mut xv12 = Intersections::default();
-	let mut xv21 = Intersections::default();
+	let vert_normal_p = &in_p.calculate_vert_normals_internal();
+	let vert_normal_q = &in_q.calculate_vert_normals_internal();
 
-	if in_p
-		.collider
-		.get_bounding_box()
-		.does_overlap(in_q.collider.get_bounding_box())
-	{
-		let vert_normal_p = &in_p.calculate_vert_normals_internal();
-		let vert_normal_q = &in_q.calculate_vert_normals_internal();
+	// Level 3
+	// Build up the intersection of the edges and triangles, keeping only those
+	// that intersect, and record the direction the edge is passing through the
+	// triangle.
+	let xv12 = intersect::intersect12::<true>(in_p, vert_normal_p, in_q, vert_normal_q, expand_p);
 
-		// Level 3
-		// Build up the intersection of the edges and triangles, keeping only those
-		// that intersect, and record the direction the edge is passing through the
-		// triangle.
-		intersect::intersect12::<true>(
-			&mut xv12,
-			in_p,
-			vert_normal_p,
-			in_q,
-			vert_normal_q,
-			expand_p,
-		);
-
-		if xv12.x12.len() > INT_MAX_SZ {
-			return Err(BooleanError::ResultTooLarge);
-		}
-
-		intersect::intersect12::<false>(
-			&mut xv21,
-			in_p,
-			vert_normal_p,
-			in_q,
-			vert_normal_q,
-			expand_p,
-		);
-
-		if xv21.x12.len() > INT_MAX_SZ {
-			return Err(BooleanError::ResultTooLarge);
-		}
-
-		// Compute winding numbers of all vertices using flood fill
-		// Vertices on the same connected component have the same winding number
-		intersect::winding03::<true>(
-			&mut w03,
-			in_p,
-			vert_normal_p,
-			in_q,
-			vert_normal_q,
-			&xv12.p1q2,
-			expand_p,
-		);
-		intersect::winding03::<false>(
-			&mut w30,
-			in_p,
-			vert_normal_p,
-			in_q,
-			vert_normal_q,
-			&xv21.p1q2,
-			expand_p,
-		);
+	if xv12.x12.len() > INT_MAX_SZ {
+		return BooleanSmithResult::Err(BooleanError::ResultTooLarge);
 	}
-	//else hitting the one CsgLeafNode::Compose() case not handled by early exits
+
+	let xv21 = intersect::intersect12::<false>(in_p, vert_normal_p, in_q, vert_normal_q, expand_p);
+
+	if xv21.x12.len() > INT_MAX_SZ {
+		return BooleanSmithResult::Err(BooleanError::ResultTooLarge);
+	}
+
+	// Compute winding numbers of all vertices using flood fill
+	// Vertices on the same connected component have the same winding number
+	let w03 = intersect::winding03::<true>(
+		in_p,
+		vert_normal_p,
+		in_q,
+		vert_normal_q,
+		&xv12.p1q2,
+		expand_p,
+	);
+	let w30 = intersect::winding03::<false>(
+		in_p,
+		vert_normal_p,
+		in_q,
+		vert_normal_q,
+		&xv21.p1q2,
+		expand_p,
+	);
 
 	debug_assert!(
 		expand_p == (op == OpType::Union),
@@ -250,7 +477,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	let n21 = num_vert_r - n_pv - n_qv - n12; //new verts from facesP -> edgesQ
 
 	if num_vert_r == 0 {
-		return decimated();
+		return BooleanSmithResult::Decimated;
 	}
 
 	let mut vert_pos = unsafe { vec_ext::uninit(num_vert_r as usize) };
@@ -358,7 +585,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 
 	let num_halfedge_r = *face_edge.last().unwrap() as usize;
 	if num_halfedge_r == 0 {
-		return decimated();
+		return BooleanSmithResult::Decimated;
 	}
 
 	// This gets incremented for each halfedge that's added to a face so that the
@@ -483,7 +710,7 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	};
 
 	let first_new_vert = n_pv + n_qv;
-	let instance_rel = Vec::from_iter(instance_rel.clone());
+	let instance_rel = Vec::from_iter(instance_rel);
 
 	pp::split_pinched_verts(&mut tri.halfedge, &mut vert_pos);
 	pp::dedupe_edges(&mut tri, &mut vert_pos);
@@ -529,10 +756,10 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 	let Some(collider) =
 		pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
 	else {
-		return decimated();
+		return BooleanSmithResult::Decimated;
 	};
 
-	let out_r = MeshBool {
+	BooleanSmithResult::Ok(MeshBool {
 		original_id: None,
 		precision,
 		vert_pos,
@@ -540,13 +767,5 @@ fn boolean(in_p: &MeshBool, op: OpType, in_q: &MeshBool) -> Result<MeshBool, Boo
 		tri,
 		instance_relation: instance_rel,
 		collider,
-	};
-
-	//pulled from csg_tree.cpp
-	#[cfg(feature = "test_thoroughly")]
-	if get_self_intersection_checks() && out_r.is_self_intersecting() {
-		panic!("self intersection detected");
-	}
-
-	Ok(out_r)
+	})
 }
