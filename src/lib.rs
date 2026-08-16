@@ -1,10 +1,12 @@
 pub use crate::meshgl::{MeshGL, MeshGLError};
 pub use crate::ops::boolean::BooleanError;
+pub use crate::ops::boolean::expression::CSGExpression;
 pub use crate::ops::proc_gen::ConstructorError;
 pub use crate::spatial::aabb::Box3D;
 pub use crate::triangulation::Polygons;
 pub use crate::util::segment_resolution::SegmentResolution;
 pub use nalgebra::{Matrix3x4, Point3, Vector3};
+use std::rc::Rc;
 
 use crate::halfedge::Halfedges;
 use crate::mesh_relations::{InstanceRelation, TriRelation};
@@ -30,6 +32,7 @@ mod ops {
 
 mod util {
 	pub mod disjoint_sets;
+	pub mod face;
 	pub mod math;
 	pub mod multiset;
 	pub mod num_convert;
@@ -74,20 +77,20 @@ pub struct MeshBool {
 	///loading a MeshGL or a procedurally generating a primitive shape), or None
 	original_id: Option<u32>,
 	precision: Precision,
-	vert_pos: Vec<Point3<f64>>,
-	properties: Properties,
+	vert_pos: Rc<Vec<Point3<f64>>>,
+	properties: Rc<Properties>,
 	tri: Triangles,
 	///Maps <instance id, instance metadata> to look up how each mesh instance
 	///relates back to its original
-	instance_relation: Vec<InstanceRelation>,
-	collider: BVHCollider,
+	instance_relation: Rc<Vec<InstanceRelation>>,
+	collider: Rc<BVHCollider>,
 }
 
 impl Clone for MeshBool {
 	fn clone(&self) -> Self {
 		Self {
 			original_id: None,
-			precision: self.precision.clone(),
+			precision: self.precision,
 			vert_pos: self.vert_pos.clone(),
 			properties: self.properties.clone(),
 			tri: self.tri.clone(),
@@ -196,19 +199,33 @@ struct Properties {
 //structure of arrays
 #[derive(Debug, Clone, Default)]
 struct Triangles {
-	halfedge: Halfedges,
-	normal: Vec<Vector3<f64>>,
+	halfedge: Rc<Halfedges>,
+	normal: Rc<Vec<Vector3<f64>>>,
 	///Maps each triangle to the instance it comes from to look up how each
 	///triangle relates back to its original
+	relation: Rc<Vec<TriRelation>>,
+}
+
+struct TrianglesWIP {
+	halfedge: Halfedges,
+	normal: Vec<Vector3<f64>>,
 	relation: Vec<TriRelation>,
 }
 
-impl Triangles {
+impl TrianglesWIP {
 	fn partial(&mut self) -> TrianglesPartial<'_> {
 		TrianglesPartial {
 			halfedge: &mut self.halfedge,
 			normal: Some(&mut self.normal),
 			relation: Some(&mut self.relation),
+		}
+	}
+
+	fn into_rc(self) -> Triangles {
+		Triangles {
+			halfedge: Rc::new(self.halfedge),
+			normal: Rc::new(self.normal),
+			relation: Rc::new(self.relation),
 		}
 	}
 }

@@ -16,6 +16,7 @@ libm = { version = "0.2", default-features = false }
 nalgebra = { version = "0.35", default-features = false, features = ["std", "libm-force"] }
 intrusive-collections = { git = "https://github.com/BorgerLand/vandalized-intrusive-rs" }
 rustc-hash = { version = "2.1", default-features = false, features = ["std"] }
+reblessive = { version = "0.4", default-features = false }
 
 [build-dependencies]
 zngur = { version = "0.10", optional = true }

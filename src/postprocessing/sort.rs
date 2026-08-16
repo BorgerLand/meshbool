@@ -2,10 +2,11 @@ use crate::halfedge::Halfedges;
 use crate::spatial::aabb::Box3D;
 use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::vec_ext;
-use crate::{Properties, Triangles, TrianglesPartial};
+use crate::{Properties, Triangles, TrianglesPartial, TrianglesWIP};
 use nalgebra::Point3;
 use std::f64;
 use std::mem::{self};
+use std::rc::Rc;
 
 #[cfg(feature = "test_thoroughly")]
 use {crate::halfedge::Halfedge, crate::test::get_intermediate_checks};
@@ -22,7 +23,7 @@ pub fn sort_and_compact_geometry(
 	properties: &mut Properties,
 	mut tri: TrianglesPartial,
 	bbox: Box3D,
-) -> Option<BVHCollider> {
+) -> Option<Rc<BVHCollider>> {
 	sort_verts(vert_pos, &mut tri.halfedge, bbox, properties.stride > 0);
 
 	if vert_pos.len() == 0 {
@@ -100,7 +101,7 @@ pub fn sort_and_compact_geometry(
 		debug_assert!(tri.halfedge.is_2_manifold(), "mesh is not 2-manifold!");
 	}
 
-	Some(BVHCollider::new(&tri_box, &tri_morton))
+	Some(Rc::new(BVHCollider::new(&tri_box, &tri_morton)))
 }
 
 ///Sorts the vertices according to their Morton code.
@@ -160,7 +161,7 @@ pub fn get_tri_box_morton(
 	let mut tri_morton = bbox.map(|_| Vec::with_capacity(halfedge.num_tri()));
 	let tri_box = (0..halfedge.num_tri())
 		.map(|tri| {
-			let mut cur_box = Box3D::default();
+			let mut cur_box = Box3D::empty();
 
 			// Removed tris are marked by all halfedges having pairedHalfedge
 			// = -1, and this will sort them to the end (the Morton code only
@@ -177,7 +178,7 @@ pub fn get_tri_box_morton(
 			for i in 0..3 {
 				let pos = vert_pos[halfedge.start[3 * tri + i] as usize];
 				center += pos.coords;
-				cur_box.union_point(pos);
+				cur_box.union_point_mut(pos);
 			}
 
 			if let Some(tri_morton) = &mut tri_morton {
@@ -237,7 +238,7 @@ fn gather_tris_in_place(mut tri: TrianglesPartial, tri_new2old: &[i32]) {
 ///Creates the halfedge_ vector for this manifold by copying a set of faces from
 ///another manifold, given by oldHalfedge. Input faceNew2Old defines the old
 ///faces to gather into this.
-pub fn gather_tris(old: &Triangles, tri_new2old: &[i32]) -> Triangles {
+pub fn gather_tris(old: &Triangles, tri_new2old: &[i32]) -> TrianglesWIP {
 	let num_tri = tri_new2old.len();
 	let new_tri_rel = vec_ext::gather(&old.relation, tri_new2old.iter());
 	let new_tri_normal = vec_ext::gather(&old.normal, tri_new2old.iter());
@@ -255,7 +256,7 @@ pub fn gather_tris(old: &Triangles, tri_new2old: &[i32]) -> Triangles {
 		reindex_face.call(new_face);
 	}
 
-	Triangles {
+	TrianglesWIP {
 		halfedge: new_halfedge,
 		normal: new_tri_normal,
 		relation: new_tri_rel,

@@ -4,6 +4,7 @@ use crate::util::vec_ext;
 use crate::{MeshBool, Properties, Triangles};
 use nalgebra::{Point3, Vector3};
 use rustc_hash::FxHashMap;
+use std::rc::Rc;
 use std::{f64, mem};
 
 // Minimum sharp angle in degrees, below which edges are considered coplanar.
@@ -28,19 +29,20 @@ impl MeshBool {
 	///@param prop_stride The new number of properties per vertex.
 	///@param prop_func A function that modifies the properties of a given vertex.
 	pub fn set_properties(
-		&self,
+		self,
 		prop_stride: usize,
 		prop_func: Option<impl FnMut(&mut [f64], Point3<f64>, &[f64])>,
 	) -> Self {
 		let old_prop_stride = self.prop_stride();
-		let halfedge = self.tri.halfedge.clone();
+		let num_prop_vert = self.num_prop_vert();
+		let halfedge = self.tri.halfedge;
 		let properties = if prop_stride == 0 {
 			Vec::new()
 		} else {
-			let mut properties = vec![0.0; prop_stride * self.num_prop_vert()];
+			let mut properties = vec![0.0; prop_stride * num_prop_vert];
 
 			if let Some(mut prop_func) = prop_func {
-				for tri in 0..self.num_tri() {
+				for tri in 0..halfedge.num_tri() {
 					for i in 0..3 {
 						let edge = 3 * tri + i;
 						let vert = halfedge.start[edge] as usize;
@@ -61,19 +63,19 @@ impl MeshBool {
 
 		return Self {
 			original_id: None,
-			precision: self.precision.clone(),
-			vert_pos: self.vert_pos.clone(),
-			properties: Properties {
+			precision: self.precision,
+			vert_pos: self.vert_pos,
+			properties: Rc::new(Properties {
 				data: properties,
 				stride: prop_stride,
-			},
+			}),
 			tri: Triangles {
 				halfedge,
-				normal: self.tri.normal.clone(),
-				relation: self.tri.relation.clone(),
+				normal: self.tri.normal,
+				relation: self.tri.relation,
 			},
-			instance_relation: self.instance_relation.clone(),
-			collider: self.collider.clone(),
+			instance_relation: self.instance_relation,
+			collider: self.collider,
 		};
 	}
 
@@ -94,11 +96,11 @@ impl MeshBool {
 	///edge. By default, no edges are sharp and all normals are shared. With a value
 	///of zero, the model is faceted and all normals match their triangle normals,
 	///but in this case it would be better not to calculate normals at all.
-	pub fn calculate_normals(&self, normal_idx: usize, mut min_sharp_angle: f64) -> Self {
+	pub fn calculate_normals(self, normal_idx: usize, mut min_sharp_angle: f64) -> Self {
 		// Mark per-meshID hasNormals so GetMeshGL(-1) can auto-substitute slot 0 on
 		// export. Restricted to the standard slot since a non-zero slot would be
 		// ambiguous when round-tripping through MeshGL.
-		let instance_relation = self
+		let instance_rel = self
 			.instance_relation
 			.iter()
 			.map(|&rel| {
@@ -118,11 +120,11 @@ impl MeshBool {
 			return Self {
 				original_id: None,
 				precision: self.precision,
-				vert_pos: self.vert_pos.clone(),
-				properties: self.properties.clone(),
+				vert_pos: self.vert_pos,
+				properties: self.properties,
 				tri: self.tri.clone(),
-				instance_relation,
-				collider: self.collider.clone(),
+				instance_relation: Rc::new(instance_rel),
+				collider: self.collider,
 			};
 		}
 
@@ -159,13 +161,17 @@ impl MeshBool {
 			instance_id_to_normal_transform
 				.entry(instance_id)
 				.or_insert_with(|| {
-					instance_relation[instance_id as usize].get_inverse_normal_transform()
+					instance_rel[instance_id as usize].get_inverse_normal_transform()
 				})
 				.clone()
 		};
 
 		let num_edge = self.tri.halfedge.len();
-		let vert_normal = self.calculate_vert_normals_internal();
+		let vert_normal = Self::calculate_vert_normals_internal(
+			&self.vert_pos,
+			&self.tri.halfedge,
+			&self.tri.normal,
+		);
 		let mut properties = unsafe { vec_ext::uninit(prop_stride * self.num_prop_vert()) };
 		for start_edge in 0..num_edge {
 			if prop[start_edge] >= 0 {
@@ -329,22 +335,22 @@ impl MeshBool {
 		Self {
 			original_id: None,
 			precision: self.precision,
-			vert_pos: self.vert_pos.clone(),
-			properties: Properties {
+			vert_pos: self.vert_pos,
+			properties: Rc::new(Properties {
 				data: properties,
 				stride: prop_stride,
-			},
+			}),
 			tri: Triangles {
-				halfedge: Halfedges {
+				halfedge: Rc::new(Halfedges {
 					start: self.tri.halfedge.start.clone(),
 					pair: self.tri.halfedge.pair.clone(),
 					prop,
-				},
-				normal: self.tri.normal.clone(),
-				relation: self.tri.relation.clone(),
+				}),
+				normal: self.tri.normal,
+				relation: self.tri.relation,
 			},
-			instance_relation,
-			collider: self.collider.clone(),
+			instance_relation: Rc::new(instance_rel),
+			collider: self.collider,
 		}
 	}
 
@@ -353,11 +359,15 @@ impl MeshBool {
 	///calculated when needed because nearly degenerate faces will accrue rounding
 	///error, while the Boolean can retain their original normal, which is more
 	///accurate and can help with merging coplanar faces.
-	pub(crate) fn calculate_vert_normals_internal(&self) -> Vec<Vector3<f64>> {
-		let num_vert = self.vert_pos.len();
+	pub(crate) fn calculate_vert_normals_internal(
+		vert_pos: &[Point3<f64>],
+		halfedge: &Halfedges,
+		tri_normal: &[Vector3<f64>],
+	) -> Vec<Vector3<f64>> {
+		let num_vert = vert_pos.len();
 		let mut vert_normal = vec![Vector3::default(); num_vert];
 
-		let mut vert_halfedge_map = vec![i32::MAX; self.num_vert()];
+		let mut vert_halfedge_map = vec![i32::MAX; num_vert];
 
 		let mut atomic_min = |value, vert: i32| {
 			if vert < 0 {
@@ -369,8 +379,8 @@ impl MeshBool {
 			}
 		};
 
-		for i in 0..self.tri.halfedge.len() {
-			atomic_min(i as i32, self.tri.halfedge.start[i]);
+		for i in 0..halfedge.len() {
+			atomic_min(i as i32, halfedge.start[i]);
 		}
 
 		for vert in 0..num_vert {
@@ -382,18 +392,16 @@ impl MeshBool {
 			}
 
 			let mut normal = Vector3::from_element(0.0);
-			self.tri.halfedge.for_vert(first_edge as usize, |edge| {
+			halfedge.for_vert(first_edge as usize, |edge| {
 				let tri_verts = Vector3::new(
-					self.tri.halfedge.start[edge],
-					self.tri.halfedge.end(edge),
-					self.tri.halfedge.end(next_halfedge(edge)),
+					halfedge.start[edge],
+					halfedge.end(edge),
+					halfedge.end(next_halfedge(edge)),
 				);
-				let curr_edge = (self.vert_pos[tri_verts[1] as usize]
-					- self.vert_pos[tri_verts[0] as usize])
-					.normalize();
-				let prev_edge = (self.vert_pos[tri_verts[0] as usize]
-					- self.vert_pos[tri_verts[2] as usize])
-					.normalize();
+				let curr_edge =
+					(vert_pos[tri_verts[1] as usize] - vert_pos[tri_verts[0] as usize]).normalize();
+				let prev_edge =
+					(vert_pos[tri_verts[0] as usize] - vert_pos[tri_verts[2] as usize]).normalize();
 
 				// if it is not finite, this means that the triangle is degenerate, and we
 				// should just exclude it from the normal calculation...
@@ -408,7 +416,7 @@ impl MeshBool {
 				} else {
 					libm::acos(dot)
 				};
-				normal += phi * self.tri.normal[edge / 3];
+				normal += phi * tri_normal[edge / 3];
 			});
 
 			vert_normal[vert] = safe_normalize3(normal);
@@ -431,11 +439,7 @@ impl MeshBool {
 	///@param mean_idx The property channel index in which to store the mean
 	///curvature. An index < 0 will be ignored (stores nothing). The property set
 	///will be automatically expanded to include the channel index specified.
-	pub fn calculate_curvature(
-		&self,
-		gaussian_idx: Option<usize>,
-		mean_idx: Option<usize>,
-	) -> Self {
+	pub fn calculate_curvature(self, gaussian_idx: Option<usize>, mean_idx: Option<usize>) -> Self {
 		if self.is_empty() || (gaussian_idx.is_none() && mean_idx.is_none()) {
 			return self.clone();
 		}
@@ -494,15 +498,15 @@ impl MeshBool {
 
 		Self {
 			original_id: None,
-			precision: self.precision.clone(),
-			vert_pos: self.vert_pos.clone(),
-			properties: Properties {
+			precision: self.precision,
+			vert_pos: self.vert_pos,
+			properties: Rc::new(Properties {
 				data: properties,
 				stride: prop_stride,
-			},
+			}),
 			tri: self.tri.clone(),
-			instance_relation: self.instance_relation.clone(),
-			collider: self.collider.clone(),
+			instance_relation: self.instance_relation,
+			collider: self.collider,
 		}
 	}
 }

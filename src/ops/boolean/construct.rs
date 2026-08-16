@@ -1,12 +1,13 @@
-use crate::MeshBool;
+use crate::Properties;
 use crate::halfedge::{Halfedge, Halfedges, next_halfedge};
-use crate::mesh_relations::{TriRelation, tri_has_normals};
+use crate::mesh_relations::{InstanceRelation, TriRelation, tri_has_normals};
 use crate::spatial::aabb::Box3D;
 use crate::util::math::{atomic_add, get_barycentric, next3_usize, prev3_usize};
 use crate::util::num_convert::OrderedF64;
 use nalgebra::{Matrix3, Point3, Vector3, Vector4};
 use rustc_hash::FxHashMap;
 use std::ops::Deref;
+use std::rc::Rc;
 use std::{array, mem};
 
 pub struct DuplicateVerts<'a, T> {
@@ -185,8 +186,8 @@ pub fn size_sides_per_face_pq(
 }
 
 pub fn size_face_normal(
-	tri_normal_p: &[Vector3<f64>],
-	tri_normal_q: &[Vector3<f64>],
+	tri_normal_p: Rc<Vec<Vector3<f64>>>,
+	tri_normal_q: Rc<Vec<Vector3<f64>>>,
 	sides_per_face_pq: &[i32],
 	num_face_r: usize,
 	invert_q: bool,
@@ -273,7 +274,8 @@ pub fn append_partial_edges(
 	halfedge_r: &mut [Halfedge],
 	face_ptr_r: &mut [i32],
 	face_rel_r: &mut [TriRelation],
-	in_a: &MeshBool,
+	vert_pos_a: &[Point3<f64>],
+	halfedge_a: &Halfedges,
 	edges_a: FxHashMap<i32, Vec<EdgePos>>,
 	whole_halfedge_a: &mut [bool],
 	i03: &[i32],
@@ -288,8 +290,6 @@ pub fn append_partial_edges(
 	// while remapping them to the output using vP2R. Use the verts position
 	// projected along the edge vector to pair them up, then distribute these
 	// edges to their faces.
-	let vert_pos_a = &in_a.vert_pos;
-	let halfedge_a = &in_a.tri.halfedge;
 
 	// Per-iter cancel check; the caller's post-call IsCancelled discards the
 	// partial outR.
@@ -388,9 +388,9 @@ pub fn append_new_edges(
 		let face_p = face_p as usize;
 		let face_q = face_q as usize;
 
-		let mut bbox = Box3D::default();
+		let mut bbox = Box3D::empty();
 		for edge in edge_pos.iter() {
-			bbox.union_point(vert_pos_r[edge.vert as usize]);
+			bbox.union_point_mut(vert_pos_r[edge.vert as usize]);
 		}
 
 		let size = bbox.size();
@@ -521,43 +521,57 @@ pub fn create_properties(
 	halfedge_r: &mut Halfedges,
 	tri_rel_r: &mut [TriRelation],
 	vert_pos_r: &[Point3<f64>],
+	instance_rel_r: &[InstanceRelation],
 	instance_id_offset_q: u32,
-	in_p: &MeshBool,
-	in_q: &MeshBool,
+	vert_pos_p: Rc<Vec<Point3<f64>>>,
+	halfedge_p: Rc<Halfedges>,
+	tri_rel_p: Rc<Vec<TriRelation>>,
+	prop_p: Rc<Properties>,
+	vert_pos_q: Rc<Vec<Point3<f64>>>,
+	halfedge_q: Rc<Halfedges>,
+	tri_rel_q: Rc<Vec<TriRelation>>,
+	prop_q: Rc<Properties>,
 	invert_q: bool,
 	epsilon: f64,
 ) -> Vec<f64> {
-	let prop_stride_p = in_p.prop_stride();
-	let prop_stride_q = in_q.prop_stride();
-	let prop_stride = prop_stride_p.max(prop_stride_q);
-	if prop_stride == 0 {
+	let prop_stride_r = prop_p.stride.max(prop_q.stride);
+	if prop_stride_r == 0 {
 		return vec![];
 	}
 
-	let num_tri = halfedge_r.num_tri();
+	let num_vert_p = vert_pos_p.len();
+	let num_vert_q = vert_pos_q.len();
+	let num_tri_r = halfedge_r.num_tri();
 	let bary = barycentric(
 		halfedge_r,
 		tri_rel_r,
 		instance_id_offset_q,
-		&in_p.vert_pos,
-		&in_q.vert_pos,
+		vert_pos_p,
+		vert_pos_q,
 		vert_pos_r,
-		&in_p.tri.halfedge,
-		&in_q.tri.halfedge,
+		&halfedge_p,
+		&halfedge_q,
 		epsilon,
 	);
 
 	let id_miss_prop = vert_pos_r.len() as i32;
 	let mut prop_idx: Vec<Vec<(Vector3<i32>, i32)>> = vec![Vec::new(); vert_pos_r.len() + 1];
-	let mut prop_miss_idx = [
-		vec![-1; in_q.num_prop_vert()],
-		vec![-1; in_p.num_prop_vert()],
-	];
+	let prop_vert_p = if prop_p.stride == 0 {
+		num_vert_p
+	} else {
+		prop_p.data.len() / prop_p.stride
+	};
+	let prop_vert_q = if prop_q.stride == 0 {
+		num_vert_q
+	} else {
+		prop_q.data.len() / prop_q.stride
+	};
+	let mut prop_miss_idx = [vec![-1; prop_vert_q], vec![-1; prop_vert_p]];
 
-	let mut properties = Vec::with_capacity(vert_pos_r.len() * prop_stride);
+	let mut properties = Vec::with_capacity(vert_pos_r.len() * prop_stride_r);
 	let mut idx = 0;
 
-	for tri in 0..num_tri {
+	for tri in 0..num_tri_r {
 		// Skip collapsed triangles
 		if halfedge_r.start[3 * tri] < 0 {
 			continue;
@@ -569,21 +583,13 @@ pub fn create_properties(
 		let tri_id = tri_rel.face_id as usize;
 		let pq = tri_rel.instance_id < instance_id_offset_q;
 		tri_rel.face_id = if pq {
-			in_p.tri.relation[tri_id].face_id
+			tri_rel_p[tri_id].face_id
 		} else {
-			in_q.tri.relation[tri_id].face_id
+			tri_rel_q[tri_id].face_id
 		};
-		let old_prop_stride = (if pq { prop_stride_p } else { prop_stride_q }) as i32;
-		let properties_pq = if pq {
-			&in_p.properties.data
-		} else {
-			&in_q.properties.data
-		};
-		let halfedge_pq = if pq {
-			&in_p.tri.halfedge
-		} else {
-			&in_q.tri.halfedge
-		};
+		let old_prop_stride = (if pq { prop_p.stride } else { prop_q.stride }) as i32;
+		let properties_pq = if pq { &prop_p.data } else { &prop_q.data };
+		let halfedge_pq = if pq { &halfedge_p } else { &halfedge_q };
 
 		// For Subtract, Q's triangles are flipped in the result, so Q's
 		// world-frame vertex normals (slot 0..2 when hasNormals) need a sign
@@ -593,7 +599,10 @@ pub fn create_properties(
 		let negate_normals = !pq
 			&& invert_q
 			&& old_prop_stride >= 3
-			&& tri_has_normals(&in_q.instance_relation, in_q.tri.relation[tri_id]);
+			&& tri_has_normals(
+				&instance_rel_r[instance_id_offset_q as usize..],
+				tri_rel_q[tri_id],
+			);
 
 		for i in 0..3 {
 			let vert = halfedge_r.start[3 * tri + i];
@@ -655,7 +664,7 @@ pub fn create_properties(
 
 			halfedge_r.prop[3 * tri + i] = idx;
 			idx += 1;
-			for p in 0..prop_stride {
+			for p in 0..prop_stride_r {
 				let p = p as i32;
 
 				if p < old_prop_stride {
@@ -684,8 +693,8 @@ fn barycentric(
 	halfedge_r: &Halfedges,
 	tri_rel_r: &[TriRelation],
 	instance_id_offset_q: u32,
-	vert_pos_p: &[Point3<f64>],
-	vert_pos_q: &[Point3<f64>],
+	vert_pos_p: Rc<Vec<Point3<f64>>>,
+	vert_pos_q: Rc<Vec<Point3<f64>>>,
 	vert_pos_r: &[Point3<f64>],
 	halfedge_p: &Halfedges,
 	halfedge_q: &Halfedges,
@@ -700,7 +709,7 @@ fn barycentric(
 
 			let tri_pq = ref_pq.face_id as usize;
 			let pq = ref_pq.instance_id < instance_id_offset_q;
-			let vert_pos = if pq { vert_pos_p } else { vert_pos_q };
+			let vert_pos = if pq { &vert_pos_p } else { &vert_pos_q };
 			let halfedge = if pq { halfedge_p } else { halfedge_q };
 
 			let mut tri_pos = Matrix3::default();

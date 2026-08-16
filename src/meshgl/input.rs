@@ -1,17 +1,18 @@
 use crate::halfedge::Halfedges;
 use crate::mesh_relations::{InstanceRelation, TriRelation, reserve_original_id};
 use crate::meshgl::MeshGL;
-use crate::postprocessing as pp;
 use crate::postprocessing::sort::morton_code;
 use crate::spatial::aabb::Box3D;
 use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::math::K_PRECISION;
-use crate::util::num_convert::{LossyFrom, LossyInto};
+use crate::util::num_convert::LossyFrom;
 use crate::util::vec_ext;
-use crate::{MeshBool, Precision, Properties, Triangles};
+use crate::{MeshBool, Precision, Properties};
+use crate::{TrianglesWIP, postprocessing as pp};
 use nalgebra::{Matrix3x4, Point3, Vector3};
 use std::any::TypeId;
+use std::rc::Rc;
 use std::{array, mem};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -48,31 +49,36 @@ where
 	///unique originalID for each material, and sort the materials into triangle
 	///runs.
 	fn try_from(mesh_gl: &MeshGL<F, I>) -> Result<Self, Self::Error> {
-		let num_vert = usize::lossy_from(mesh_gl.num_vert());
-		let num_tri = usize::lossy_from(mesh_gl.num_tri());
-
-		if num_vert == 0 && num_tri == 0 {
-			return Ok(MeshBool {
-				original_id: None,
-				precision: Precision {
-					epsilon: -1.0,
-					tolerance: -1.0,
-				},
-				vert_pos: Vec::default(),
-				tri: Triangles::default(),
-				properties: Properties::default(),
-				instance_relation: Vec::default(),
-				collider: BVHCollider::default(),
-			});
-		}
-
-		if num_vert < 4 || num_tri < 4 {
-			return Err(MeshGLError::NotManifold);
-		}
+		let requested_tolerance = f64::from(mesh_gl.tolerance);
 
 		let gl_prop_stride = usize::lossy_from(mesh_gl.prop_stride);
 		if gl_prop_stride < 3 {
 			return Err(MeshGLError::MissingPositionProperties);
+		}
+
+		let original_id = mesh_gl
+			.run_original_id
+			.is_empty()
+			.then(|| reserve_original_id());
+		let prop_stride = gl_prop_stride - 3;
+
+		let num_vert = usize::lossy_from(mesh_gl.num_vert());
+		let num_tri = usize::lossy_from(mesh_gl.num_tri());
+
+		if num_vert == 0 && num_tri == 0 {
+			return Ok(MeshBool::decimated(
+				original_id,
+				Rc::default(),
+				prop_stride,
+				Precision {
+					epsilon: -1.0,
+					tolerance: requested_tolerance,
+				},
+			));
+		}
+
+		if num_vert < 4 || num_tri < 4 {
+			return Err(MeshGLError::NotManifold);
 		}
 
 		if mesh_gl.merge_from_vert.len() != mesh_gl.merge_to_vert.len() {
@@ -113,11 +119,9 @@ where
 			return Err(MeshGLError::InvalidConstruction);
 		}
 
-		let tolerance = f64::from(mesh_gl.tolerance);
 		// This will have unreferenced duplicate positions that will be removed by
 		// Impl::remove_unreferenced_verts().
 		let mut vert_pos: Vec<Point3<f64>> = Vec::with_capacity(num_vert);
-		let prop_stride = gl_prop_stride - 3;
 		let mut properties: Vec<f64> = Vec::with_capacity(num_vert * prop_stride);
 
 		for i in 0..num_vert {
@@ -154,7 +158,7 @@ where
 		};
 
 		let mut tri_rel_unfiltered = unsafe { vec_ext::uninit(num_tri) };
-		let instance_relation = Vec::from_iter((0..run_original_id.len()).map(|i| {
+		let instance_relation = Rc::new(Vec::from_iter((0..run_original_id.len()).map(|i| {
 			let instance_id = i as u32;
 			let original_id = run_original_id[i];
 			let back_side = mesh_gl.back_side(i);
@@ -189,7 +193,7 @@ where
 				has_normals: run_has_n,
 				user_provided_face_id: !mesh_gl.face_id.is_empty(),
 			}
-		}));
+		})));
 
 		let prop2vert = (!mesh_gl.merge_from_vert.is_empty())
 			.then(|| {
@@ -244,7 +248,12 @@ where
 		}
 
 		let bbox = Box3D::from_cloud(&vert_pos);
-		let precision = Precision::new(bbox, tolerance, TypeId::of::<F>() == TypeId::of::<f32>());
+		let precision = Precision::new(
+			bbox,
+			requested_tolerance,
+			TypeId::of::<F>() == TypeId::of::<f32>(),
+		);
+		let epsilon = precision.epsilon;
 		let mut properties = Properties {
 			data: properties,
 			stride: prop_stride,
@@ -261,7 +270,7 @@ where
 			&vert_pos,
 			precision.tolerance,
 		);
-		let mut tri = Triangles {
+		let mut tri = TrianglesWIP {
 			halfedge,
 			normal: tri_normal,
 			relation: tri_rel,
@@ -274,7 +283,8 @@ where
 			&tri.relation,
 			&instance_relation,
 			prop_stride,
-			precision,
+			epsilon,
+			precision.tolerance,
 			0,
 		);
 		pp::swap_degenerates(
@@ -282,7 +292,8 @@ where
 			&mut vert_pos,
 			&mut properties,
 			&instance_relation,
-			precision,
+			epsilon,
+			precision.tolerance,
 			0,
 		);
 		pp::mark_unreferenced_verts(&mut tri.halfedge, &mut vert_pos);
@@ -300,9 +311,9 @@ where
 		Ok(MeshBool {
 			original_id,
 			precision,
-			vert_pos,
-			properties,
-			tri,
+			vert_pos: Rc::new(vert_pos),
+			properties: Rc::new(properties),
+			tri: tri.into_rc(),
 			instance_relation,
 			collider,
 		})
@@ -341,7 +352,7 @@ where
 	usize: LossyFrom<I>,
 	u64: LossyFrom<I>,
 	i32: LossyFrom<I>,
-	f64: LossyFrom<F>,
+	f64: From<F>,
 {
 	///Updates the mergeFromVert and mergeToVert vectors in order to create a
 	///manifold solid. If the MeshGL is already manifold, no change will occur and
@@ -391,20 +402,20 @@ where
 
 		let vert_prop_d = self.vert_properties.clone();
 		let gl_prop_stride = usize::lossy_from(self.prop_stride);
-		let mut bbox = Box3D::default();
+		let mut bbox = Box3D::empty();
 		for i in 0..3 {
 			let min_max = vert_prop_d[i..vert_prop_d.len()]
 				.iter()
 				.cloned()
 				.step_by(gl_prop_stride)
-				.map(|f| (f64::lossy_from(f), f64::lossy_from(f)))
+				.map(|f| (f64::from(f), f64::from(f)))
 				.reduce(|acc, b| (acc.0.min(b.0), acc.1.max(b.1)))
 				.unwrap_or((core::f64::INFINITY, core::f64::NEG_INFINITY));
 			bbox.min[i] = min_max.0;
 			bbox.max[i] = min_max.1;
 		}
 
-		let tolerance = f64::lossy_from(self.tolerance).max(
+		let tolerance = f64::from(self.tolerance).max(
 			(if TypeId::of::<F>() == TypeId::of::<f32>() {
 				core::f32::EPSILON as f64
 			} else {
@@ -417,9 +428,8 @@ where
 				let vert = open_verts[i];
 				let base = gl_prop_stride * vert as usize;
 
-				let center = Point3::from(array::from_fn(|j| {
-					self.vert_properties[base + j].lossy_into()
-				}));
+				let center =
+					Point3::from(array::from_fn(|j| self.vert_properties[base + j].into()));
 
 				let mut min = center;
 				min.iter_mut().for_each(|v| *v -= tolerance / 2.0);

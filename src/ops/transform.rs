@@ -1,37 +1,32 @@
 use crate::halfedge::Halfedges;
 use crate::mesh_relations::{InstanceRelation, TriRelation, tri_has_normals};
+use crate::ops::boolean::expression::CSGExpression;
 use crate::postprocessing::sort::get_tri_box_morton;
 use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::math::{
-	cosd, is_axis_aligned, mat3, mat4, normal_transform, safe_normalize3, sind, transform_normal,
+	is_axis_aligned, mat3, mul_mat3x4, normal_transform, safe_normalize3, transform_normal,
 };
 use crate::{Box3D, MeshBool, Precision, Properties, Triangles};
 use crate::{TrianglesPartial, postprocessing as pp};
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3, Vector4};
 use std::mem;
+use std::rc::Rc;
 
 impl MeshBool {
 	///Move this Manifold in space. This operation can be chained. Transforms are
 	///combined and applied lazily.
 	///
 	///@param v The vector to add to every vertex.
-	pub fn translate(&self, v: Vector3<f64>) -> Self {
-		let mut transform = Matrix3x4::<f64>::identity();
-		*transform.column_mut(3) = *v;
-		self.transform(transform)
+	pub fn translate(self, v: Vector3<f64>) -> CSGExpression {
+		CSGExpression::from(self).translate(v)
 	}
 
 	///Scale this Manifold in space. This operation can be chained. Transforms are
 	///combined and applied lazily.
 	///
 	///@param v The vector to multiply every vertex by per component.
-	pub fn scale(&self, v: Vector3<f64>) -> Self {
-		let mut transform = Matrix3x4::<f64>::identity();
-		for i in 0..3 {
-			transform[(i, i)] = v[i];
-		}
-
-		self.transform(transform)
+	pub fn scale(self, v: Vector3<f64>) -> CSGExpression {
+		CSGExpression::from(self).scale(v)
 	}
 
 	///Applies an Euler angle rotation to the manifold, This operation can be
@@ -51,46 +46,18 @@ impl MeshBool {
 	///@param xDegrees First rotation, degrees about the global X-axis.
 	///@param yDegrees Second rotation, degrees about the global Y-axis.
 	///@param zDegrees Third rotation, degrees about the global Z-axis.
-	pub fn rotate(&self, x_degrees: f64, y_degrees: f64, z_degrees: f64) -> Self {
-		let rx = Matrix3::from_column_slice(&[
-			1.0,
-			0.0,
-			0.0,
-			0.0,
-			cosd(x_degrees),
-			sind(x_degrees),
-			0.0,
-			-sind(x_degrees),
-			cosd(x_degrees),
-		]);
-		let ry = Matrix3::from_column_slice(&[
-			cosd(y_degrees),
-			0.0,
-			-sind(y_degrees),
-			0.0,
-			1.0,
-			0.0,
-			sind(y_degrees),
-			0.0,
-			cosd(y_degrees),
-		]);
-		let rz = Matrix3::from_column_slice(&[
-			cosd(z_degrees),
-			sind(z_degrees),
-			0.0,
-			-sind(z_degrees),
-			cosd(z_degrees),
-			0.0,
-			0.0,
-			0.0,
-			1.0,
-		]);
+	pub fn rotate(self, x_degrees: f64, y_degrees: f64, z_degrees: f64) -> CSGExpression {
+		CSGExpression::from(self).rotate(x_degrees, y_degrees, z_degrees)
+	}
 
-		let mut transform = Matrix3x4::default();
-		transform
-			.fixed_view_mut::<3, 3>(0, 0)
-			.copy_from(&(rz * ry * rx));
-		self.transform(transform)
+	///Mirror this Manifold over the plane described by the unit form of the given
+	///normal vector. If the length of the normal is zero, an empty Manifold is
+	///returned. This operation can be chained. Transforms are combined and applied
+	///lazily.
+	///
+	///@param normal The normal vector of the plane to be mirrored over
+	pub fn mirror(self, normal: Vector3<f64>) -> CSGExpression {
+		CSGExpression::from(self).mirror(normal)
 	}
 
 	///Transform this Manifold in space. The first three columns form a 3x3 matrix
@@ -98,61 +65,55 @@ impl MeshBool {
 	///chained. Transforms are combined and applied lazily.
 	///
 	///@param m The affine transform matrix to apply to all the vertices.
-	pub fn transform(&self, transform: Matrix3x4<f64>) -> Self {
+	pub fn transform(self, transform: Matrix3x4<f64>) -> CSGExpression {
+		CSGExpression::from(self).transform(transform)
+	}
+
+	pub(crate) fn apply_transform(self, transform: Matrix3x4<f64>) -> Self {
 		if transform == Matrix3x4::identity() {
 			return self.clone();
 		}
 
-		let instance_relation = self
-			.instance_relation
-			.iter()
-			.map(|&rel| {
-				let mut rel = rel;
-				rel.transform = transform * mat4(rel.transform);
-				rel
-			})
-			.collect();
+		let num_prop_vert = self.num_prop_vert();
+
+		let mut instance_rel = Rc::unwrap_or_clone(self.instance_relation);
+		for rel in instance_rel.iter_mut() {
+			rel.transform = mul_mat3x4(transform, rel.transform);
+		}
+		let instance_rel = Rc::new(instance_rel);
 
 		if !transform.iter().fold(true, |acc, e| acc && e.is_finite()) {
-			return Self::decimated(
-				None,
-				instance_relation,
-				self.properties.stride,
-				self.precision,
-			);
+			return Self::decimated(None, instance_rel, self.properties.stride, self.precision);
 		}
 
-		let vert_pos = Vec::from_iter(
-			self.vert_pos
-				.iter()
-				.map(|v| (transform * Vector4::new(v.x, v.y, v.z, 1.0)).into()),
-		);
+		let mut vert_pos = Rc::unwrap_or_clone(self.vert_pos);
+		for v in vert_pos.iter_mut() {
+			*v = (transform * Vector4::new(v.x, v.y, v.z, 1.0)).into();
+		}
 
 		let normal_transform = normal_transform(transform);
-		let tri_normal = self
-			.tri
-			.normal
-			.iter()
-			.map(|&n| transform_normal(normal_transform, n))
-			.collect();
+		let mut tri_normal = Rc::unwrap_or_clone(self.tri.normal);
+		for n in tri_normal.iter_mut() {
+			*n = transform_normal(normal_transform, *n);
+		}
 
-		let mut properties = self.properties.clone();
+		let mut properties = Rc::unwrap_or_clone(self.properties);
 		if properties.stride >= 3 {
 			eager_transform_prop_normals(
 				&mut properties,
 				&self.tri.halfedge,
-				&self.instance_relation,
+				&instance_rel,
 				&self.tri.relation,
 				normal_transform,
-				self.num_prop_vert(),
+				num_prop_vert,
 				0,
 			);
 		}
 
-		let mut halfedge = self.tri.halfedge.clone();
+		let mut halfedge = Rc::unwrap_or_clone(self.tri.halfedge);
 		let invert = mat3(transform).determinant() < 0.0;
 		if invert {
-			for tri in 0..self.num_tri() {
+			for tri in 0..halfedge.num_tri() {
 				FlipTris {
 					halfedge: &mut halfedge,
 				}
@@ -170,31 +131,31 @@ impl MeshBool {
 		precision.epsilon = precision.epsilon.max(epsilon_spectral_norm);
 		precision.tolerance = precision.tolerance.max(epsilon_spectral_norm);
 
-		let collider = if self.is_empty() {
+		let collider = Rc::new(if halfedge.num_tri() == 0 {
 			BVHCollider::default()
 		} else {
-			let mut collider = self.collider.clone();
+			let mut collider = Rc::unwrap_or_clone(self.collider);
 			if is_axis_aligned(transform) {
-				collider.transform(transform);
+				collider.transform_axis_aligned(transform);
 			} else {
 				let (tri_box, _) = get_tri_box_morton(&halfedge, &vert_pos, None);
 				collider.update_boxes(&tri_box);
 			}
 
 			collider
-		};
+		});
 
 		Self {
 			original_id: None,
 			precision,
-			vert_pos,
-			properties,
+			vert_pos: Rc::new(vert_pos),
+			properties: Rc::new(properties),
 			tri: Triangles {
-				halfedge,
-				normal: tri_normal,
-				relation: self.tri.relation.clone(),
+				halfedge: Rc::new(halfedge),
+				normal: Rc::new(tri_normal),
+				relation: self.tri.relation,
 			},
-			instance_relation,
+			instance_relation: instance_rel,
 			collider,
 		}
 	}
@@ -279,32 +240,6 @@ fn flip_halfedge(halfedge: i32) -> i32 {
 }
 
 impl MeshBool {
-	///Mirror this Manifold over the plane described by the unit form of the given
-	///normal vector. If the length of the normal is zero, an empty Manifold is
-	///returned. This operation can be chained. Transforms are combined and applied
-	///lazily.
-	///
-	///@param normal The normal vector of the plane to be mirrored over
-	pub fn mirror(&self, normal: Vector3<f64>) -> Self {
-		if normal.magnitude_squared() == 0.0 {
-			return Self::decimated(
-				None,
-				self.instance_relation.clone(),
-				self.properties.stride,
-				self.precision,
-			);
-		}
-		let n = normal.normalize();
-		let m = Matrix3::identity() - (2.0 * (n * n.transpose()));
-		let m = Matrix3x4::from_columns(&[
-			m.column(0).into(),
-			m.column(1).into(),
-			m.column(2).into(),
-			Vector3::default(),
-		]);
-		self.transform(m)
-	}
-
 	///This function does not change the topology, but allows the vertices to be
 	///moved according to any arbitrary input function. It is easy to create a
 	///function that warps a geometrically valid object into one which overlaps, but
@@ -317,7 +252,7 @@ impl MeshBool {
 	///matter after a non-rigid warp.
 	///
 	///@param warpFunc A function that modifies a given vertex position.
-	pub fn warp(&self, mut warp_func: impl FnMut(&mut Point3<f64>)) -> Self {
+	pub fn warp(self, mut warp_func: impl FnMut(&mut Point3<f64>)) -> Self {
 		self.warp_batch(|vecs| {
 			vecs.iter_mut().for_each(|v| warp_func(v));
 		})
@@ -331,24 +266,27 @@ impl MeshBool {
 	///warp.
 	///
 	///@param warpFunc A function that modifies multiple vertex positions.
-	pub fn warp_batch(&self, mut warp_func: impl FnMut(&mut [Point3<f64>])) -> Self {
-		let mut vert_pos = self.vert_pos.clone();
+	pub fn warp_batch(self, mut warp_func: impl FnMut(&mut [Point3<f64>])) -> Self {
+		drop(self.collider);
+		drop(self.tri.normal);
+
+		let mut vert_pos = Rc::unwrap_or_clone(self.vert_pos);
 		warp_func(&mut vert_pos);
 
 		let bbox = Box3D::from_cloud(&vert_pos);
 		if !bbox.is_finite() {
 			return Self::decimated(
 				None,
-				self.instance_relation.clone(),
+				self.instance_relation,
 				self.properties.stride,
 				self.precision,
 			);
 		}
 
 		let precision = Precision::new(bbox, self.precision.tolerance, false);
-		let mut properties = self.properties.clone();
-		let mut halfedge = self.tri.halfedge.clone();
-		let mut tri_rel = self.tri.relation.clone();
+		let mut properties = Rc::unwrap_or_clone(self.properties);
+		let mut halfedge = Rc::unwrap_or_clone(self.tri.halfedge);
+		let mut tri_rel = Rc::unwrap_or_clone(self.tri.relation);
 		let collider = pp::sort_and_compact_geometry(
 			&mut vert_pos,
 			&mut properties,
@@ -371,14 +309,14 @@ impl MeshBool {
 		Self {
 			original_id: None,
 			precision,
-			vert_pos,
-			properties,
+			vert_pos: Rc::new(vert_pos),
+			properties: Rc::new(properties),
 			tri: Triangles {
-				halfedge,
-				normal: tri_normal,
-				relation: tri_rel,
+				halfedge: Rc::new(halfedge),
+				normal: Rc::new(tri_normal),
+				relation: Rc::new(tri_rel),
 			},
-			instance_relation: self.instance_relation.clone(),
+			instance_relation: self.instance_relation,
 			collider,
 		}
 	}

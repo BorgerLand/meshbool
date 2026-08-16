@@ -87,10 +87,10 @@ pub fn transform_normal(transform: Matrix3<f64>, mut normal: Vector3<f64>) -> Ve
 }
 
 #[inline(always)]
-pub fn mat4(a: Matrix3x4<f64>) -> Matrix4<f64> {
-	let mut result = Matrix4::identity();
-	result.fixed_view_mut::<3, 4>(0, 0).copy_from(&a);
-	result
+pub fn mul_mat3x4(parent: Matrix3x4<f64>, child: Matrix3x4<f64>) -> Matrix3x4<f64> {
+	let mut child4 = Matrix4::identity();
+	child4.fixed_view_mut::<3, 4>(0, 0).copy_from(&child);
+	parent * child4
 }
 
 #[inline(always)]

@@ -10,6 +10,7 @@ use crate::util::segment_resolution::SegmentResolution;
 use crate::{Box3D, MeshBool, Precision, Properties, TrianglesPartial};
 use nalgebra::{Matrix2, Matrix3x4, Point2, Point3, Vector2, Vector3};
 use std::f64::consts::FRAC_PI_2;
+use std::rc::Rc;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ConstructorError {
@@ -116,9 +117,12 @@ impl MeshBool {
 			// Cone with apex at bottom: create the centered apex-at-top version and
 			// mirror it
 			let mut cone = MeshBool::cylinder(height, radius_high, 0.0, quality, true)?;
-			cone = cone.mirror(Vector3::new(0.0, 0.0, 1.0));
+			cone = cone.mirror(Vector3::new(0.0, 0.0, 1.0)).eval().unwrap();
 			if !center {
-				cone = cone.translate(Vector3::new(0.0, 0.0, height / 2.0));
+				cone = cone
+					.translate(Vector3::new(0.0, 0.0, height / 2.0))
+					.eval()
+					.unwrap();
 			}
 			return Ok(cone.as_original());
 		}
@@ -144,6 +148,8 @@ impl MeshBool {
 		Ok(if center {
 			cylinder
 				.translate(Vector3::new(0.0, 0.0, -height / 2.0))
+				.eval()
+				.unwrap()
 				.as_original()
 		} else {
 			cylinder
@@ -192,7 +198,7 @@ impl MeshBool {
 		} / 4;
 
 		let (sphere, _) = octahedron.subdivide(|_, _, _| (n - 1) as i32, false);
-		let mut vert_pos = sphere.vert_pos;
+		let mut vert_pos = Rc::try_unwrap(sphere.vert_pos).unwrap();
 		for v in vert_pos.iter_mut() {
 			let v_vec = Vector3::new(
 				libm::cos(FRAC_PI_2 * (1.0 - v.x)),
@@ -206,7 +212,10 @@ impl MeshBool {
 			}
 		}
 
-		Ok(Self::from_halfedges(vert_pos, sphere.tri.halfedge))
+		Ok(Self::from_halfedges(
+			vert_pos,
+			Rc::try_unwrap(sphere.tri.halfedge).unwrap(),
+		))
 	}
 
 	///Constructs a manifold from a set of polygons by extruding them along the
@@ -559,14 +568,14 @@ impl MeshBool {
 		MeshBool {
 			original_id: Some(original_id),
 			precision,
-			vert_pos,
-			properties,
+			vert_pos: Rc::new(vert_pos),
+			properties: Rc::new(properties),
 			tri: Triangles {
-				halfedge,
-				normal: tri_normal,
-				relation: tri_rel,
+				halfedge: Rc::new(halfedge),
+				normal: Rc::new(tri_normal),
+				relation: Rc::new(tri_rel),
 			},
-			instance_relation: instance_rel,
+			instance_relation: Rc::new(instance_rel),
 			collider,
 		}
 	}

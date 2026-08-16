@@ -76,17 +76,17 @@ impl BVHCollider {
 		}
 	}
 
-	pub fn transform(&mut self, transform: Matrix3x4<f64>) {
+	pub fn transform_axis_aligned(&mut self, transform: Matrix3x4<f64>) {
 		debug_assert!(is_axis_aligned(transform), "transform must be axis-aligned");
 
 		for aabb in &mut self.node_bbox {
-			*aabb = aabb.transform(transform)
+			*aabb = aabb.transform_axis_aligned(transform)
 		}
 	}
 
 	pub fn get_bounding_box(&self) -> Box3D {
 		if self.node_bbox.is_empty() {
-			return Box3D::default();
+			return Box3D::empty();
 		}
 		self.node_bbox[internal2node(0)]
 	}
@@ -299,7 +299,7 @@ where
 	#[inline(always)]
 	fn record_collision(&mut self, query: OverlapT, node: usize, query_idx: usize) -> bool {
 		let bbox = self.node_bbox[node];
-		let overlaps = bbox.does_overlap(query);
+		let overlaps = bbox.overlaps(query);
 		if overlaps && is_leaf(node) {
 			let leaf_idx = node2leaf(node);
 			if !SELF_COLLISION || leaf_idx != query_idx {

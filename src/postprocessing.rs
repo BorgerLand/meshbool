@@ -5,7 +5,7 @@ use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::math::{ccw, get_axis_aligned_projection};
 use crate::util::num_convert::OrderedF64;
-use crate::{Precision, Properties, Triangles};
+use crate::{Properties, TrianglesWIP};
 use nalgebra::{Point2, Point3, Vector3};
 use rustc_hash::FxHashMap;
 use std::cmp::Reverse;
@@ -223,7 +223,7 @@ pub fn set_normals_and_coplanar(
 ///one pair of triangles sharing the same edge), which are removed by
 ///duplicating one vert and adding two triangles. These degenerate triangles are
 ///likely to be collapsed again in the subsequent simplification.
-pub fn dedupe_edges(tri: &mut Triangles, vert_pos: &mut Vec<Point3<f64>>) {
+pub fn dedupe_edges(tri: &mut TrianglesWIP, vert_pos: &mut Vec<Point3<f64>>) {
 	loop {
 		let nb_edges = tri.halfedge.len();
 		let mut duplicates = Vec::<usize>::new();
@@ -352,7 +352,8 @@ pub fn collapse_short_edges(
 	tri_rel: &[TriRelation],
 	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
-	precision: Precision,
+	epsilon: f64,
+	tolerance: f64,
 	first_new_vert: usize,
 ) {
 	let mut s = FlagStore::default();
@@ -368,9 +369,9 @@ pub fn collapse_short_edges(
 	// newly-created verts, which means error stacking is not a concern, so we
 	// allow collapsing up to tolerance in that case.
 	let tol = if first_new_vert == 0 {
-		precision.epsilon
+		epsilon
 	} else {
-		precision.tolerance
+		tolerance
 	};
 
 	let short_edge = |(halfedge, vert_pos): &mut (&mut Halfedges, &mut Vec<Point3<f64>>), edge| {
@@ -392,7 +393,7 @@ pub fn collapse_short_edges(
 		let max_len = if end < first_new_vert {
 			tol * tol
 		} else {
-			precision.epsilon * precision.epsilon
+			epsilon * epsilon
 		};
 		len_sq < max_len
 	};
@@ -411,10 +412,8 @@ pub fn collapse_short_edges(
 				vert_pos,
 				&mut scratch_buffer,
 				prop_stride,
-				Precision {
-					epsilon: precision.epsilon,
-					tolerance: tol,
-				},
+				epsilon,
+				tol,
 				first_new_vert,
 			);
 			if did_collapse {
@@ -489,10 +488,8 @@ pub fn collapse_colinear_edges(
 					vert_pos,
 					&mut scratch_buffer,
 					prop_stride,
-					Precision {
-						epsilon,
-						tolerance: epsilon,
-					},
+					epsilon,
+					epsilon,
 					0,
 				);
 				if did_collapse {
@@ -511,11 +508,12 @@ pub fn collapse_colinear_edges(
 //performs edge swaps on the long edges of degenerate triangles, though
 ///there are some configurations of degenerates that cannot be removed this way.
 pub fn swap_degenerates(
-	tri: &mut Triangles,
+	tri: &mut TrianglesWIP,
 	vert_pos: &mut Vec<Point3<f64>>,
 	properties: &mut Properties,
 	instance_rel: &[InstanceRelation],
-	precision: Precision,
+	epsilon: f64,
+	tolerance: f64,
 	first_new_vert: usize,
 ) {
 	//RecursiveEdgeSwap
@@ -524,7 +522,7 @@ pub fn swap_degenerates(
 	let nb_edges = tri.halfedge.len();
 	let mut scratch_buffer = Vec::with_capacity(10);
 
-	let swappable_edge = |(tri, vert_pos): &mut (&mut Triangles, &mut Vec<Point3<f64>>),
+	let swappable_edge = |(tri, vert_pos): &mut (&mut TrianglesWIP, &mut Vec<Point3<f64>>),
 	                      mut edge|
 	 -> bool {
 		let pair = tri.halfedge.pair[edge];
@@ -548,8 +546,7 @@ pub fn swap_degenerates(
 		for i in 0..3 {
 			v[i] = projection * vert_pos[tri.halfedge.start[tri_edge[i] as usize] as usize];
 		}
-		if ccw(v[0], v[1], v[2], precision.tolerance) > 0 || !edge::is_01_longest(v[0], v[1], v[2])
-		{
+		if ccw(v[0], v[1], v[2], tolerance) > 0 || !edge::is_01_longest(v[0], v[1], v[2]) {
 			return false;
 		}
 
@@ -561,7 +558,7 @@ pub fn swap_degenerates(
 			v[i] = projection * vert_pos[tri.halfedge.start[pair_tri_edge[i] as usize] as usize];
 		}
 
-		ccw(v[0], v[1], v[2], precision.tolerance) > 0 || edge::is_01_longest(v[0], v[1], v[2])
+		ccw(v[0], v[1], v[2], tolerance) > 0 || edge::is_01_longest(v[0], v[1], v[2])
 	};
 
 	let mut edge_swap_stack = Vec::new();
@@ -584,7 +581,8 @@ pub fn swap_degenerates(
 				&mut edge_swap_stack,
 				&mut scratch_buffer,
 				instance_rel,
-				precision,
+				epsilon,
+				tolerance,
 			);
 			while !edge_swap_stack.is_empty() {
 				let last = edge_swap_stack.pop().unwrap();
@@ -605,7 +603,8 @@ pub fn swap_degenerates(
 					&mut edge_swap_stack,
 					&mut scratch_buffer,
 					instance_rel,
-					precision,
+					epsilon,
+					tolerance,
 				);
 			}
 		},

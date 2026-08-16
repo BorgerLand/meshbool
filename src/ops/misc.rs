@@ -2,9 +2,9 @@ use crate::mesh_relations::{
 	InstanceRelation, TriRelation, all_instances_have_normals, reserve_original_id,
 };
 use crate::postprocessing as pp;
-use crate::spatial::bvh_collider::BVHCollider;
-use crate::{Box3D, MeshBool, Precision, Properties, Triangles};
+use crate::{Box3D, MeshBool, Precision, Properties, Triangles, TrianglesWIP};
 use nalgebra::Matrix3x4;
+use std::rc::Rc;
 
 impl MeshBool {
 	///This removes all relations (originalID, faceID, transform) to ancestor meshes
@@ -12,9 +12,12 @@ impl MeshBool {
 	///- these don't get joined at boundaries where originalID changes, so the
 	///reset may allow triangles of flat faces to be further collapsed with
 	///Simplify().
-	pub fn as_original(&self) -> Self {
+	pub fn as_original(self) -> Self {
+		drop(self.tri.normal);
+		drop(self.tri.relation);
+
 		let original_id = reserve_original_id();
-		let mut tri_rel = vec![TriRelation::default(); self.num_tri()];
+		let mut tri_rel = vec![TriRelation::default(); self.tri.halfedge.num_tri()];
 		let instance_rel = vec![InstanceRelation {
 			original_id,
 			transform: Matrix3x4::identity(),
@@ -34,21 +37,21 @@ impl MeshBool {
 		Self {
 			original_id: Some(original_id),
 			precision: self.precision,
-			vert_pos: self.vert_pos.clone(),
-			properties: self.properties.clone(),
+			vert_pos: self.vert_pos,
+			properties: self.properties,
 			tri: Triangles {
-				halfedge: self.tri.halfedge.clone(),
-				normal: tri_normal,
-				relation: tri_rel,
+				halfedge: self.tri.halfedge,
+				normal: Rc::new(tri_normal),
+				relation: Rc::new(tri_rel),
 			},
-			instance_relation: instance_rel,
-			collider: self.collider.clone(),
+			instance_relation: Rc::new(instance_rel),
+			collider: self.collider,
 		}
 	}
 
 	///Return a copy of the manifold with the set tolerance value.
 	///This performs mesh simplification when the tolerance value is increased.
-	pub fn set_tolerance(&self, tolerance: f64) -> Self {
+	pub fn set_tolerance(self, tolerance: f64) -> Self {
 		self.set_tolerance_and_simplify(Some(tolerance), false)
 	}
 
@@ -57,48 +60,50 @@ impl MeshBool {
 	///than the current tolerance, the current tolerance is used for simplification.
 	///The result will contain a subset of the original verts and all surfaces will
 	///have moved by less than tolerance.
-	pub fn simplify(&self, tolerance: Option<f64>) -> Self {
+	pub fn simplify(self, tolerance: Option<f64>) -> Self {
 		self.set_tolerance_and_simplify(tolerance, true)
 	}
 
-	fn set_tolerance_and_simplify(&self, tolerance: Option<f64>, mut simplify: bool) -> Self {
+	fn set_tolerance_and_simplify(self, tolerance: Option<f64>, mut simplify: bool) -> Self {
+		let epsilon = self.get_epsilon();
 		let mut precision = self.precision;
-		let tolerance = tolerance.unwrap_or(precision.tolerance);
-		let mut tri_rel = self.tri.relation.clone();
+		let requested_tolerance = tolerance.unwrap_or(precision.tolerance);
+		let mut tri_rel = self.tri.relation.to_vec();
+		drop(self.tri.relation);
 
-		let tri_normal = if tolerance > precision.tolerance {
+		let tri_normal = if requested_tolerance > precision.tolerance {
 			simplify = true;
-			precision.tolerance = tolerance;
+			precision.tolerance = requested_tolerance;
 			pp::set_normals_and_coplanar(
 				&mut tri_rel,
 				&self.instance_relation,
 				&self.tri.halfedge,
 				&self.vert_pos,
-				tolerance,
+				requested_tolerance,
 			)
 		} else {
 			if !simplify {
 				// for reducing tolerance, we need to make sure it is still at least
 				// equal to epsilon.
-				precision.tolerance = precision.epsilon.max(tolerance);
+				precision.tolerance = epsilon.max(requested_tolerance);
 			}
 
-			self.tri.normal.clone()
+			self.tri.normal.to_vec()
 		};
 
-		if self.is_empty() {
+		if self.tri.halfedge.num_tri() == 0 {
 			return Self::decimated(
 				None,
-				self.instance_relation.clone(),
+				self.instance_relation,
 				self.properties.stride,
 				precision,
 			);
 		}
 
-		let mut vert_pos = self.vert_pos.clone();
-		let mut properties = self.properties.clone();
-		let mut tri = Triangles {
-			halfedge: self.tri.halfedge.clone(),
+		let mut vert_pos = self.vert_pos.to_vec();
+		let mut properties = Rc::unwrap_or_clone(self.properties);
+		let mut tri = TrianglesWIP {
+			halfedge: Rc::unwrap_or_clone(self.tri.halfedge),
 			normal: tri_normal,
 			relation: tri_rel,
 		};
@@ -112,8 +117,9 @@ impl MeshBool {
 				&tri.normal,
 				&tri.relation,
 				&self.instance_relation,
-				self.properties.stride,
-				precision,
+				properties.stride,
+				epsilon,
+				precision.tolerance,
 				0,
 			);
 			pp::collapse_colinear_edges(
@@ -123,7 +129,7 @@ impl MeshBool {
 				&tri.relation,
 				&self.instance_relation,
 				properties.stride,
-				precision.epsilon,
+				epsilon,
 				0,
 			);
 			pp::swap_degenerates(
@@ -131,32 +137,28 @@ impl MeshBool {
 				&mut vert_pos,
 				&mut properties,
 				&self.instance_relation,
-				precision,
+				epsilon,
+				precision.tolerance,
 				0,
 			);
 			let bbox = Box3D::from_cloud(&vert_pos);
 			let Some(collider) =
 				pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
 			else {
-				return Self::decimated(
-					None,
-					self.instance_relation.clone(),
-					properties.stride,
-					precision,
-				);
+				return Self::decimated(None, self.instance_relation, properties.stride, precision);
 			};
 			collider
 		} else {
-			self.collider.clone()
+			self.collider
 		};
 
 		Self {
 			original_id: None,
 			precision,
-			vert_pos,
-			properties,
-			tri,
-			instance_relation: self.instance_relation.clone(),
+			vert_pos: Rc::new(vert_pos),
+			properties: Rc::new(properties),
+			tri: tri.into_rc(),
+			instance_relation: self.instance_relation,
 			collider,
 		}
 	}
@@ -165,21 +167,21 @@ impl MeshBool {
 	//but lost all its geometry along the way and early exited
 	pub(crate) fn decimated(
 		original_id: Option<u32>,
-		instance_relation: Vec<InstanceRelation>,
+		instance_relation: Rc<Vec<InstanceRelation>>,
 		prop_stride: usize,
 		precision: Precision,
 	) -> Self {
 		Self {
 			original_id,
 			precision,
-			vert_pos: Vec::default(),
-			properties: Properties {
+			vert_pos: Rc::default(),
+			properties: Rc::new(Properties {
 				data: Vec::default(),
 				stride: prop_stride,
-			},
+			}),
 			tri: Triangles::default(),
 			instance_relation,
-			collider: BVHCollider::default(),
+			collider: Rc::default(),
 		}
 	}
 }

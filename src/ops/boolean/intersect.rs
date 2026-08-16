@@ -1,6 +1,6 @@
-use crate::MeshBool;
 use crate::halfedge::Halfedges;
 use crate::spatial::aabb::Box3D;
+use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::math::next3_usize;
 use core::f64;
@@ -8,6 +8,7 @@ use nalgebra::{Point3, Vector2, Vector3, Vector4};
 use rustc_hash::FxHashSet;
 use std::mem;
 use std::ops::DerefMut;
+use std::rc::Rc;
 
 /**
  * The notation in these files is abbreviated due to the complexity of the
@@ -40,70 +41,121 @@ pub struct Intersections {
 }
 
 pub fn intersect12<const FORWARD: bool>(
-	in_p: &MeshBool,
+	vert_pos_p: &[Point3<f64>],
+	halfedge_p: &Halfedges,
+	tri_normal_p: &[Vector3<f64>],
+	collider_p: &BVHCollider,
 	vert_normal_p: &[Vector3<f64>],
-	in_q: &MeshBool,
+	vert_pos_q: &[Point3<f64>],
+	halfedge_q: &Halfedges,
+	tri_normal_q: &[Vector3<f64>],
+	collider_q: &BVHCollider,
 	vert_normal_q: &[Vector3<f64>],
 	expand_p: bool,
 ) -> Intersections {
 	if expand_p {
-		intersect12_impl::<true, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q)
+		intersect12_impl::<true, FORWARD>(
+			vert_pos_p,
+			halfedge_p,
+			tri_normal_p,
+			collider_p,
+			vert_normal_p,
+			vert_pos_q,
+			halfedge_q,
+			tri_normal_q,
+			collider_q,
+			vert_normal_q,
+		)
 	} else {
-		intersect12_impl::<false, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q)
+		intersect12_impl::<false, FORWARD>(
+			vert_pos_p,
+			halfedge_p,
+			tri_normal_p,
+			collider_p,
+			vert_normal_p,
+			vert_pos_q,
+			halfedge_q,
+			tri_normal_q,
+			collider_q,
+			vert_normal_q,
+		)
 	}
 }
 
 fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
-	in_p: &MeshBool,
+	vert_pos_p: &[Point3<f64>],
+	halfedge_p: &Halfedges,
+	tri_normal_p: &[Vector3<f64>],
+	collider_p: &BVHCollider,
 	vert_normal_p: &[Vector3<f64>],
-	in_q: &MeshBool,
+	vert_pos_q: &[Point3<f64>],
+	halfedge_q: &Halfedges,
+	tri_normal_q: &[Vector3<f64>],
+	collider_q: &BVHCollider,
 	vert_normal_q: &[Vector3<f64>],
 ) -> Intersections {
 	// a: 1 (edge), b: 2 (face)
-	let a = if FORWARD { in_p } else { in_q };
-	let vert_normal_a = if FORWARD {
-		vert_normal_p
+	let (vert_pos_a, halfedge_a, vert_normal_a) = if FORWARD {
+		(vert_pos_p, halfedge_p, vert_normal_p)
 	} else {
-		vert_normal_q
+		(vert_pos_q, halfedge_q, vert_normal_q)
 	};
-	let b = if FORWARD { in_q } else { in_p };
-	let vert_normal_b = if FORWARD {
-		vert_normal_q
+	let (vert_pos_b, halfedge_b, tri_normal_b, collider_b, vert_normal_b) = if FORWARD {
+		(
+			vert_pos_q,
+			halfedge_q,
+			tri_normal_q,
+			collider_q,
+			vert_normal_q,
+		)
 	} else {
-		vert_normal_p
+		(
+			vert_pos_p,
+			halfedge_p,
+			tri_normal_p,
+			collider_p,
+			vert_normal_p,
+		)
 	};
 
 	let k02 = Kernel02::<EXPAND_P, FORWARD> {
-		in_a: a,
+		vert_pos_a,
 		vert_normal_a,
-		in_b: b,
+		vert_pos_b,
+		halfedge_b,
+		tri_normal_b,
 		vert_normal_b,
 	};
 	let k11 = Kernel11::<EXPAND_P> {
-		in_p,
+		vert_pos_p,
+		halfedge_pair_p: &halfedge_p.pair,
+		tri_normal_p,
 		vert_normal_p,
-		in_q,
+		vert_pos_q,
+		halfedge_pair_q: &halfedge_q.pair,
+		tri_normal_q,
 		vert_normal_q,
 	};
 
 	let k12 = Kernel12::<EXPAND_P, FORWARD> {
-		in_a: a,
-		in_b: b,
+		vert_pos_a,
+		halfedge_a,
+		halfedge_b,
 		k02,
 		k11,
 	};
 	let f = |i| {
-		let start = a.tri.halfedge.start[i] as usize;
-		let end = a.tri.halfedge.end(i) as usize;
+		let start = halfedge_a.start[i] as usize;
+		let end = halfedge_a.end(i) as usize;
 		if start < end {
-			Box3D::new(a.vert_pos[start], a.vert_pos[end])
+			Box3D::new(vert_pos_a[start], vert_pos_a[end])
 		} else {
-			Box3D::default()
+			Box3D::empty()
 		}
 	};
 
 	let mut xv12 = Intersections::default();
-	b.collider.collisions_from_fn::<false, _>(
+	collider_b.collisions_from_fn::<false, _>(
 		|query_idx, leaf_idx| {
 			let (x12, v12) = k12.call(query_idx, leaf_idx);
 			if v12[0].is_finite() {
@@ -118,7 +170,7 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 			}
 		},
 		f,
-		a.tri.halfedge.len(),
+		halfedge_a.len(),
 		true,
 	);
 
@@ -126,8 +178,9 @@ fn intersect12_impl<const EXPAND_P: bool, const FORWARD: bool>(
 }
 
 struct Kernel12<'a, const EXPAND_P: bool, const FORWARD: bool> {
-	in_a: &'a MeshBool,
-	in_b: &'a MeshBool,
+	vert_pos_a: &'a [Point3<f64>],
+	halfedge_a: &'a Halfedges,
+	halfedge_b: &'a Halfedges,
 	k02: Kernel02<'a, EXPAND_P, FORWARD>,
 	k11: Kernel11<'a, EXPAND_P>,
 }
@@ -145,9 +198,9 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWA
 		// intersection is between the left and right.
 		let mut shadows_var = false;
 
-		let edge_a_start = self.in_a.tri.halfedge.start[a1] as usize;
-		let edge_a_end = self.in_a.tri.halfedge.end(a1) as usize;
-		let edge_b = load_face_edges(&self.in_b.tri.halfedge, b2);
+		let edge_a_start = self.halfedge_a.start[a1] as usize;
+		let edge_a_end = self.halfedge_a.end(a1) as usize;
+		let edge_b = load_face_edges(self.halfedge_b, b2);
 
 		for vert_a in [edge_a_start, edge_a_end] {
 			let (s, z) = self.k02.call_with_edge(vert_a, b2, &edge_b);
@@ -160,7 +213,7 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWA
 					})) as i8;
 				if k < 2 && (k == 0 || (s != 0) != shadows_var) {
 					shadows_var = s != 0;
-					xzy_lr0[k] = self.in_a.vert_pos[vert_a];
+					xzy_lr0[k] = self.vert_pos_a[vert_a];
 					let switcheroo = xzy_lr0[k].deref_mut();
 					mem::swap(&mut switcheroo.y, &mut switcheroo.z);
 					xzy_lr1[k] = xzy_lr0[k];
@@ -224,9 +277,13 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel12<'a, EXPAND_P, FORWA
 }
 
 struct Kernel11<'a, const EXPAND_P: bool> {
-	in_p: &'a MeshBool,
+	vert_pos_p: &'a [Point3<f64>],
+	halfedge_pair_p: &'a [i32],
+	tri_normal_p: &'a [Vector3<f64>],
 	vert_normal_p: &'a [Vector3<f64>],
-	in_q: &'a MeshBool,
+	vert_pos_q: &'a [Point3<f64>],
+	halfedge_pair_q: &'a [i32],
+	tri_normal_q: &'a [Vector3<f64>],
 	vert_normal_q: &'a [Vector3<f64>],
 }
 
@@ -258,9 +315,11 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 				q1,
 				q1s,
 				q1e,
-				self.in_p,
+				self.vert_pos_p,
 				self.vert_normal_p,
-				self.in_q,
+				self.vert_pos_q,
+				self.halfedge_pair_q,
+				self.tri_normal_q,
 				self.vert_normal_q,
 			);
 			// If the value is NaN, then these do not overlap.
@@ -268,7 +327,7 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 				s11 += s01 * (if i == 0 { -1 } else { 1 });
 				if k < 2 && (k == 0 || (s01 != 0) != shadows_var) {
 					shadows_var = s01 != 0;
-					p_rl[k] = self.in_p.vert_pos[p0[i]];
+					p_rl[k] = self.vert_pos_p[p0[i]];
 					q_rl[k] = Point3::new(p_rl[k].x, yz01.x, yz01.y);
 					k += 1;
 				}
@@ -282,9 +341,11 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 				p1,
 				p1s,
 				p1e,
-				self.in_q,
+				self.vert_pos_q,
 				self.vert_normal_q,
-				self.in_p,
+				self.vert_pos_p,
+				self.halfedge_pair_p,
+				self.tri_normal_p,
 				self.vert_normal_p,
 			);
 			// If the value is NaN, then these do not overlap.
@@ -292,7 +353,7 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 				s11 += s10 * (if i == 0 { -1 } else { 1 });
 				if k < 2 && (k == 0 || (s10 != 0) != shadows_var) {
 					shadows_var = s10 != 0;
-					q_rl[k] = self.in_q.vert_pos[q0[i]];
+					q_rl[k] = self.vert_pos_q[q0[i]];
 					p_rl[k] = Point3::new(q_rl[k].x, yz10.x, yz10.y);
 					k += 1;
 				}
@@ -307,10 +368,10 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 			debug_assert!(k == 2, "Boolean manifold error: s11");
 			xyzz11 = intersect(&p_rl[0], &p_rl[1], &q_rl[0], &q_rl[1]);
 
-			let p1pair = self.in_p.tri.halfedge.pair[p1] as usize;
-			let dir_p = self.in_p.tri.normal[p1 / 3].z + self.in_p.tri.normal[p1pair / 3].z;
-			let q1pair = self.in_q.tri.halfedge.pair[q1] as usize;
-			let dir_q = self.in_q.tri.normal[q1 / 3].z + self.in_q.tri.normal[q1pair / 3].z;
+			let p1pair = self.halfedge_pair_p[p1] as usize;
+			let dir_p = self.tri_normal_p[p1 / 3].z + self.tri_normal_p[p1pair / 3].z;
+			let q1pair = self.halfedge_pair_q[q1] as usize;
+			let dir_q = self.tri_normal_q[q1 / 3].z + self.tri_normal_q[q1pair / 3].z;
 			if !shadows(xyzz11.z, xyzz11.w, with_sign(EXPAND_P, dir_p) - dir_q) {
 				s11 = 0;
 			}
@@ -321,46 +382,62 @@ impl<'a, const EXPAND_P: bool> Kernel11<'a, EXPAND_P> {
 }
 
 pub fn winding03<const FORWARD: bool>(
-	in_p: &MeshBool,
-	vert_normal_p: &[Vector3<f64>],
-	in_q: &MeshBool,
-	vert_normal_q: &[Vector3<f64>],
+	vert_pos_a: &[Point3<f64>],
+	halfedge_a: &Halfedges,
+	vert_normal_a: &[Vector3<f64>],
+	vert_pos_b: &[Point3<f64>],
+	halfedge_b: &Halfedges,
+	tri_normal_b: &[Vector3<f64>],
+	collider_b: Rc<BVHCollider>,
+	vert_normal_b: &[Vector3<f64>],
 	p1q2: &[[i32; 2]],
 	expand_p: bool,
 ) -> Vec<i32> {
 	if expand_p {
-		winding03_impl::<true, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q, p1q2)
+		winding03_impl::<true, FORWARD>(
+			vert_pos_a,
+			halfedge_a,
+			vert_normal_a,
+			vert_pos_b,
+			halfedge_b,
+			tri_normal_b,
+			collider_b,
+			vert_normal_b,
+			p1q2,
+		)
 	} else {
-		winding03_impl::<false, FORWARD>(in_p, vert_normal_p, in_q, vert_normal_q, p1q2)
+		winding03_impl::<false, FORWARD>(
+			vert_pos_a,
+			halfedge_a,
+			vert_normal_a,
+			vert_pos_b,
+			halfedge_b,
+			tri_normal_b,
+			collider_b,
+			vert_normal_b,
+			p1q2,
+		)
 	}
 }
 
 fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
-	in_p: &MeshBool,
-	vert_normal_p: &[Vector3<f64>],
-	in_q: &MeshBool,
-	vert_normal_q: &[Vector3<f64>],
+	vert_pos_a: &[Point3<f64>],
+	halfedge_a: &Halfedges,
+	vert_normal_a: &[Vector3<f64>],
+	vert_pos_b: &[Point3<f64>],
+	halfedge_b: &Halfedges,
+	tri_normal_b: &[Vector3<f64>],
+	collider_b: Rc<BVHCollider>,
+	vert_normal_b: &[Vector3<f64>],
 	p1q2: &[[i32; 2]],
 ) -> Vec<i32> {
 	// a: 0 (vert), b: 2 (face)
-	let a = if FORWARD { in_p } else { in_q };
-	let vert_normal_a = if FORWARD {
-		vert_normal_p
-	} else {
-		vert_normal_q
-	};
-	let b = if FORWARD { in_q } else { in_p };
-	let vert_normal_b = if FORWARD {
-		vert_normal_q
-	} else {
-		vert_normal_p
-	};
 	let index = if FORWARD { 0 } else { 1 };
 
-	let mut u_a = DisjointSets::new(a.vert_pos.len());
-	for edge in 0..a.tri.halfedge.len() {
-		let start = a.tri.halfedge.start[edge] as usize;
-		let end = a.tri.halfedge.end(edge) as usize;
+	let mut u_a = DisjointSets::new(vert_pos_a.len());
+	for edge in 0..halfedge_a.len() {
+		let start = halfedge_a.start[edge] as usize;
+		let end = halfedge_a.end(edge) as usize;
 		if start >= end {
 			continue;
 		}
@@ -373,22 +450,24 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 
 	// find components, the hope is the number of components should be small
 	let mut components = FxHashSet::default();
-	for v in 0..a.vert_pos.len() {
+	for v in 0..vert_pos_a.len() {
 		components.insert(u_a.find(v));
 	}
 
 	let verts = Vec::from_iter(components.into_iter().map(|c| c as i32));
 
 	let k02 = Kernel02::<EXPAND_P, FORWARD> {
-		in_a: a,
+		vert_pos_a,
 		vert_normal_a,
-		in_b: b,
+		vert_pos_b: vert_pos_b,
+		halfedge_b: halfedge_b,
+		tri_normal_b: tri_normal_b,
 		vert_normal_b,
 	};
 
-	let mut w03 = vec![0; a.num_vert()];
-	let f = |i| a.vert_pos[verts[i] as usize];
-	b.collider.collisions_from_fn::<false, _>(
+	let mut w03 = vec![0; vert_pos_a.len()];
+	let f = |i| vert_pos_a[verts[i] as usize];
+	collider_b.collisions_from_fn::<false, _>(
 		|query_idx, leaf_idx| {
 			let (s02, z02) = k02.call(verts[query_idx] as usize, leaf_idx);
 			if z02.is_finite() {
@@ -401,6 +480,8 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 		verts.len(),
 		true,
 	);
+
+	drop(collider_b);
 
 	// flood fill
 	for i in 0..w03.len() {
@@ -415,15 +496,17 @@ fn winding03_impl<const EXPAND_P: bool, const FORWARD: bool>(
 }
 
 struct Kernel02<'a, const EXPAND_P: bool, const FORWARD: bool> {
-	in_a: &'a MeshBool,
+	vert_pos_a: &'a [Point3<f64>],
 	vert_normal_a: &'a [Vector3<f64>],
-	in_b: &'a MeshBool,
+	vert_pos_b: &'a [Point3<f64>],
+	halfedge_b: &'a Halfedges,
+	tri_normal_b: &'a [Vector3<f64>],
 	vert_normal_b: &'a [Vector3<f64>],
 }
 
 impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel02<'a, EXPAND_P, FORWARD> {
 	fn call(&self, a0: usize, b2: usize) -> (i32, f64) {
-		let edge_b = load_face_edges(&self.in_b.tri.halfedge, b2);
+		let edge_b = load_face_edges(self.halfedge_b, b2);
 		self.call_with_edge(a0, b2, &edge_b)
 	}
 
@@ -444,9 +527,11 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel02<'a, EXPAND_P, FORWA
 				edge_b[i].edge,
 				edge_b[i].start,
 				edge_b[i].end,
-				self.in_a,
+				self.vert_pos_a,
 				self.vert_normal_a,
-				self.in_b,
+				self.vert_pos_b,
+				&self.halfedge_b.pair,
+				self.tri_normal_b,
 				self.vert_normal_b,
 			);
 			let s01 = syz01.0;
@@ -473,17 +558,17 @@ impl<'a, const EXPAND_P: bool, const FORWARD: bool> Kernel02<'a, EXPAND_P, FORWA
 			z02 = f64::NAN;
 		} else {
 			debug_assert!(k == 2, "Boolean manifold error: s02");
-			let vert_pos_a = self.in_a.vert_pos[a0];
+			let vert_pos_a = self.vert_pos_a[a0];
 			z02 = interpolate(yzz_rl[0], yzz_rl[1], vert_pos_a.y)[1];
 			if FORWARD {
-				if !shadows(vert_pos_a.z, z02, -self.in_b.tri.normal[b2].z) {
+				if !shadows(vert_pos_a.z, z02, -self.tri_normal_b[b2].z) {
 					s02 = 0;
 				}
 			} else {
 				if !shadows(
 					z02,
 					vert_pos_a.z,
-					with_sign(EXPAND_P, self.in_b.tri.normal[b2].z),
+					with_sign(EXPAND_P, self.tri_normal_b[b2].z),
 				) {
 					s02 = 0;
 				}
@@ -500,14 +585,16 @@ fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
 	b1: usize,
 	b1s: usize,
 	b1e: usize,
-	in_a: &MeshBool,
+	vert_pos_a: &[Point3<f64>],
 	vert_normal_a: &[Vector3<f64>],
-	in_b: &MeshBool,
+	vert_pos_b: &[Point3<f64>],
+	halfedge_pair_b: &[i32],
+	tri_normal_b: &[Vector3<f64>],
 	vert_normal_b: &[Vector3<f64>],
 ) -> (i8, Vector2<f64>) {
-	let a0x = in_a.vert_pos[a0].x;
-	let b1sx = in_b.vert_pos[b1s].x;
-	let b1ex = in_b.vert_pos[b1e].x;
+	let a0x = vert_pos_a[a0].x;
+	let b1sx = vert_pos_b[b1s].x;
+	let b1ex = vert_pos_b[b1e].x;
 	let a0xp = vert_normal_a[a0].x;
 	let b1sxp = vert_normal_b[b1s].x;
 	let b1exp = vert_normal_b[b1e].x;
@@ -522,15 +609,15 @@ fn shadow01<const EXPAND_P: bool, const FORWARD: bool>(
 	let mut yz01 = Vector2::from_element(f64::NAN);
 
 	if s01 != 0 {
-		yz01 = interpolate(in_b.vert_pos[b1s], in_b.vert_pos[b1e], in_a.vert_pos[a0].x);
-		let b1pair = in_b.tri.halfedge.pair[b1] as usize;
-		let dir = in_b.tri.normal[b1 / 3].y + in_b.tri.normal[b1pair / 3].y;
+		yz01 = interpolate(vert_pos_b[b1s], vert_pos_b[b1e], vert_pos_a[a0].x);
+		let b1pair = halfedge_pair_b[b1] as usize;
+		let dir = tri_normal_b[b1 / 3].y + tri_normal_b[b1pair / 3].y;
 		if FORWARD {
-			if !shadows(in_a.vert_pos[a0].y, yz01[0], -dir) {
+			if !shadows(vert_pos_a[a0].y, yz01[0], -dir) {
 				s01 = 0;
 			}
 		} else {
-			if !shadows(yz01[0], in_a.vert_pos[a0].y, with_sign(EXPAND_P, dir)) {
+			if !shadows(yz01[0], vert_pos_a[a0].y, with_sign(EXPAND_P, dir)) {
 				s01 = 0;
 			}
 		}

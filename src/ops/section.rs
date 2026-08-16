@@ -1,21 +1,22 @@
 use crate::MeshBool;
-use crate::ops::boolean::BooleanError;
-use crate::ops::boolean::face2tri::{assemble_halfedges, project_polygons};
+use crate::ops::boolean::{BooleanError, OpType, boolean};
 use crate::postprocessing as pp;
 use crate::postprocessing::sort::{gather_tris, reindex_verts};
 use crate::spatial::aabb::Box3D;
 use crate::triangulation::{Polygons, SimplePolygon};
 use crate::util::disjoint_sets::DisjointSets;
+use crate::util::face::{assemble_halfedges, project_polygons};
 use crate::util::math::{get_axis_aligned_projection, next3_usize};
 use crate::util::vec_ext;
 use nalgebra::Vector3;
 use rustc_hash::FxHashSet;
+use std::rc::Rc;
 
 impl MeshBool {
 	// This operation returns a vector of Manifolds that are topologically
 	// disconnected. If everything is connected, the vector is length one,
 	// containing a copy of the original. It is the inverse operation of Compose().
-	pub fn decompose(&self) -> Vec<Self> {
+	pub fn decompose(self) -> Vec<Self> {
 		let mut uf = DisjointSets::new(self.num_vert());
 		for edge in 0..self.tri.halfedge.len() {
 			if self.tri.halfedge.is_forward(edge) {
@@ -62,7 +63,7 @@ impl MeshBool {
 				self.num_vert(),
 				self.num_prop_vert() > 0,
 			);
-			let mut properties = self.properties.clone();
+			let mut properties = (*self.properties).clone();
 			let bbox = Box3D::from_cloud(&vert_pos);
 			let collider =
 				pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
@@ -71,9 +72,9 @@ impl MeshBool {
 			meshes.push(Self {
 				original_id: None,
 				precision: self.precision, // inherit original object's precision
-				vert_pos,
-				properties,
-				tri,
+				vert_pos: Rc::new(vert_pos),
+				properties: Rc::new(properties),
+				tri: tri.into_rc(),
 				instance_relation: self.instance_relation.clone(),
 				collider,
 			});
@@ -121,11 +122,11 @@ impl MeshBool {
 	///doing them separately.
 	///
 	///@param cutter
-	pub fn split(&self, cutter: &Self) -> Result<(Self, Self), BooleanError> {
+	pub fn split(self, cutter: Self) -> Result<(Self, Self), BooleanError> {
 		//this could be optimized like c++, which runs the intersections
 		//half of the boolean pipeline once and reuses the results
-		let result1 = self.intersection(cutter)?;
-		let result2 = self.difference(cutter)?;
+		let result1 = boolean(self.clone(), OpType::Intersection, cutter.clone())?;
+		let result2 = boolean(self, OpType::Difference, cutter)?;
 		Ok((result1, result2))
 	}
 
@@ -137,14 +138,14 @@ impl MeshBool {
 	///@param originOffset The distance of the plane from the origin in the
 	///direction of the normal vector.
 	pub fn split_by_plane(
-		&self,
+		self,
 		normal: Vector3<f64>,
 		origin_offset: f64,
 	) -> Result<(Self, Self), BooleanError> {
 		if self.is_empty() {
 			let decimated1 = Self::decimated(
 				None,
-				self.instance_relation.clone(),
+				self.instance_relation,
 				self.properties.stride,
 				self.precision,
 			);
@@ -152,7 +153,8 @@ impl MeshBool {
 			return Ok((decimated1, decimated2));
 		}
 
-		self.split(&halfspace(self.bounding_box(), normal, origin_offset))
+		let cutter = halfspace(self.bounding_box(), normal, origin_offset);
+		self.split(cutter)
 	}
 
 	///Identical to SplitByPlane(), but calculating and returning only the first
@@ -163,11 +165,12 @@ impl MeshBool {
 	///@param originOffset The distance of the plane from the origin in the
 	///direction of the normal vector.
 	pub fn trim_by_plane(
-		&self,
+		self,
 		normal: Vector3<f64>,
 		origin_offset: f64,
 	) -> Result<Self, BooleanError> {
-		self.intersection(&halfspace(self.bounding_box(), normal, origin_offset))
+		let in_q = halfspace(self.bounding_box(), normal, origin_offset);
+		boolean(self, OpType::Intersection, in_q)
 	}
 
 	///Returns the cross section of this object parallel to the X-Y plane at the
@@ -250,14 +253,17 @@ impl MeshBool {
 
 fn halfspace(b_box: Box3D, mut normal: Vector3<f64>, origin_offset: f64) -> MeshBool {
 	normal.normalize_mut();
-	let mut cutter = MeshBool::cube(Vector3::repeat(2.0), true)
-		.unwrap()
-		.translate(Vector3::new(1.0, 0.0, 0.0));
-	let size: f64 = (b_box.center() - normal * origin_offset).norm() + 0.5 * b_box.size().norm();
-	cutter = cutter
-		.scale(Vector3::repeat(size))
-		.translate(Vector3::new(origin_offset, 0.0, 0.0));
+
+	let size = (b_box.center() - normal * origin_offset).coords.norm() + 0.5 * b_box.size().norm();
 	let y_deg: f64 = (-libm::asin(normal.z)).to_degrees();
 	let z_deg: f64 = libm::atan2(normal.y, normal.x).to_degrees();
-	return cutter.rotate(0.0, y_deg, z_deg);
+
+	MeshBool::cube(Vector3::repeat(2.0), true)
+		.unwrap()
+		.translate(Vector3::new(1.0, 0.0, 0.0))
+		.scale(Vector3::repeat(size))
+		.translate(Vector3::new(origin_offset, 0.0, 0.0))
+		.rotate(0.0, y_deg, z_deg)
+		.eval()
+		.unwrap()
 }

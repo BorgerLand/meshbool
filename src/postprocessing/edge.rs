@@ -1,13 +1,13 @@
 use crate::halfedge::{Halfedges, next_halfedge};
 use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::util::math::{ccw, get_axis_aligned_projection};
-use crate::{Precision, Properties, Triangles};
+use crate::{Properties, TrianglesWIP};
 use nalgebra::{Point2, Point3, Vector3, distance};
 use std::f64;
 
 // Deduplicate the given 4-manifold edge by duplicating endVert, thus making the
 // edges distinct. Also duplicates startVert if it becomes pinched.
-pub fn dedupe(vert_pos: &mut Vec<Point3<f64>>, tri: &mut Triangles, edge: usize) {
+pub fn dedupe(vert_pos: &mut Vec<Point3<f64>>, tri: &mut TrianglesWIP, edge: usize) {
 	// Orbit endVert
 	let next_edge = next_halfedge(edge);
 	let start_vert = tri.halfedge.start[edge];
@@ -97,7 +97,7 @@ pub fn dedupe(vert_pos: &mut Vec<Point3<f64>>, tri: &mut Triangles, edge: usize)
 
 pub fn recursive_swap(
 	edge: usize,
-	tri: &mut Triangles,
+	tri: &mut TrianglesWIP,
 	vert_pos: &mut Vec<Point3<f64>>,
 	properties: &mut Properties,
 	tag: &mut i32,
@@ -105,7 +105,8 @@ pub fn recursive_swap(
 	edge_swap_stack: &mut Vec<i32>,
 	edges: &mut Vec<i32>,
 	instance_rel: &[InstanceRelation],
-	precision: Precision,
+	epsilon: f64,
+	tolerance: f64,
 ) {
 	let pair = tri.halfedge.pair[edge];
 	if pair < 0 {
@@ -128,7 +129,7 @@ pub fn recursive_swap(
 	}
 
 	// Only operate on the long edge of a degenerate triangle.
-	if ccw(v[0], v[1], v[2], precision.tolerance) > 0 || !is_01_longest(v[0], v[1], v[2]) {
+	if ccw(v[0], v[1], v[2], tolerance) > 0 || !is_01_longest(v[0], v[1], v[2]) {
 		return;
 	}
 
@@ -140,7 +141,7 @@ pub fn recursive_swap(
 
 	v[3] = projection * vert_pos[tri.halfedge.start[tri1_edge[2] as usize] as usize];
 
-	let mut swap_edge = |tri: &mut Triangles| {
+	let mut swap_edge = |tri: &mut TrianglesWIP| {
 		// The 0-verts are swapped to the opposite 2-verts.
 		let v0 = tri.halfedge.start[tri0_edge[2] as usize];
 		let v1 = tri.halfedge.start[tri1_edge[2] as usize];
@@ -202,14 +203,14 @@ pub fn recursive_swap(
 	};
 
 	// Only operate if the other triangles are not degenerate.
-	if ccw(v[1], v[0], v[3], precision.tolerance) <= 0 {
+	if ccw(v[1], v[0], v[3], tolerance) <= 0 {
 		if !is_01_longest(v[1], v[0], v[3]) {
 			return;
 		}
 		// Two facing, long-edge degenerates can swap.
 		swap_edge(tri);
 		let e23 = v[3] - v[2];
-		if e23.magnitude_squared() < precision.tolerance * precision.tolerance {
+		if e23.magnitude_squared() < tolerance * tolerance {
 			*tag += 1;
 			collapse(
 				tri0_edge[2] as usize,
@@ -220,10 +221,8 @@ pub fn recursive_swap(
 				vert_pos,
 				edges,
 				properties.stride,
-				Precision {
-					epsilon: precision.epsilon,
-					tolerance: precision.epsilon,
-				},
+				epsilon,
+				epsilon,
 				0,
 			);
 			edges.truncate(0);
@@ -234,9 +233,7 @@ pub fn recursive_swap(
 		}
 
 		return;
-	} else if ccw(v[0], v[3], v[2], precision.tolerance) <= 0
-		|| ccw(v[1], v[2], v[3], precision.tolerance) <= 0
-	{
+	} else if ccw(v[0], v[3], v[2], tolerance) <= 0 || ccw(v[1], v[2], v[3], tolerance) <= 0 {
 		return;
 	}
 
@@ -264,7 +261,8 @@ pub fn collapse(
 	vert_pos: &mut Vec<Point3<f64>>,
 	edges: &mut Vec<i32>,
 	prop_stride: usize,
-	precision: Precision,
+	epsilon: f64,
+	tolerance: f64,
 	first_new_vert: usize,
 ) -> bool {
 	let pair = halfedge.pair[edge];
@@ -286,9 +284,9 @@ pub fn collapse(
 	// further, as it's still only collapsing its own original neighbors together,
 	// which can't stack errors arbitrarily far.
 	let max_len = if (end_vert as usize) < first_new_vert {
-		precision.tolerance * precision.tolerance
+		tolerance * tolerance
 	} else {
-		precision.epsilon * precision.epsilon
+		epsilon * epsilon
 	};
 	let short_edge = delta.magnitude_squared() < max_len;
 
@@ -327,7 +325,7 @@ pub fn collapse(
 						projection * p_last,
 						projection * p_old,
 						projection * p_new,
-						precision.tolerance,
+						tolerance,
 					) != 0
 					{
 						return false;
@@ -340,7 +338,7 @@ pub fn collapse(
 				projection * p_next,
 				projection * p_last,
 				projection * p_new,
-				precision.epsilon,
+				epsilon,
 			) < 0
 			{
 				return false;

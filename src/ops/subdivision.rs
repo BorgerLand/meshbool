@@ -4,6 +4,7 @@ use crate::util::vec_ext;
 use crate::{MeshBool, Properties, Triangles};
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3, Vector4};
 use rustc_hash::FxHashMap;
+use std::rc::Rc;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
@@ -22,7 +23,7 @@ impl MeshBool {
 	pub(crate) fn subdivide<
 		F: Fn(Vector3<f64>, Vector4<f64>, Vector4<f64>) -> i32 + Send + Sync,
 	>(
-		&self,
+		self,
 		edge_divisions: F,
 		keep_interior: bool,
 	) -> (Self, Vec<Barycentric>) {
@@ -378,15 +379,15 @@ impl MeshBool {
 			Self {
 				original_id: None,
 				precision: self.precision,
-				vert_pos,
-				properties,
+				vert_pos: Rc::new(vert_pos),
+				properties: Rc::new(properties),
 				tri: Triangles {
-					halfedge,
-					normal: tri_normal,
-					relation: tri_rel,
+					halfedge: Rc::new(halfedge),
+					normal: Rc::new(tri_normal),
+					relation: Rc::new(tri_rel),
 				},
-				instance_relation: self.instance_relation.clone(),
-				collider: self.collider.clone(),
+				instance_relation: self.instance_relation,
+				collider: self.collider,
 			},
 			vert_bary,
 		)
@@ -615,7 +616,7 @@ impl Partition {
 			}
 		}
 
-		let mut partition: Self = Self::get_cached_partition(sorted_div);
+		let mut partition = Self::get_cached_partition(sorted_div);
 		partition.idx = tri_idx;
 
 		return partition;

@@ -1,4 +1,5 @@
 use crate::MeshBool;
+use crate::ops::boolean::{OpType, boolean};
 use crate::postprocessing::sort::get_tri_box_morton;
 use crate::spatial::aabb::Box3D;
 use crate::util::math::{ccw, get_axis_aligned_projection};
@@ -85,7 +86,7 @@ impl MeshBool {
 	///@param other The other manifold to compute the minimum gap to.
 	///@param searchLength The maximum distance to search for a minimum gap.
 	pub fn min_gap(&self, other: &Self, search_length: f64) -> f64 {
-		if let Ok(intersect) = self.intersection(other)
+		if let Ok(intersect) = boolean(self.clone(), OpType::Intersection, other.clone())
 			&& !intersect.is_empty()
 		{
 			return 0.0;

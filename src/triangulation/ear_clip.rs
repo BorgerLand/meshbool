@@ -95,7 +95,7 @@ fn initialize(
 	polys: &PolygonsIdx,
 ) -> Vec<usize> {
 	let mut starts = Vec::new();
-	let mut bbox = Box2D::default();
+	let mut bbox = Box2D::empty();
 
 	for poly in polys {
 		let vert = &poly[0];
@@ -111,7 +111,7 @@ fn initialize(
 
 		let first = polygon.last().unwrap();
 
-		bbox.union(first.pos);
+		bbox.union_point_mut(first.pos);
 		let first = polygon.len() - 1;
 		let mut last = first;
 		// This is not the real rightmost start, but just an arbitrary vert for
@@ -119,7 +119,7 @@ fn initialize(
 		starts.push(first);
 
 		for vert in &poly[1..] {
-			bbox.union(vert.pos);
+			bbox.union_point_mut(vert.pos);
 
 			polygon.push(Vert {
 				mesh_idx: vert.idx,
@@ -205,14 +205,14 @@ fn find_start(
 
 	let mut start = first;
 	let mut max_x = f64::NEG_INFINITY;
-	let mut bbox = Box2D::default();
+	let mut bbox = Box2D::empty();
 	// Kahan summation
 	let mut area = 0.0;
 	let mut area_compensation = 0.0;
 
 	let add_point = |v: usize, polygon: &mut Vec<Vert>| {
 		let v = &polygon[v];
-		bbox.union(v.pos);
+		bbox.union_point_mut(v.pos);
 		let area1 = Matrix2::from_columns(&[v.pos - origin, v.right().pos - origin]).determinant();
 		let t1 = area + area1;
 		area_compensation += (area - t1) + area1;
@@ -830,7 +830,7 @@ impl Vert {
 			center.coords.add_scalar(-radius).into(),
 			center.coords.add_scalar(radius).into(),
 		);
-		ear_box.union(self.pos);
+		ear_box.union_point_mut(self.pos);
 		ear_box.min.coords.add_scalar_mut(-epsilon);
 		ear_box.max.coords.add_scalar_mut(epsilon);
 

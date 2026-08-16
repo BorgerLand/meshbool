@@ -1,4 +1,4 @@
-use crate::spatial::aabb::Box2D;
+use crate::spatial::aabb::{Box2D, Overlap};
 use crate::triangulation::PolyVert;
 use crate::util::num_convert::OrderedF64;
 use nalgebra::Point2;
@@ -41,13 +41,13 @@ pub fn query_2d_tree(points: &[PolyVert], r: Box2D, mut f: impl FnMut(&PolyVert)
 		return;
 	}
 
-	let mut current = Box2D::default();
+	let mut current = Box2D::empty();
 	current.min = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
 	current.max = Point2::new(f64::INFINITY, f64::INFINITY);
 
 	let mut level = 0;
 	let mut current_view = points;
-	let mut rect_stack = [Box2D::default(); 64];
+	let mut rect_stack = [Box2D::empty(); 64];
 	let mut view_stack: [&[PolyVert]; 64] = [&[]; 64];
 	let mut level_stack = [0; 64];
 	let mut stack_pointer = 0;
@@ -86,8 +86,8 @@ pub fn query_2d_tree(points: &[PolyVert], r: Box2D, mut f: impl FnMut(&PolyVert)
 		if r.contains(&middle.pos) {
 			f(&middle);
 		}
-		if left.does_overlap(&r) {
-			if right.does_overlap(&r) {
+		if left.overlaps(r) {
+			if right.overlaps(r) {
 				debug_assert!(stack_pointer < 64, "Stack overflow");
 				rect_stack[stack_pointer] = right;
 				view_stack[stack_pointer] = &current_view[current_view.len() / 2 + 1..];
