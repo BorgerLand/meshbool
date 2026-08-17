@@ -81,24 +81,7 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 	drop(in_q.instance_relation);
 	let instance_rel = Rc::new(instance_rel);
 
-	if Rc::ptr_eq(&in_p.vert_pos, &in_q.vert_pos)
-		&& Rc::ptr_eq(&in_p.tri.halfedge, &in_q.tri.halfedge)
-	{
-		if op == OpType::Difference {
-			return Ok(MeshBool::decimated(
-				None,
-				instance_rel,
-				prop_stride,
-				precision,
-			));
-		}
-
-		return Ok(MeshBool {
-			original_id: None,
-			instance_relation: instance_rel,
-			..in_p
-		});
-	} else if num_tri_p == 0 {
+	if num_tri_p == 0 {
 		if num_tri_q > 0 && op == OpType::Union {
 			//clone q
 			return Ok(MeshBool {
