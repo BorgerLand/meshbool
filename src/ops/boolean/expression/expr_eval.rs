@@ -204,12 +204,6 @@ impl CSGCommutative {
 					(child, bbox)
 				}));
 
-				// this kMaxUnionSize is a heuristic to avoid the pairwise disjoint check
-				// with O(n^2) complexity to take too long.
-				// If the number of children exceeded this limit, we will operate on chunks
-				// with size kMaxUnionSize.
-				const K_MAX_UNION_SIZE: usize = 1000;
-
 				let mut cur_disjoint_union_mesh = Vec::with_capacity(children.len());
 				let mut cur_disjoint_union_bbox = Vec::with_capacity(children.len());
 				let mut disjoint_unions = BinaryHeap::with_capacity(children.len());
@@ -220,9 +214,7 @@ impl CSGCommutative {
 					cur_disjoint_union_bbox.push(cur_disjoint_union_first.1);
 
 					let mut test_candidate_i = 0;
-					while test_candidate_i < children.len()
-						&& cur_disjoint_union_bbox.len() < K_MAX_UNION_SIZE
-					{
+					while test_candidate_i < children.len() {
 						let test_candidate = children[test_candidate_i].1;
 						if cur_disjoint_union_bbox
 							.iter()
