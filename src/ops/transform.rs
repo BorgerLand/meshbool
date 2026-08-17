@@ -9,7 +9,6 @@ use crate::util::math::{
 use crate::{Box3D, MeshBool, Precision, Properties, Triangles};
 use crate::{TrianglesPartial, postprocessing as pp};
 use nalgebra::{Matrix3, Matrix3x4, Point3, Vector3, Vector4};
-use std::mem;
 use std::rc::Rc;
 
 impl MeshBool {
@@ -99,8 +98,7 @@ impl MeshBool {
 
 		let mut properties = Rc::unwrap_or_clone(self.properties);
 		if properties.stride >= 3 {
-			eager_transform_prop_normals(
-				&mut properties,
+			properties.eager_transform_prop_normals(
 				&self.tri.halfedge,
 				&instance_rel,
 				&self.tri.relation,
@@ -113,11 +111,14 @@ impl MeshBool {
 		let mut halfedge = Rc::unwrap_or_clone(self.tri.halfedge);
 		let invert = mat3(transform).determinant() < 0.0;
 		if invert {
-			for tri in 0..halfedge.num_tri() {
-				FlipTris {
-					halfedge: &mut halfedge,
-				}
-				.call(tri);
+			for tri in halfedge.start.as_chunks_mut::<3>().0 {
+				*tri = flip_tri_start(*tri);
+			}
+			for tri in halfedge.pair.as_chunks_mut::<3>().0 {
+				*tri = flip_tri_pair(*tri);
+			}
+			for tri in halfedge.prop.as_chunks_mut::<3>().0 {
+				*tri = flip_tri_prop(*tri);
 			}
 		}
 
@@ -161,82 +162,73 @@ impl MeshBool {
 	}
 }
 
-fn eager_transform_prop_normals(
-	properties: &mut Properties,
-	halfedge: &Halfedges,
-	instance_rel: &[InstanceRelation],
-	tri_rel: &[TriRelation],
-	normal_transform: Matrix3<f64>,
-	num_prop_vert: usize,
-	offset: usize,
-) {
-	// Short-circuit when no meshID carries normals. OR semantics (any has
-	// it), unlike AllHaveNormals() - mixed inputs still need the per-meshID
-	// iteration below to rotate the with-normals subset.
-	let mut any_has_normals = false;
-	for m in instance_rel {
-		if m.has_normals {
-			any_has_normals = true;
-			break;
+impl Properties {
+	pub(crate) fn eager_transform_prop_normals(
+		&mut self,
+		halfedge: &Halfedges,
+		instance_rel: &[InstanceRelation],
+		tri_rel: &[TriRelation],
+		normal_transform: Matrix3<f64>,
+		num_prop_vert: usize,
+		offset: usize,
+	) {
+		// Short-circuit when no meshID carries normals. OR semantics (any has
+		// it), unlike AllHaveNormals() - mixed inputs still need the per-meshID
+		// iteration below to rotate the with-normals subset.
+		let mut any_has_normals = false;
+		for m in instance_rel {
+			if m.has_normals {
+				any_has_normals = true;
+				break;
+			}
 		}
-	}
 
-	if !any_has_normals {
-		return;
-	}
-	let mut prop_visited = vec![false; num_prop_vert];
-	for e in 0..halfedge.len() {
-		if !tri_has_normals(instance_rel, tri_rel[e / 3]) {
-			continue;
+		if !any_has_normals {
+			return;
 		}
-		let prop = halfedge.prop[e];
-		if prop < 0 || prop_visited[prop as usize] {
-			continue;
-		}
-		let prop = prop as usize;
-		prop_visited[prop] = true;
-		let mut n = Vector3::default();
-		for i in 0..3 {
-			n[i] = properties.data[(offset + prop) * properties.stride + i];
-		}
-		// Re-normalize as we transform: non-orthogonal transforms (scale) and
-		// barycentric interpolation upstream both leave non-unit values that
-		// would otherwise compound and break downstream lighting / smoothing.
-		n = safe_normalize3(normal_transform * n);
-		for i in 0..3 {
-			properties.data[(offset + prop) * properties.stride + i] = n[i];
-		}
-	}
-}
-
-pub struct FlipTris<'a> {
-	pub halfedge: &'a mut Halfedges,
-}
-
-impl<'a> FlipTris<'a> {
-	pub fn call(&mut self, tri: usize) {
-		let mut face = [
-			self.halfedge.get(3 * tri + 2),
-			self.halfedge.get(3 * tri + 1),
-			self.halfedge.get(3 * tri),
-		];
-		for i in 0..3 {
-			mem::swap(&mut face[i].start_vert, &mut face[i].end_vert);
-			face[i].paired_halfedge = flip_halfedge(face[i].paired_halfedge);
-		}
-		for i in 0..3 {
-			self.halfedge.start[3 * tri + i] = face[i].start_vert;
-			self.halfedge.pair[3 * tri + i] = face[i].paired_halfedge;
-			self.halfedge.prop[3 * tri + i] = face[i].prop_vert;
+		let mut prop_visited = vec![false; num_prop_vert];
+		for e in 0..halfedge.len() {
+			if !tri_has_normals(instance_rel, tri_rel[e / 3]) {
+				continue;
+			}
+			let prop = halfedge.prop[e];
+			if prop < 0 || prop_visited[prop as usize] {
+				continue;
+			}
+			let prop = prop as usize;
+			prop_visited[prop] = true;
+			let mut n = Vector3::default();
+			for i in 0..3 {
+				n[i] = self.data[(offset + prop) * self.stride + i];
+			}
+			// Re-normalize as we transform: non-orthogonal transforms (scale) and
+			// barycentric interpolation upstream both leave non-unit values that
+			// would otherwise compound and break downstream lighting / smoothing.
+			n = safe_normalize3(normal_transform * n);
+			for i in 0..3 {
+				self.data[(offset + prop) * self.stride + i] = n[i];
+			}
 		}
 	}
 }
 
-#[inline(always)]
-fn flip_halfedge(halfedge: i32) -> i32 {
-	let tri = halfedge / 3;
-	let vert = 2 - (halfedge - 3 * tri);
-	3 * tri + vert
+pub fn flip_tri_start(mut start: [i32; 3]) -> [i32; 3] {
+	start.swap(1, 2);
+	start
+}
+
+pub fn flip_tri_pair(mut pair: [i32; 3]) -> [i32; 3] {
+	pair.swap(0, 2);
+	pair.map(|halfedge| {
+		let tri = halfedge / 3;
+		let vert = 2 - (halfedge - 3 * tri);
+		3 * tri + vert
+	})
+}
+
+pub fn flip_tri_prop(mut prop: [i32; 3]) -> [i32; 3] {
+	prop.swap(0, 2);
+	prop
 }
 
 impl MeshBool {

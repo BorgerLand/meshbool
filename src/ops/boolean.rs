@@ -1,4 +1,4 @@
-use crate::ops::boolean::disjoint_union::boolean_disjoint_union;
+use crate::ops::boolean::expression::disjoint_union::boolean_disjoint_union;
 use crate::postprocessing as pp;
 use crate::spatial::aabb::Overlap;
 use crate::util::vec_ext;
@@ -13,7 +13,6 @@ use crate::test::{get_intermediate_checks, get_self_intersection_checks};
 pub mod expression;
 
 mod construct;
-mod disjoint_union;
 mod face2tri;
 mod intersect;
 
@@ -58,7 +57,7 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 
 	//handle this early exit scenario extra early before moving out of p/q
 	if num_tri_p > 0 && num_tri_q > 0 && !overlapping && op == OpType::Union {
-		return boolean_disjoint_union([in_p, in_q].into_iter());
+		return boolean_disjoint_union([in_p, in_q].into_iter().map(MeshBool::into));
 	}
 
 	//outR.epsilon_ = std::max(inP_.epsilon_, inQ_.epsilon_);

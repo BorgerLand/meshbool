@@ -15,9 +15,9 @@ pub struct Halfedge {
 
 #[derive(Clone, Debug, Default)]
 pub struct Halfedges {
-	pub start: Vec<i32>,
-	pub pair: Vec<i32>,
-	pub prop: Vec<i32>,
+	pub start: Vec<i32>, //index into vert_pos
+	pub pair: Vec<i32>,  //index into halfedge.start
+	pub prop: Vec<i32>,  //index into properties.data
 }
 
 impl Halfedges {

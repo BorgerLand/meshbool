@@ -1,6 +1,6 @@
 use crate::BooleanError;
 use crate::mesh_relations::InstanceRelation;
-use crate::ops::boolean::disjoint_union::boolean_disjoint_union;
+use crate::ops::boolean::expression::disjoint_union::boolean_disjoint_union;
 use crate::ops::boolean::expression::*;
 use crate::ops::boolean::{OpType, boolean};
 use crate::spatial::aabb::Overlap;
@@ -63,7 +63,7 @@ impl CSGLeaf {
 		self.leaf.apply_transform(self.pending_transform)
 	}
 
-	fn approximate_bbox(&self) -> Box3D {
+	pub fn approximate_bbox(&self) -> Box3D {
 		self.leaf.bounding_box().transform(self.pending_transform)
 	}
 
@@ -153,9 +153,16 @@ impl CSGCommutative {
 				continue;
 			}
 
-			let child = child.eval_impl(ctx).await?;
-			if child.is_empty() {
-				decimated.push(child.into());
+			let child = match child {
+				CSGExpression::Leaf(expr) => expr,
+				expr => CSGLeaf {
+					leaf: expr.eval_impl(ctx).await?,
+					pending_transform: Matrix3x4::identity(),
+				},
+			};
+
+			if child.leaf.is_empty() {
+				decimated.push(CSGExpression::Leaf(child));
 			} else {
 				children.push(child);
 			}
@@ -178,11 +185,11 @@ impl CSGCommutative {
 
 		Ok(boolean(
 			if children.len() == 1 {
-				children.into_iter().next().unwrap()
+				children.into_iter().next().unwrap().eval()
 			} else if children.len() == 2 {
 				let mut children = children.into_iter();
-				let lhs = children.next().unwrap();
-				let rhs = children.next().unwrap();
+				let lhs = children.next().unwrap().eval();
+				let rhs = children.next().unwrap().eval();
 				boolean(lhs, OpType::Union, rhs)?
 			} else {
 				//in an ideal world this is a boxicity-3 mwis-like problem:
@@ -195,12 +202,12 @@ impl CSGCommutative {
 
 				//sort most to least complex meshes, hoping that looping in this
 				//order pulls out the most complex meshes first, approximating mwis
-				children.sort_unstable_by_key(|child| Reverse(child.num_tri()));
+				children.sort_unstable_by_key(|child| Reverse(child.leaf.num_tri()));
 
 				//bounding_box() is a lookup into the bvh collider's internal
 				//array. to avoid cache miss per comparison, copy it into a tuple
 				let mut children = VecDeque::from_iter(children.into_iter().map(|child| {
-					let bbox = child.bounding_box();
+					let bbox = child.approximate_bbox();
 					(child, bbox)
 				}));
 
@@ -231,11 +238,9 @@ impl CSGCommutative {
 
 					cur_disjoint_union_bbox.clear();
 					disjoint_unions.push(SortByNumTri(if cur_disjoint_union_mesh.len() == 1 {
-						cur_disjoint_union_mesh.pop().unwrap()
+						cur_disjoint_union_mesh.pop().unwrap().eval()
 					} else {
-						let new_child = boolean_disjoint_union(cur_disjoint_union_mesh.drain(..))?;
-						cur_disjoint_union_mesh.clear();
-						new_child
+						boolean_disjoint_union(cur_disjoint_union_mesh.drain(..))?
 					}));
 				}
 

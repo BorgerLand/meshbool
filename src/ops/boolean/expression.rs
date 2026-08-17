@@ -1,6 +1,7 @@
 use crate::{Box3D, MeshBool, Precision};
 use nalgebra::Matrix3x4;
 
+pub mod disjoint_union;
 pub mod expr_build;
 mod expr_eval;
 
@@ -13,9 +14,18 @@ pub enum CSGExpression {
 }
 
 #[derive(Clone, Debug)]
-struct CSGLeaf {
+pub(super) struct CSGLeaf {
 	leaf: MeshBool,
 	pending_transform: Matrix3x4<f64>,
+}
+
+impl From<MeshBool> for CSGLeaf {
+	fn from(leaf: MeshBool) -> Self {
+		Self {
+			leaf,
+			pending_transform: Matrix3x4::identity(),
+		}
+	}
 }
 
 #[derive(Clone, Debug)]
