@@ -91,14 +91,14 @@ pub fn boolean_disjoint_union(
 		}
 	};
 
-	let prop_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+	let mut prop_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
 		properties_aa
 			.iter()
 			.map(|properties_a| num_prop_vert(properties_a) as i32),
 		0,
 	));
 
-	let num_prop_verts = *prop_offsets.last().unwrap() as usize;
+	let num_prop_verts = prop_offsets.pop().unwrap() as usize;
 
 	let mut prop = Vec::with_capacity(halfedge_len);
 	for (i, offset) in prop_offsets.into_iter().enumerate() {
