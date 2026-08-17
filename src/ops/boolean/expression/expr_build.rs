@@ -52,17 +52,7 @@ macro_rules! csg_op {
 		// expr op= expr
 		impl $assign_trait for CSGExpression {
 			fn $assign_method(&mut self, rhs: Self) {
-				let owned_self = mem::replace(
-					self,
-					//redudant temporary to satisfy borrow checker,
-					//should be optimized away
-					CSGExpression::Commutative(CSGCommutative {
-						children: Vec::default(),
-						op: CommutativeOpType::Union,
-						approximate_bbox: None,
-					}),
-				);
-				*self = owned_self.$method(rhs);
+				*self = mem::replace(self, Self::temporary_dud()).$method(rhs);
 			}
 		}
 

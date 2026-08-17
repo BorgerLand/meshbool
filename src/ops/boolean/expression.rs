@@ -41,6 +41,18 @@ impl From<MeshBool> for CSGExpression {
 	}
 }
 
+impl CSGExpression {
+	//returns a minimal overhead dud value to satisfy
+	//borrow checker. don't actually use this value
+	pub(crate) fn temporary_dud() -> Self {
+		Self::Commutative(CSGCommutative {
+			children: Vec::default(),
+			op: CommutativeOpType::Union,
+			approximate_bbox: None,
+		})
+	}
+}
+
 ///Optimizations to avoid running the full boolean are
 ///applied when an expression consists of multiple
 ///consecutive, commutative, matching ops. For example

@@ -1,6 +1,7 @@
 use crate::halfedge::Halfedges;
 use crate::mesh_relations::{InstanceRelation, TriRelation, reserve_original_id};
 use crate::meshgl::MeshGL;
+use crate::postprocessing as pp;
 use crate::postprocessing::sort::morton_code;
 use crate::spatial::aabb::Box3D;
 use crate::spatial::bvh_collider::BVHCollider;
@@ -8,8 +9,7 @@ use crate::util::disjoint_sets::DisjointSets;
 use crate::util::math::K_PRECISION;
 use crate::util::num_convert::LossyFrom;
 use crate::util::vec_ext;
-use crate::{MeshBool, Precision, Properties};
-use crate::{TrianglesWIP, postprocessing as pp};
+use crate::{MeshBool, Precision, Properties, TrianglesWIP};
 use nalgebra::{Matrix3x4, Point3, Vector3};
 use std::any::TypeId;
 use std::rc::Rc;

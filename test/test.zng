@@ -4,16 +4,16 @@ mod crate
 	{
 		type MeshBoolTestWrapper
 		{
-			#layout(size = 304, align = 8);
+			#layout(size = 176, align = 8);
 			
 			fn default() -> MeshBoolTestWrapper;
 			fn invalid() -> MeshBoolTestWrapper;
 			fn clone(&self) -> MeshBoolTestWrapper;
-			fn simplify(&self, f64) -> MeshBoolTestWrapper;
-			fn genus(&self) -> i32;
-			fn surface_area(&self) -> f64;
-			fn volume(&self) -> f64;
-			fn original_id(&self) -> i32;
+			fn simplify(&mut self, f64) -> MeshBoolTestWrapper;
+			fn genus(&mut self) -> i32;
+			fn surface_area(&mut self) -> f64;
+			fn volume(&mut self) -> f64;
+			fn original_id(&mut self) -> i32;
 			fn tetrahedron() -> MeshBoolTestWrapper;
 			fn cube(::nalgebra::Vector3<f64>, bool) -> MeshBoolTestWrapper;
 			fn cylinder(f64, f64, f64, i32, bool) -> MeshBoolTestWrapper;
@@ -32,10 +32,10 @@ mod crate
 				i32,
 				f64,
 			) -> MeshBoolTestWrapper;
-			fn as_original(&self) -> MeshBoolTestWrapper;
+			fn as_original(&mut self) -> MeshBoolTestWrapper;
 			fn reserve_ids(u32) -> u32;
-			fn matches_tri_normals(&self) -> bool;
-			fn num_degenerate_tris(&self) -> usize;
+			fn matches_tri_normals(&mut self) -> bool;
+			fn num_degenerate_tris(&mut self) -> usize;
 			fn translate(&self, ::nalgebra::Vector3<f64>) -> MeshBoolTestWrapper;
 			fn scale(&self, ::nalgebra::Vector3<f64>) -> MeshBoolTestWrapper;
 			fn rotate(&self, f64, f64, f64) -> MeshBoolTestWrapper;
@@ -43,45 +43,45 @@ mod crate
 			fn mirror(&self, ::nalgebra::Vector3<f64>) -> MeshBoolTestWrapper;
 			fn set_properties
 			(
-				&self,
+				&mut self,
 				usize,
 				::core::option::Option<Box<dyn FnMut(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>>,
 			) -> MeshBoolTestWrapper;
-			fn warp(&self, Box<dyn FnMut(&mut ::nalgebra::Point3<f64>)>) -> MeshBoolTestWrapper;
-			fn warp_batch(&self, Box<dyn FnMut(&mut [::nalgebra::Point3<f64>])>) -> MeshBoolTestWrapper;
-			fn calculate_curvature(&self, i32, i32) -> MeshBoolTestWrapper;
-			fn calculate_normals(&self, i32, f64) -> MeshBoolTestWrapper;
+			fn warp(&mut self, Box<dyn FnMut(&mut ::nalgebra::Point3<f64>)>) -> MeshBoolTestWrapper;
+			fn warp_batch(&mut self, Box<dyn FnMut(&mut [::nalgebra::Point3<f64>])>) -> MeshBoolTestWrapper;
+			fn calculate_curvature(&mut self, i32, i32) -> MeshBoolTestWrapper;
+			fn calculate_normals(&mut self, i32, f64) -> MeshBoolTestWrapper;
 			fn boolean(&self, &MeshBoolTestWrapper, OpType) -> MeshBoolTestWrapper;
-			fn decompose(&self) -> ::std::vec::Vec<MeshBoolTestWrapper>;
-			fn split(&self, &MeshBoolTestWrapper) -> (MeshBoolTestWrapper, MeshBoolTestWrapper);
-			fn split_by_plane(&self, ::nalgebra::Vector3<f64>, f64) -> (MeshBoolTestWrapper, MeshBoolTestWrapper);
-			fn trim_by_plane(&self, ::nalgebra::Vector3<f64>, f64) -> MeshBoolTestWrapper;
-			fn slice(&self, f64) -> ::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>;
-			fn get_mesh_gl_32(&self, i32) -> MeshGL32;
-			fn get_mesh_gl_64(&self, i32) -> MeshGL64;
+			fn decompose(&mut self) -> ::std::vec::Vec<MeshBoolTestWrapper>;
+			fn split(&mut self, &mut MeshBoolTestWrapper) -> (MeshBoolTestWrapper, MeshBoolTestWrapper);
+			fn split_by_plane(&mut self, ::nalgebra::Vector3<f64>, f64) -> (MeshBoolTestWrapper, MeshBoolTestWrapper);
+			fn trim_by_plane(&mut self, ::nalgebra::Vector3<f64>, f64) -> MeshBoolTestWrapper;
+			fn slice(&mut self, f64) -> ::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>;
+			fn get_mesh_gl_32(&mut self, i32) -> MeshGL32;
+			fn get_mesh_gl_64(&mut self, i32) -> MeshGL64;
 			fn from_meshgl<f32, u32>(&MeshGL32) -> MeshBoolTestWrapper;
 			fn from_meshgl<f64, u64>(&MeshGL64) -> MeshBoolTestWrapper;
-			fn is_empty(&self) -> bool;
-			fn status(&self) -> MeshBoolError;
-			fn num_vert(&self) -> usize;
-			fn num_edge(&self) -> usize;
-			fn num_tri(&self) -> usize;
-			fn prop_stride(&self) -> usize;
-			fn num_prop_vert(&self) -> usize;
-			fn bounding_box(&self) -> Box3D;
-			fn get_epsilon(&self) -> f64;
-			fn get_tolerance(&self) -> f64;
-			fn set_tolerance(&self, f64) -> MeshBoolTestWrapper;
-			fn project(&self) -> ::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>;
-			fn min_gap(&self, &MeshBoolTestWrapper, f64) -> f64;
+			fn is_empty(&mut self) -> bool;
+			fn status(&mut self) -> MeshBoolError;
+			fn num_vert(&mut self) -> usize;
+			fn num_edge(&mut self) -> usize;
+			fn num_tri(&mut self) -> usize;
+			fn prop_stride(&mut self) -> usize;
+			fn num_prop_vert(&mut self) -> usize;
+			fn bounding_box(&mut self) -> Box3D;
+			fn get_epsilon(&mut self) -> f64;
+			fn get_tolerance(&mut self) -> f64;
+			fn set_tolerance(&mut self, f64) -> MeshBoolTestWrapper;
+			fn project(&mut self) -> ::std::vec::Vec<::std::vec::Vec<::nalgebra::Point2<f64>>>;
+			fn min_gap(&mut self, &mut MeshBoolTestWrapper, f64) -> f64;
 		}
 		
 		type (MeshBoolTestWrapper, MeshBoolTestWrapper)
 		{
-			#layout(size = 608, align = 8);
+			#layout(size = 352, align = 8);
 			
 			field 0 (offset = 0,   type = MeshBoolTestWrapper);
-			field 1 (offset = 304, type = MeshBoolTestWrapper);
+			field 1 (offset = 176, type = MeshBoolTestWrapper);
 		}
 		
 		fn get_intermediate_checks() -> bool;
