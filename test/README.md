@@ -46,8 +46,10 @@ cmake .. -DCMAKE_BUILD_TYPE=Release -DMANIFOLD_DEBUG=OFF -DMANIFOLD_ASSERT=OFF &
 cd test #from inside test/manifold/build
 #THOROUGH MODE (requires thorough build):
 RUST_BACKTRACE=1 ./manifold_test
-#BENCH MODE (requires bench build):
+#BENCH MODE - DURATION (requires bench build):
 ./manifold_test --gtest_filter='Properties.MingapAfterTransformations:Properties.MingapStretchyBracelet:Properties.ToleranceSphere:Boolean.CreatePropertiesSlow:Samples.Bracelet:Samples.CondensedMatter16:Samples.CondensedMatter64:Samples.Sponge4:BooleanComplex.Close:BooleanComplex.GenericTwinBooleanTest7081:Polygon.Zebra:Polygon.Zebra3'
+#BENCH MODE - PEAK RAM (requires bench build):
+for t in Properties.MingapAfterTransformations Properties.MingapStretchyBracelet Properties.ToleranceSphere Boolean.CreatePropertiesSlow Samples.Bracelet Samples.CondensedMatter16 Samples.CondensedMatter64 Samples.Sponge4 BooleanComplex.Close BooleanComplex.GenericTwinBooleanTest7081 Polygon.Zebra Polygon.Zebra3; do echo "=== $t ==="; ( /usr/bin/time -v ./manifold_test --gtest_filter="$t" > /dev/null ) 2>&1 | grep "Maximum resident"; done
 ```
 
 ---
