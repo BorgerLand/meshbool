@@ -3,8 +3,10 @@ use crate::spatial::tree2d;
 use crate::triangulation::{HalfedgeTriangulation, PolyVert, PolygonsIdx};
 use crate::util::math::{K_PRECISION, ccw, safe_normalize2};
 use crate::util::multiset::{Handle, MultiSet};
+use crate::util::num_convert::OrderedF64;
 use nalgebra::{Matrix2, Point2, Vector2};
 use rustc_hash::FxHashMap;
+use std::cmp::Reverse;
 use std::ops::Range;
 use std::ptr;
 
@@ -36,7 +38,7 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, epsilon: &mut f64) -> HalfedgeT
 	let polygon_end = unsafe { polygon.as_ptr().add(polygon.capacity()) } as usize;
 	let polygon_range = polygon_first..polygon_end;
 	//The set of right-most starting points, one for each negative-area contour.
-	let mut holes = MultiSet::new();
+	let mut holes = Vec::new();
 	//The set of starting points, one for each positive-area contour.
 	let mut outers = Vec::new();
 	//The set of starting points, one for each simple polygon.
@@ -63,6 +65,7 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, epsilon: &mut f64) -> HalfedgeT
 		);
 	}
 
+	holes.sort_unstable_by_key(|&hole| Reverse(OrderedF64(polygon[hole].pos.x)));
 	for start in holes.into_iter() {
 		cut_keyhole(
 			start,
@@ -195,7 +198,7 @@ fn find_start(
 	polygon: &mut Vec<Vert>,
 	polygon_range: &Range<usize>,
 	hole2bbox: &mut FxHashMap<usize, Box2D>,
-	holes: &mut MultiSet<usize>,
+	holes: &mut Vec<usize>,
 	simples: &mut Vec<usize>,
 	outers: &mut Vec<usize>,
 	epsilon: f64,
@@ -234,7 +237,7 @@ fn find_start(
 	let min_area = epsilon * size.x.max(size.y);
 
 	if max_x.is_finite() && area < -min_area {
-		holes.insert(|&a, &b| polygon[a].pos.x > polygon[b].pos.x, start);
+		holes.push(start);
 		hole2bbox.entry(start).or_insert(bbox);
 	} else {
 		simples.push(start);

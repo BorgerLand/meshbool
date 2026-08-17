@@ -32,7 +32,6 @@ pub fn boolean_disjoint_union(
 		.map(|node| {
 			prop_stride_new = prop_stride_new.max(node.properties.stride);
 			bbox = bbox.union_box3(node.bounding_box());
-
 			precision.epsilon = precision.epsilon.max(node.precision.epsilon);
 			precision.tolerance = precision.tolerance.max(node.precision.tolerance);
 
