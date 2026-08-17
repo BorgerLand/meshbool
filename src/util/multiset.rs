@@ -75,12 +75,6 @@ impl<K: 'static> MultiSet<K> {
 		Handle(unsafe { NonNull::new_unchecked(ptr) })
 	}
 
-	///Iterates over all `(key, value)` pairs in ascending order.
-	///For keys that compare equally, maintains insertion order.
-	pub fn into_iter(self) -> impl Iterator<Item = K> {
-		self.tree.into_iter().map(|n| n.key)
-	}
-
 	///Removes and returns the smallest-key and oldest-inserted element, or
 	///`None` if empty.
 	pub fn pop_front(&mut self) -> Option<K> {

@@ -58,6 +58,7 @@ RUST_BACKTRACE=1 ./manifold_test
 - `Manifold.MeshRelationRefinePrecision`: Had a crashing bug - now uses assert instead of expect as an array length guard
 - `Manifold.InvalidInput*`, `Manifold.Merge`: Removed meaningless `IsEmpty()` check on the errored mesh to avoid cluttering logs
 - `Samples.CondensedMatter16`: Seems to have been passing by sheer luck, and changing boolean/halfedge order broke it. Shares the same bad triangulation problem as `Samples.CondensedMatter64`, requiring `processOverlaps = true;` to avoid a crash
+- `Samples.Sponge4`: Similar to the comment already in there ("Alternative order causes degenerate triangles"), needed to change the order again to avoid degenerates triangles. Now produces 0 degenerates.
 
 ## Disabled tests
 
@@ -70,9 +71,3 @@ RUST_BACKTRACE=1 ./manifold_test
 | All of `sdf_test.cpp`                        | Unimplemented           | `manifold/test/CMakeLists.txt` |
 | All of `smooth_test.cpp`                     | Unimplemented           | `manifold/test/CMakeLists.txt` |
 | All of `hull_test.cpp`                       | Unimplemented           | `manifold/test/CMakeLists.txt` |
-
-## Known failures
-
-Currently treating these as potential bugs in Manifold/its test suite's expectations:
-
-- Samples.Sponge4: Purely due to removal/destabilizing of some sorting. It was passing before optimization (see Git tag `pre-refactor-db042ab`), and `Expected: (sponge.NumDegenerateTris()) <= (8), actual: 28 vs 8` is still respectably low enough that I don't think the failure means much (the old triangulator allowed 40k degenerate triangles)
