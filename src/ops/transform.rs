@@ -227,7 +227,7 @@ pub fn flip_tri_pair(mut pair: [i32; 3]) -> [i32; 3] {
 }
 
 pub fn flip_tri_prop(mut prop: [i32; 3]) -> [i32; 3] {
-	prop.swap(0, 2);
+	prop.swap(1, 2);
 	prop
 }
 

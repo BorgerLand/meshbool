@@ -256,31 +256,6 @@ pub(in crate::ops::boolean) fn boolean_disjoint_union(
 		relation: tri_rel,
 	};
 
-	let epsilon = precision.epsilon;
-
-	pp::split_pinched_verts(&mut tri.halfedge, &mut vert_pos);
-	pp::dedupe_edges(&mut tri, &mut vert_pos);
-	pp::collapse_short_edges(
-		&mut tri.halfedge,
-		&mut vert_pos,
-		&tri.normal,
-		&tri.relation,
-		&instance_rel,
-		prop_stride_new,
-		epsilon,
-		precision.tolerance,
-		0,
-	);
-	pp::swap_degenerates(
-		&mut tri,
-		&mut vert_pos,
-		&mut properties,
-		&instance_rel,
-		epsilon,
-		precision.tolerance,
-		0,
-	);
-
 	let Some(collider) =
 		pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
 	else {

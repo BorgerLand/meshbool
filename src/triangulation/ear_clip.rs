@@ -12,6 +12,30 @@ use std::ptr;
 
 const K_BEST: f64 = f64::NEG_INFINITY;
 
+#[derive(Default)]
+pub struct EarClipBuffers {
+	///The flat list where all the Verts are stored. Not used much for traversal.
+	polygon: Vec<Vert>,
+	///The set of right-most starting points, one for each negative-area contour.
+	holes: Vec<usize>,
+	///The set of starting points, one for each positive-area contour.
+	outers: Vec<usize>,
+	///The set of starting points, one for each simple polygon.
+	simples: Vec<usize>,
+	///Maps each hole (by way of starting point) to its bounding box.
+	hole2bbox: FxHashMap<usize, Box2D>,
+	///A priority queue of valid ears - the multiset allows them to be updated.
+	ears_queue: MultiSet<usize>,
+	///Per-polygon collision data, kept as scratch storage between calls.
+	collider: IdxCollider,
+}
+
+#[derive(Default)]
+struct IdxCollider {
+	points: Vec<PolyVert>,
+	itr: Vec<usize>,
+}
+
 ///Ear-clipping triangulator based on David Eberly's approach from Geometric
 ///Tools, but adjusted to handle epsilon-valid polygons, and including a
 ///fallback that ensures a manifold triangulation even for overlapping polygons.
@@ -24,7 +48,26 @@ const K_BEST: f64 = f64::NEG_INFINITY;
 ///@brief Triangulates a set of &epsilon;-valid polygons. If the input is not
 ///&epsilon;-valid, the triangulation may overlap, but will always return a
 ///manifold result that matches the input edge directions.
-pub fn triangulate_ear_clip(polys: &PolygonsIdx, epsilon: &mut f64) -> HalfedgeTriangulation {
+pub fn triangulate_ear_clip(
+	polys: &PolygonsIdx,
+	epsilon: &mut f64,
+	buffers: Option<&mut EarClipBuffers>,
+) -> HalfedgeTriangulation {
+	let buffers = match buffers {
+		Some(buffers) => {
+			buffers.polygon.clear();
+			buffers.holes.clear();
+			buffers.outers.clear();
+			buffers.simples.clear();
+			buffers.hole2bbox.clear();
+			buffers.ears_queue.clear();
+			buffers.collider.points.clear();
+			buffers.collider.itr.clear();
+			buffers
+		}
+		None => &mut EarClipBuffers::default(),
+	};
+
 	let mut result = HalfedgeTriangulation::new();
 
 	let mut num_vert = 0;
@@ -32,58 +75,58 @@ pub fn triangulate_ear_clip(polys: &PolygonsIdx, epsilon: &mut f64) -> HalfedgeT
 		num_vert += poly.len();
 	}
 	//The flat list where all the Verts are stored. Not used much for traversal.
-	let mut polygon: Vec<Vert> = Vec::with_capacity(num_vert + 2 * polys.len()); //must never reallocate or else all vert.left and vert.right break
+	let polygon = &mut buffers.polygon;
+	polygon.reserve(num_vert + 2 * polys.len()); //must never reallocate or else all vert.left and vert.right break
 	//Pointers to first and last verts within self.polygon
 	let polygon_first = polygon.as_ptr() as usize;
 	let polygon_end = unsafe { polygon.as_ptr().add(polygon.capacity()) } as usize;
 	let polygon_range = polygon_first..polygon_end;
-	//The set of right-most starting points, one for each negative-area contour.
-	let mut holes = Vec::new();
-	//The set of starting points, one for each positive-area contour.
-	let mut outers = Vec::new();
-	//The set of starting points, one for each simple polygon.
-	let mut simples = Vec::new();
-	//Maps each hole (by way of starting point) to its bounding box.
-	let mut hole2bbox = FxHashMap::default();
 
-	let starts = initialize(&mut polygon, &polygon_range, epsilon, &mut result, polys);
+	let starts = initialize(polygon, &polygon_range, epsilon, &mut result, polys);
 
 	for v in 0..polygon.len() {
-		clip_if_degenerate(v, &mut result, &mut polygon, &polygon_range, *epsilon);
+		clip_if_degenerate(v, &mut result, polygon, &polygon_range, *epsilon);
 	}
 
 	for first in starts {
 		find_start(
-			&mut polygon,
+			polygon,
 			&polygon_range,
-			&mut hole2bbox,
-			&mut holes,
-			&mut simples,
-			&mut outers,
+			&mut buffers.hole2bbox,
+			&mut buffers.holes,
+			&mut buffers.simples,
+			&mut buffers.outers,
 			*epsilon,
 			first,
 		);
 	}
 
-	holes.sort_unstable_by_key(|&hole| Reverse(OrderedF64(polygon[hole].pos.x)));
-	for start in holes.into_iter() {
+	buffers
+		.holes
+		.sort_unstable_by_key(|&hole| Reverse(OrderedF64(polygon[hole].pos.x)));
+	for &start in buffers.holes.iter() {
 		cut_keyhole(
 			start,
-			&mut simples,
+			&mut buffers.simples,
 			&mut result,
-			&mut polygon,
+			polygon,
 			&polygon_range,
-			&outers,
-			&hole2bbox,
+			&buffers.outers,
+			&buffers.hole2bbox,
 			*epsilon,
 		);
 	}
 
-	drop(outers);
-	drop(hole2bbox);
-
-	for start in simples {
-		triangulate_poly(start, &mut polygon, &polygon_range, &mut result, *epsilon);
+	for &start in buffers.simples.iter() {
+		triangulate_poly(
+			start,
+			polygon,
+			&mut buffers.ears_queue,
+			&mut buffers.collider,
+			&mut result,
+			&polygon_range,
+			*epsilon,
+		);
 	}
 
 	result
@@ -252,25 +295,25 @@ fn find_start(
 fn triangulate_poly(
 	start: usize,
 	polygon: &mut Vec<Vert>,
-	polygon_range: &Range<usize>,
+	ears_queue: &mut MultiSet<usize>,
+	collider: &mut IdxCollider,
 	result: &mut HalfedgeTriangulation,
+	polygon_range: &Range<usize>,
 	epsilon: f64,
 ) {
-	let vert_collider = vert_collider(start, polygon, polygon_range);
+	build_vert_collider(start, polygon, collider, polygon_range);
 
-	if vert_collider.itr.is_empty() {
+	if collider.itr.is_empty() {
 		//empty poly
 		return;
 	}
 
 	// A simple polygon always creates two fewer triangles than it has verts.
 	let mut num_tri = -2;
-
-	// A priority queue of valid ears - the multiset allows them to be updated.
-	let mut ears_queue = MultiSet::new();
+	ears_queue.clear();
 
 	let queue_vert = |v, polygon: &mut Vec<Vert>| {
-		process_ear(v, &vert_collider, &mut ears_queue, polygon, epsilon);
+		process_ear(v, &collider, ears_queue, polygon, epsilon);
 		num_tri += 1;
 	};
 
@@ -292,9 +335,9 @@ fn triangulate_poly(
 		num_tri -= 1;
 
 		let ear_left = polygon[v].left().ptr2index(polygon_range);
-		process_ear(ear_left, &vert_collider, &mut ears_queue, polygon, epsilon);
+		process_ear(ear_left, &collider, ears_queue, polygon, epsilon);
 		let ear_right = polygon[v].right().ptr2index(polygon_range);
-		process_ear(ear_right, &vert_collider, &mut ears_queue, polygon, epsilon);
+		process_ear(ear_right, &collider, ears_queue, polygon, epsilon);
 		// This is a backup vert that is used if the queue is empty (geometrically
 		// invalid polygon), to ensure manifoldness.
 		v = ear_right;
@@ -555,24 +598,24 @@ fn process_ear(
 ///Create a collider of all vertices in this polygon, each expanded by
 ///epsilon_. Each ear uses this BVH to quickly find a subset of vertices to
 ///check for cost.
-fn vert_collider(
+fn build_vert_collider(
 	start: usize,
 	polygon: &mut Vec<Vert>,
+	collider: &mut IdxCollider,
 	polygon_range: &Range<usize>,
-) -> IdxCollider {
-	let mut itr = Vec::new();
-	let mut points = Vec::new();
+) {
+	collider.points.clear();
+	collider.itr.clear();
 	loop_verts(start, polygon, polygon_range, |v, polygon| {
-		points.push(PolyVert {
+		collider.points.push(PolyVert {
 			pos: polygon[v].pos,
-			idx: itr.len() as i32,
+			idx: collider.itr.len() as i32,
 		});
 
-		itr.push(v);
+		collider.itr.push(v);
 	});
 
-	tree2d::build_2d_tree(&mut points);
-	IdxCollider { points, itr }
+	tree2d::build_2d_tree(&mut collider.points);
 }
 
 ///This function and JoinPolygons are the only functions that affect the
@@ -587,11 +630,6 @@ fn link(left: usize, right: usize, polygon: &mut Vec<Vert>, polygon_range: &Rang
 ///from it, but it is still linked to them.
 fn clipped(v: &Vert) -> bool {
 	!ptr::eq(v.right().left, v)
-}
-
-struct IdxCollider {
-	points: Vec<PolyVert>,
-	itr: Vec<usize>,
 }
 
 /// A circularly-linked list representing the polygon(s) that still need to be

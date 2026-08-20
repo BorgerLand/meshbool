@@ -188,6 +188,10 @@ impl Precision {
 
 		Self { epsilon, tolerance }
 	}
+
+	fn max_cost(&self) -> f64 {
+		self.tolerance * self.tolerance
+	}
 }
 
 #[derive(Debug, Clone, Default)]

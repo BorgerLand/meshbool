@@ -35,6 +35,7 @@ mod crate
 			fn as_original(&mut self) -> MeshBoolTestWrapper;
 			fn reserve_ids(u32) -> u32;
 			fn matches_tri_normals(&mut self) -> bool;
+			fn has_simple_props(&mut self) -> bool;
 			fn num_degenerate_tris(&mut self) -> usize;
 			fn translate(&self, ::nalgebra::Vector3<f64>) -> MeshBoolTestWrapper;
 			fn scale(&self, ::nalgebra::Vector3<f64>) -> MeshBoolTestWrapper;
@@ -189,6 +190,21 @@ mod crate
 			
 			fn get_circular_segments(f64) -> u32;
 		}
+		
+		fn triangulate_idx_halfedges_reuse
+		(
+			&::std::vec::Vec<::std::vec::Vec<crate::triangulation::PolyVert>>,
+			f64,
+			bool,
+			&mut PolygonTriangulator,
+		) -> crate::triangulation::HalfedgeTriangulation;
+		
+		type PolygonTriangulator
+		{
+			#layout(size = 184, align = 8);
+			
+			fn default() -> PolygonTriangulator;
+		}
 	}
 	
 	mod triangulation
@@ -212,6 +228,13 @@ mod crate
 			#layout(size = 24, align = 8);
 			
 			fn new(::nalgebra::Point2<f64>, i32) -> PolyVert;
+		}
+		
+		type HalfedgeTriangulation
+		{
+			#layout(size = 64, align = 8);
+			
+			fn triangles(&self) -> ::std::vec::Vec<::nalgebra::Vector3<i32>>;
 		}
 	}
 }

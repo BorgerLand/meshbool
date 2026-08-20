@@ -35,24 +35,19 @@ impl<K> Clone for Handle<K> {
 ///current implementation, not a documented guarantee of the crate, but this
 ///property is necessary for matching the behavior of the C++ standard. Updating the
 ///crate should be met with scrutiny for this reason.
-///
-///I am not 100% sure this is a good idea for performance due to inherent lack of
-///cache locality. The previous commit was using a manually sorted vec, which was
-///slightly faster, but Samples.Sponge4 was failing
-///(Expected: (sponge.NumDegenerateTris()) <= (8), actual: 24 vs 8).
-///Possibly the stable pointer guarantee as opposed to removing any identical key
-///is load bearing.
 pub struct MultiSet<K: 'static> {
 	tree: RBTree<NodeAdapter<K>>,
 }
 
-impl<K: 'static> MultiSet<K> {
-	pub fn new() -> Self {
-		MultiSet {
-			tree: RBTree::new(NodeAdapter::new()),
+impl<K: 'static> Default for MultiSet<K> {
+	fn default() -> Self {
+		Self {
+			tree: RBTree::default(),
 		}
 	}
+}
 
+impl<K: 'static> MultiSet<K> {
 	///Inserts a `(key, value)` pair. Never overwrites; equal keys coexist and
 	///are inserted after any existing equal keys. The returned handle is valid
 	///until the entry is removed.
@@ -91,5 +86,10 @@ impl<K: 'static> MultiSet<K> {
 		let mut cursor = unsafe { self.tree.cursor_mut_from_ptr(handle.0.as_ptr()) };
 		let node = cursor.remove().unwrap();
 		node.key
+	}
+
+	///all handles become invalid. do not pass to remove
+	pub fn clear(&mut self) {
+		*self = Self::default();
 	}
 }

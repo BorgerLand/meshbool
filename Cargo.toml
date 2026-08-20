@@ -8,6 +8,7 @@ rust-version = "1.91"
 crate-type = ["staticlib"]
 
 [features]
+default = ["test_thoroughly"]
 test = ["dep:zngur", "dep:build-rs"]
 test_thoroughly = ["test"]
 

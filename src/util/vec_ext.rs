@@ -96,3 +96,23 @@ where
 		.map(|mapped| input[mapped.lossy_into()])
 		.collect()
 }
+
+//c++ std::partition
+pub fn unstable_partition<T, F>(slice: &mut [T], mut predicate: F) -> usize
+where
+	F: FnMut(&T) -> bool,
+{
+	let mut left = 0;
+	let mut right = slice.len();
+
+	while left < right {
+		if predicate(&slice[left]) {
+			left += 1;
+		} else {
+			right -= 1;
+			slice.swap(left, right);
+		}
+	}
+
+	left
+}

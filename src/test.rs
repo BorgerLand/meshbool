@@ -1,7 +1,10 @@
 use crate::mesh_relations::reserve_original_id;
 use crate::meshgl::MeshGL;
 use crate::postprocessing::sort::get_tri_box_morton;
-use crate::triangulation::PolyVert;
+use crate::triangulation::{
+	EarClipBuffers as PolygonTriangulator, HalfedgeTriangulation, PolyVert, PolygonsIdx,
+	triangulate_idx_halfedges,
+};
 use crate::util::num_convert::LossyFrom;
 use crate::util::segment_resolution::SegmentResolution;
 use crate::util::tri_dst::distance_triangle_triangle_squared;
@@ -478,6 +481,11 @@ impl MeshBoolTestWrapper {
 		self.eval().matches_tri_normals()
 	}
 
+	fn has_simple_props(&mut self) -> bool {
+		self.warn_status();
+		self.eval().has_simple_props()
+	}
+
 	fn num_degenerate_tris(&mut self) -> usize {
 		self.warn_status();
 		self.eval().num_degenerate_tris()
@@ -647,6 +655,15 @@ impl PolyVert {
 	fn new(pos: Point2<f64>, idx: i32) -> Self {
 		Self { pos, idx }
 	}
+}
+
+fn triangulate_idx_halfedges_reuse(
+	polys: &PolygonsIdx,
+	epsilon: f64,
+	allow_convex: bool,
+	triangulator: &mut PolygonTriangulator,
+) -> HalfedgeTriangulation {
+	triangulate_idx_halfedges(polys, epsilon, allow_convex, Some(triangulator))
 }
 
 type MeshGL32 = MeshGL<f32, u32>;

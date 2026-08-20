@@ -65,7 +65,6 @@ impl MeshBool {
 	}
 
 	fn set_tolerance_and_simplify(self, tolerance: Option<f64>, mut simplify: bool) -> Self {
-		let epsilon = self.get_epsilon();
 		let mut precision = self.precision;
 		let requested_tolerance = tolerance.unwrap_or(precision.tolerance);
 		let mut tri_rel = self.tri.relation.to_vec();
@@ -85,7 +84,7 @@ impl MeshBool {
 			if !simplify {
 				// for reducing tolerance, we need to make sure it is still at least
 				// equal to epsilon.
-				precision.tolerance = epsilon.max(requested_tolerance);
+				precision.tolerance = precision.epsilon.max(requested_tolerance);
 			}
 
 			self.tri.normal.to_vec()
@@ -111,36 +110,7 @@ impl MeshBool {
 		let collider = if simplify {
 			pp::split_pinched_verts(&mut tri.halfedge, &mut vert_pos);
 			pp::dedupe_edges(&mut tri, &mut vert_pos);
-			pp::collapse_short_edges(
-				&mut tri.halfedge,
-				&mut vert_pos,
-				&tri.normal,
-				&tri.relation,
-				&self.instance_relation,
-				properties.stride,
-				epsilon,
-				precision.tolerance,
-				0,
-			);
-			pp::collapse_colinear_edges(
-				&mut tri.halfedge,
-				&mut vert_pos,
-				&tri.normal,
-				&tri.relation,
-				&self.instance_relation,
-				properties.stride,
-				epsilon,
-				0,
-			);
-			pp::swap_degenerates(
-				&mut tri,
-				&mut vert_pos,
-				&mut properties,
-				&self.instance_relation,
-				epsilon,
-				precision.tolerance,
-				0,
-			);
+			pp::simplify_topology2(&mut tri, &mut vert_pos, &mut properties, precision);
 			let bbox = Box3D::from_cloud(&vert_pos);
 			let Some(collider) =
 				pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)

@@ -2,10 +2,12 @@ pub use crate::postprocessing::sort::sort_and_compact_geometry;
 
 use crate::halfedge::{Halfedges, next_halfedge};
 use crate::mesh_relations::{InstanceRelation, TriRelation};
+use crate::postprocessing::edge::Merger;
 use crate::util::disjoint_sets::DisjointSets;
-use crate::util::math::{ccw, get_axis_aligned_projection};
+use crate::util::math::{ccw, get_axis_aligned_projection, safe_normalize3};
 use crate::util::num_convert::OrderedF64;
-use crate::{Properties, TrianglesWIP};
+use crate::util::vec_ext;
+use crate::{Precision, Properties, TrianglesWIP};
 use nalgebra::{Point2, Point3, Vector3};
 use rustc_hash::FxHashMap;
 use std::cmp::Reverse;
@@ -132,7 +134,7 @@ pub fn set_normals_and_coplanar(
 		tri: i32,
 	}
 
-	let (mut tri_normal, mut tri_priority): (Vec<_>, Vec<_>) = (0..num_tri)
+	let (tri_normal, mut tri_priority): (Vec<_>, Vec<_>) = (0..num_tri)
 		.map(|tri| {
 			if halfedge.start[3 * tri] < 0 {
 				return (
@@ -145,7 +147,7 @@ pub fn set_normals_and_coplanar(
 			}
 
 			let v = vert_pos[halfedge.start[3 * tri] as usize];
-			let mut n = (vert_pos[halfedge.end(3 * tri) as usize] - v)
+			let n = (vert_pos[halfedge.end(3 * tri) as usize] - v)
 				.cross(&(vert_pos[halfedge.end(3 * tri + 1) as usize] - v));
 
 			let priority = TriPriority {
@@ -153,12 +155,7 @@ pub fn set_normals_and_coplanar(
 				tri: tri as i32,
 			};
 
-			n = n.normalize();
-			if n.x.is_nan() {
-				n = Vector3::new(0.0, 0.0, 1.0);
-			}
-
-			(n, priority)
+			(safe_normalize3(n), priority)
 		})
 		.unzip();
 
@@ -192,7 +189,6 @@ pub fn set_normals_and_coplanar(
 			if (v - base).dot(&normal).abs() < tolerance {
 				let tri = h / 3;
 				coplanar_id[tri] = tp.tri;
-				tri_normal[tri] = normal;
 
 				if interior_halfedges.is_empty()
 					|| h != halfedge.pair[*interior_halfedges.last().unwrap() as usize] as usize
@@ -336,6 +332,205 @@ pub fn dedupe_edges(tri: &mut TrianglesWIP, vert_pos: &mut Vec<Point3<f64>>) {
 	}
 }
 
+pub fn simplify_topology2(
+	tri: &mut TrianglesWIP,
+	vert_pos: &mut Vec<Point3<f64>>,
+	properties: &mut Properties,
+	precision: Precision,
+) {
+	let mut edges = Vec::from_iter(0..tri.halfedge.len() as i32);
+	let mut edges_end = edges.len();
+	let mut verts_visited = vec![false; vert_pos.len()];
+	let mut total_cost = vec![0.0_f64; vert_pos.len()];
+	let mut merger = vec![Merger::default(); edges.len()];
+	let max_cost = precision.max_cost();
+	let mut scratch_buffer = Vec::with_capacity(10);
+
+	while 0 != edges_end {
+		for &edge in edges.iter() {
+			let edge = edge as usize;
+			let pair = tri.halfedge.pair[edge] as usize;
+			if !tri.halfedge.valid(edge) {
+				continue;
+			}
+			// Optimization: only calculate for forward halfedges, then copy
+			// result to the pair. However, this conflicts with the above
+			// optimization because forward halfedges with two retained verts
+			// get discarded, but can later become edges with new verts,
+			// which are then needed.
+			if !tri.halfedge.is_forward(edge) {
+				continue;
+			}
+
+			if merger[edge].valid()
+				&& !verts_visited[tri.halfedge.start[edge] as usize]
+				&& !verts_visited[tri.halfedge.end(edge) as usize]
+				&& !verts_visited[tri.halfedge.end(next_halfedge(edge)) as usize]
+				&& !verts_visited[tri.halfedge.end(next_halfedge(pair)) as usize]
+			{
+				continue;
+			}
+
+			// Swappable edges differ on forward and backward, so check before the
+			// forward-only optimization.
+			let swap_edge = edge::swappable(
+				edge,
+				&tri.halfedge,
+				&tri.normal,
+				vert_pos,
+				precision.epsilon,
+			);
+			if swap_edge
+				|| edge::swappable(
+					pair,
+					&tri.halfedge,
+					&tri.normal,
+					vert_pos,
+					precision.epsilon,
+				) {
+				let v0 = vert_pos[tri.halfedge.start[edge] as usize];
+				let l01 = (vert_pos[tri.halfedge.end(edge) as usize] - v0).magnitude();
+				let l02 =
+					(vert_pos[tri
+						.halfedge
+						.end(next_halfedge(if swap_edge { edge } else { pair }))
+						as usize] - v0)
+						.magnitude();
+				let a = 0.0_f64.max(1.0_f64.min(l02 / l01));
+				merger[if swap_edge { edge } else { pair }] = Merger {
+					added_cost: 0.0,
+					total_cost: Merger::K_SWAP,
+					a: if swap_edge { a } else { 1.0 - a },
+					new_pos: Point3::new(f64::NAN, f64::NAN, f64::NAN),
+				};
+				continue;
+			}
+
+			// Optimization: only recalculate when an edge has collapsed into
+			// this one. Technically its cost can also change from a
+			// neighbor's collapse, but probably not enough to worry about,
+			// and this is a much cheaper check.
+			if merger[edge].valid()
+				&& !verts_visited[tri.halfedge.start[edge] as usize]
+				&& !verts_visited[tri.halfedge.end(edge) as usize]
+			{
+				continue;
+			}
+
+			let mut edge_cost = edge::check(
+				edge,
+				&tri.halfedge,
+				&tri.normal,
+				&tri.relation,
+				vert_pos,
+				properties.stride,
+				precision.epsilon,
+			);
+			edge_cost.total_cost += total_cost[tri.halfedge.start[edge] as usize]
+				.max(total_cost[tri.halfedge.end(edge) as usize]);
+			merger[edge] = edge_cost;
+			// Forward edge optimization is enabled, so copy the result to
+			// the pair.
+			edge_cost.a = 1.0 - edge_cost.a;
+			merger[pair] = edge_cost;
+		}
+
+		edges[..edges_end]
+			.sort_unstable_by_key(|&edge| OrderedF64(merger[edge as usize].total_cost));
+		verts_visited.iter_mut().for_each(|v| *v = false);
+		let mut edges_itr = 0;
+		let mut num_collapsed: usize = 0;
+		let mut num_swapped: usize = 0;
+		// Collapse short edges first so that long edges calculate correct cost.
+		let short_collapse = merger[edges[edges_itr] as usize].short();
+		let mut increment_itr = false;
+		loop {
+			if increment_itr {
+				edges_itr += 1;
+			}
+			if edges_itr == edges_end {
+				break;
+			}
+			increment_itr = true;
+
+			let edge = edges[edges_itr] as usize;
+			if !tri.halfedge.valid(edge) {
+				continue;
+			}
+			if merger[edge].total_cost > max_cost {
+				break; // Sorting means no further edges can be collapsed this round.
+			}
+			if short_collapse && !merger[edge].free() {
+				break; // force recalculation of cost after free edges collapse.
+			}
+			let start_v = tri.halfedge.start[edge] as usize;
+			let end_v = tri.halfedge.end(edge) as usize;
+			// Allow short merges to stack to ensure all are collapsed.
+			if !short_collapse && (verts_visited[start_v] || verts_visited[end_v]) {
+				continue;
+			}
+			if merger[edge].swap() {
+				verts_visited[start_v] = true;
+				verts_visited[end_v] = true;
+				verts_visited[tri.halfedge.end(next_halfedge(edge)) as usize] = true;
+				verts_visited[tri
+					.halfedge
+					.end(next_halfedge(tri.halfedge.pair[edge] as usize))
+					as usize] = true;
+				edge::swap(edge, merger[edge].a, tri, vert_pos, properties);
+				verts_visited.resize(vert_pos.len(), true);
+				total_cost.resize(vert_pos.len(), 0.0);
+				num_swapped += 1;
+				continue;
+			}
+			let did_collapse = edge::collapse2(
+				edge,
+				&mut tri.halfedge,
+				&tri.normal,
+				vert_pos,
+				properties,
+				&mut scratch_buffer,
+				merger[edge],
+				precision.epsilon,
+			);
+			verts_visited.resize(vert_pos.len(), true);
+			total_cost.resize(vert_pos.len(), 0.0);
+			if did_collapse {
+				total_cost[start_v] += merger[edge].added_cost;
+				total_cost[end_v] += merger[edge].added_cost;
+				verts_visited[start_v] = true;
+				verts_visited[end_v] = true;
+				num_collapsed += 1;
+			}
+		}
+		edges_end = vec_ext::unstable_partition(&mut edges[..edges_end], |&edge| {
+			tri.halfedge.valid(edge as usize)
+		});
+		if num_collapsed == 0 && num_swapped == 0 {
+			break;
+		}
+
+		for tri_i in 0..tri.halfedge.num_tri() {
+			if !tri.halfedge.valid(3 * tri_i) {
+				continue;
+			}
+			let mut update = false;
+			for i in 0..3 {
+				update |= verts_visited[tri.halfedge.start[3 * tri_i + i] as usize];
+			}
+			if !update {
+				continue;
+			}
+
+			let center = vert_pos[tri.halfedge.start[3 * tri_i] as usize];
+			tri.normal[tri_i] = safe_normalize3(
+				(vert_pos[tri.halfedge.start[3 * tri_i + 1] as usize] - center)
+					.cross(&(vert_pos[tri.halfedge.start[3 * tri_i + 2] as usize] - center)),
+			);
+		}
+	}
+}
+
 ///Collapses degenerate triangles by removing edges shorter than tolerance_ and
 ///any edge that is preceeded by an edge that joins the same two face relations.
 ///
@@ -443,16 +638,16 @@ pub fn collapse_colinear_edges(
 		// Collapse colinear edges, but only remove new verts, i.e. verts with
 		// index
 		// >= firstNewVert. This is used to keep the Boolean from changing the
-		// non-intersecting parts of the input meshes. Colinear is defined not by a
-		// local check, but by the global MarkCoplanar function, which keeps this
-		// from being vulnerable to error stacking.
+		// non-intersecting parts of the input meshes. Colinear is defined not by
+		// a local check, but by the global MarkCoplanar function, which keeps
+		// this from being vulnerable to error stacking.
 		let colinear_edge = |(halfedge, _): &mut (&mut Halfedges, &mut Vec<Point3<f64>>), edge| {
 			let pair = halfedge.pair[edge];
 			if pair < 0 || (halfedge.start[edge] as usize) < first_new_vert {
 				return false;
 			}
-			// Flag redundant edges - those where the startVert is surrounded by only
-			// two original triangles.
+			// Flag redundant edges - those where the startVert is surrounded by
+			// only two original triangles.
 			let ref0 = tri_rel[edge / 3];
 			let mut current = next_halfedge(pair as usize);
 			let mut ref1 = tri_rel[current / 3];
@@ -546,7 +741,7 @@ pub fn swap_degenerates(
 		for i in 0..3 {
 			v[i] = projection * vert_pos[tri.halfedge.start[tri_edge[i] as usize] as usize];
 		}
-		if ccw(v[0], v[1], v[2], tolerance) > 0 || !edge::is_01_longest(v[0], v[1], v[2]) {
+		if ccw(v[0], v[1], v[2], tolerance) > 0 || !edge::is_01_longest_2(v[0], v[1], v[2]) {
 			return false;
 		}
 
@@ -558,7 +753,7 @@ pub fn swap_degenerates(
 			v[i] = projection * vert_pos[tri.halfedge.start[pair_tri_edge[i] as usize] as usize];
 		}
 
-		ccw(v[0], v[1], v[2], tolerance) > 0 || edge::is_01_longest(v[0], v[1], v[2])
+		ccw(v[0], v[1], v[2], tolerance) > 0 || edge::is_01_longest_2(v[0], v[1], v[2])
 	};
 
 	let mut edge_swap_stack = Vec::new();

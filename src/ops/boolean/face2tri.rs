@@ -1,7 +1,7 @@
 use crate::TrianglesWIP;
 use crate::halfedge::{Halfedge, Halfedges};
 use crate::mesh_relations::TriRelation;
-use crate::triangulation::{HalfedgeTriangulation, triangulate_idx_halfedges};
+use crate::triangulation::{EarClipBuffers, HalfedgeTriangulation, triangulate_idx_halfedges};
 use crate::util::face::{assemble_halfedges, project_polygons};
 use crate::util::math::{ccw, get_axis_aligned_projection, next3_usize};
 use crate::util::vec_ext;
@@ -26,7 +26,8 @@ pub fn face2tri(
 	halfedge_rel: Vec<TriRelation>,
 	epsilon: f64,
 ) -> TrianglesWIP {
-	let general_triangulation = |face| {
+	let mut scratch_buffer = EarClipBuffers::default();
+	let mut general_triangulation = |face| {
 		let normal = face_normal[face];
 		let projection = get_axis_aligned_projection(normal);
 		let polys = project_polygons(
@@ -39,7 +40,7 @@ pub fn face2tri(
 			projection,
 		);
 
-		triangulate_idx_halfedges(&polys, epsilon, false)
+		triangulate_idx_halfedges(&polys, epsilon, false, Some(&mut scratch_buffer))
 	};
 
 	let mut tri_offset = unsafe { vec_ext::uninit(face_edge.len()) };
@@ -60,6 +61,8 @@ pub fn face2tri(
 			results.entry(face as i32).or_insert(triangulation);
 		}
 	}
+
+	drop(scratch_buffer);
 
 	vec_ext::exclusive_scan_in_place(&mut tri_offset, 0);
 	let tri_offset_back = *tri_offset.last().unwrap();

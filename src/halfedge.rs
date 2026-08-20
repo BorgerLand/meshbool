@@ -22,10 +22,7 @@ pub struct Halfedges {
 
 impl Halfedges {
 	///Create the halfedge_ data structure from a list of triangles. If the optional
-	///prop2vert array is missing, it's assumed these triangles are are pointing to
-	///both vert and propVert indices. If prop2vert is present, the triangles are
-	///assumed to be pointing to propVert indices only. The prop2vert array is used
-	///to map the propVert indices to vert indices.
+	///triVert array is missing, it's assumed that triProp is identical to triVert.
 	pub fn from_tri_indices(
 		vert_count: usize,
 		tri_vert: Vec<Vector3<i32>>,
@@ -322,6 +319,18 @@ impl Halfedges {
 		self.start[idx] < self.end(idx)
 	}
 
+	pub fn valid(&self, idx: usize) -> bool {
+		self.pair[idx] >= 0
+	}
+
+	pub fn tri(&self, idx: usize) -> usize {
+		idx / 3
+	}
+
+	pub fn prop_end(&self, idx: usize) -> i32 {
+		self.prop[next_halfedge(idx)]
+	}
+
 	pub fn get(&self, idx: usize) -> Halfedge {
 		Halfedge {
 			start_vert: self.start[idx],
@@ -457,6 +466,15 @@ pub fn next_halfedge(current: usize) -> usize {
 		current - 2
 	} else {
 		current + 1
+	}
+}
+
+#[inline(always)]
+pub fn prev_halfedge(current: usize) -> usize {
+	if current % 3 == 0 {
+		current + 2
+	} else {
+		current - 1
 	}
 }
 

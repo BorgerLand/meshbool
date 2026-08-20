@@ -12,8 +12,8 @@ use crate::util::vec_ext;
 use crate::{MeshBool, Precision, Properties, TrianglesWIP};
 use nalgebra::{Matrix3x4, Point3, Vector3};
 use std::any::TypeId;
+use std::array;
 use std::rc::Rc;
-use std::{array, mem};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum MeshGLError {
@@ -253,7 +253,6 @@ where
 			requested_tolerance,
 			TypeId::of::<F>() == TypeId::of::<f32>(),
 		);
-		let epsilon = precision.epsilon;
 		let mut properties = Properties {
 			data: properties,
 			stride: prop_stride,
@@ -276,26 +275,6 @@ where
 			relation: tri_rel,
 		};
 		pp::dedupe_edges(&mut tri, &mut vert_pos);
-		pp::collapse_short_edges(
-			&mut tri.halfedge,
-			&mut vert_pos,
-			&tri.normal,
-			&tri.relation,
-			&instance_relation,
-			prop_stride,
-			epsilon,
-			precision.tolerance,
-			0,
-		);
-		pp::swap_degenerates(
-			&mut tri,
-			&mut vert_pos,
-			&mut properties,
-			&instance_relation,
-			epsilon,
-			precision.tolerance,
-			0,
-		);
 		pp::mark_unreferenced_verts(&mut tri.halfedge, &mut vert_pos);
 		let Some(collider) =
 			pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)
@@ -367,8 +346,6 @@ where
 	///a round-trip through a file format. Constructing a Manifold from the result
 	///will report an error status if it is not manifold.
 	pub fn merge(&mut self) -> bool {
-		let mut open_edges = vec![]; //c++ used multiset
-
 		let mut merge: Vec<i32> = (0..i32::lossy_from(self.num_vert())).collect();
 		for i in 0..self.merge_from_vert.len() {
 			merge[usize::lossy_from(self.merge_from_vert[i])] =
@@ -377,28 +354,64 @@ where
 
 		let num_vert = usize::lossy_from(self.num_vert());
 		let num_tri = usize::lossy_from(self.num_tri());
+		let mut edges = Vec::with_capacity(3 * num_tri);
 		let next = [1, 2, 0];
 		for tri in 0..num_tri {
 			for i in 0..3 {
-				let mut edge = (
-					merge[usize::lossy_from(self.tri_verts[3 * tri + next[i] as usize])],
-					merge[usize::lossy_from(self.tri_verts[3 * tri + i])],
-				);
-				let it = open_edges.iter().position(|&p| p == edge);
-				if it.is_none() {
-					mem::swap(&mut edge.0, &mut edge.1);
-					open_edges.push(edge);
-				} else {
-					open_edges.remove(it.unwrap());
-				}
+				let first = merge[usize::lossy_from(self.tri_verts[3 * tri + i])];
+				let second = merge[usize::lossy_from(self.tri_verts[3 * tri + next[i]])];
+				edges.push(encode_open_edge(first, second));
 			}
 		}
-		if open_edges.is_empty() {
-			return false;
+		edges.sort_unstable();
+
+		let mut open_verts = Vec::with_capacity(edges.len());
+		// Opposing directed edges cancel in pairs. Repeated edges in the same
+		// direction remain, matching the previous multiset behavior. Collapsed
+		// self-edges likewise remain only when their count is odd.
+		let mut begin = 0;
+		while begin < edges.len() {
+			let key = edges[begin] >> 1;
+			let mut end = begin + 1;
+			while end < edges.len() && edges[end] >> 1 == key {
+				end += 1;
+			}
+
+			let low = (edges[begin] >> 32) as i32;
+			let high = ((edges[begin] >> 1) & 0x7FFF_FFFF) as i32;
+			if low == high {
+				if (end - begin) % 2 == 1 {
+					open_verts.push(low);
+				}
+			} else {
+				let mut split = begin;
+				while split < end && edges[split] & 1 == 0 {
+					split += 1;
+				}
+				let num_forward = split - begin;
+				let num_reverse = end - split;
+				let num_open = num_forward.max(num_reverse) - num_forward.min(num_reverse);
+				let edge = if num_forward >= num_reverse {
+					edges[begin]
+				} else {
+					edges[end - 1]
+				};
+				for _ in 0..num_open {
+					open_verts.push(open_edge_first(edge));
+				}
+			}
+
+			begin = end;
 		}
 
-		let num_open_vert = open_edges.len();
-		let mut open_verts = Vec::from_iter(open_edges.iter().map(|&(vert, _)| vert));
+		if open_verts.is_empty() {
+			return false;
+		}
+		// The multiset yielded first vertices in ascending order. Preserve that
+		// ordering so equal Morton codes keep the same deterministic merge roots.
+		open_verts.sort_unstable();
+
+		let num_open_vert = open_verts.len();
 
 		let vert_prop_d = self.vert_properties.clone();
 		let gl_prop_stride = usize::lossy_from(self.prop_stride);
@@ -480,4 +493,20 @@ where
 
 		true
 	}
+}
+
+fn encode_open_edge(first: i32, second: i32) -> u64 {
+	let low = first.min(second) as u64;
+	let high = first.max(second) as u64;
+	let direction = if first > second { 1 } else { 0 };
+	// Vertex indices are non-negative ints, so 31 bits each leaves one bit for
+	// direction. Keeping direction in the low bit groups opposing edges together
+	// when the encoded values are sorted.
+	(low << 32) | (high << 1) | direction
+}
+
+fn open_edge_first(edge: u64) -> i32 {
+	let low = (edge >> 32) as i32;
+	let high = ((edge >> 1) & 0x7FFF_FFFF) as i32;
+	if edge & 1 == 0 { low } else { high }
 }

@@ -20,12 +20,12 @@ impl MeshBool {
 	///without changing the mesh by too much.
 	pub fn num_degenerate_tris(&self) -> usize {
 		if self.is_empty() {
-			return 1;
+			return 0;
 		}
 		(0..self.num_tri())
 			.filter(|&tri| {
 				if self.tri.halfedge.pair[3 * tri] < 0 {
-					return true;
+					return false;
 				}
 
 				let projection = get_axis_aligned_projection(self.tri.normal[tri]);
@@ -118,6 +118,31 @@ impl MeshBool {
 			false,
 		);
 		min_distance.min(search_length * search_length).sqrt()
+	}
+
+	///Returns true if properties are shared everywhere except across mesh
+	///boundaries. This is not true in general, but only because an input mesh may
+	///have property discontinuities. For simple input meshes where properties are
+	///1:1 with verts, this HasSimpleProps condition should still be true after any
+	///combination of boolean operations and simplifications. CalculateNormals()
+	///will cause this to be false anytime the mesh contains a sharp edge.
+	pub fn has_simple_props(&self) -> bool {
+		if self.tri.halfedge.len() == 0 || self.properties.stride == 0 {
+			return true;
+		}
+		(0..self.tri.halfedge.len()).all(|edge| {
+			let pair = self.tri.halfedge.pair[edge];
+			if pair < 0 || !self.tri.halfedge.is_forward(edge) {
+				return true;
+			}
+
+			let pair = pair as usize;
+			let props_match = self.tri.halfedge.prop[edge] == self.tri.halfedge.prop_end(pair)
+				&& self.tri.halfedge.prop[pair] == self.tri.halfedge.prop_end(edge);
+			let meshes_match = self.tri.relation[self.tri.halfedge.tri(edge)].instance_id
+				== self.tri.relation[self.tri.halfedge.tri(pair)].instance_id;
+			meshes_match == props_match
+		})
 	}
 
 	///The triangle normal vectors are saved over the course of operations rather

@@ -16,11 +16,7 @@ pub fn build_2d_tree(points: &mut [PolyVert]) {
 }
 
 fn build_2d_tree_impl(points: &mut [PolyVert], sort_x: bool) {
-	if sort_x {
-		points.sort_unstable_by_key(|vert| OrderedF64(vert.pos.x));
-	} else {
-		points.sort_unstable_by_key(|vert| OrderedF64(vert.pos.y));
-	}
+	points.sort_unstable_by_key(|vert| OrderedF64(if sort_x { vert.pos.x } else { vert.pos.y }));
 
 	let len = points.len();
 	if len < 2 {

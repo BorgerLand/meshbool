@@ -1,3 +1,5 @@
+pub use crate::triangulation::ear_clip::EarClipBuffers;
+
 use crate::halfedge::Halfedge;
 use crate::triangulation::ear_clip::triangulate_ear_clip;
 use nalgebra::{Point2, Vector3};
@@ -59,7 +61,7 @@ pub fn triangulate(polygons: &Polygons, epsilon: f64, allow_convex: bool) -> Vec
 }
 
 pub fn triangulate_idx(polys: &PolygonsIdx, epsilon: f64, allow_convex: bool) -> Vec<Vector3<i32>> {
-	triangulate_idx_halfedges(polys, epsilon, allow_convex).triangles()
+	triangulate_idx_halfedges(polys, epsilon, allow_convex, None).triangles()
 }
 
 ///@brief Triangulates a set of &epsilon;-valid polygons. If the input is not
@@ -81,13 +83,14 @@ pub fn triangulate_idx_halfedges(
 	polys: &PolygonsIdx,
 	mut epsilon: f64,
 	allow_convex: bool,
+	scratch_buffer: Option<&mut EarClipBuffers>,
 ) -> HalfedgeTriangulation {
 	let mut result;
 	if allow_convex && is_convex(polys, epsilon) {
 		//fast path
 		result = triangulate_convex(polys)
 	} else {
-		result = triangulate_ear_clip(polys, &mut epsilon);
+		result = triangulate_ear_clip(polys, &mut epsilon, scratch_buffer);
 	};
 
 	#[cfg(feature = "test_thoroughly")]
@@ -235,7 +238,7 @@ impl HalfedgeTriangulation {
 		self.edge2halfedge = FxHashMap::default();
 	}
 
-	fn triangles(&self) -> Vec<Vector3<i32>> {
+	pub fn triangles(&self) -> Vec<Vector3<i32>> {
 		let mut triangles = Vec::with_capacity(self.num_tri());
 		let mut edge = self.contour_end;
 		while edge < self.halfedges.len() {
