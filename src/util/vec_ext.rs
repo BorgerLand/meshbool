@@ -18,20 +18,18 @@ pub unsafe fn uninit<T>(size: usize) -> Vec<T> {
 	vec
 }
 
-//it is more beneficial to collect() this for parallelization,
-//but single threaded can sometimes avoid that allocation
-pub fn exclusive_scan_with_total<IO>(
-	input: impl IntoIterator<Item = IO>,
-	init: IO,
-) -> impl Iterator<Item = IO>
+pub fn exclusive_scan_with_total<IO>(input: impl IntoIterator<Item = IO>, init: IO) -> Vec<IO>
 where
 	IO: Copy + AddAssign + Default,
 {
 	let mut acc = IO::default(); //boldly assuming this always returns 0
-	iter::once(init).chain(input.into_iter()).map(move |input| {
-		acc += input;
-		acc
-	})
+	iter::once(init)
+		.chain(input.into_iter())
+		.map(move |input| {
+			acc += input;
+			acc
+		})
+		.collect()
 }
 
 ///Compute the inclusive prefix sum for the range `[first, last)` using the

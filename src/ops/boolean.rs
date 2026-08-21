@@ -247,27 +247,21 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 	let i03 = Vec::from_iter(w03.into_iter().map(|v| c1 + (c3 as i32) * v));
 	let i30 = Vec::from_iter(w30.into_iter().map(|v| c2 + (c3 as i32) * v));
 
-	let v_p2r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
-		i03.iter().map(|v| v.abs()),
-		0,
-	));
+	let v_p2r = vec_ext::exclusive_scan_with_total(i03.iter().map(|v| v.abs()), 0);
 	let mut num_vert_r = *v_p2r.last().unwrap() as usize;
 	let n_pv = num_vert_r;
 
-	let v_q2r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
-		i30.iter().map(|v| v.abs()),
-		num_vert_r as i32,
-	));
+	let v_q2r = vec_ext::exclusive_scan_with_total(i30.iter().map(|v| v.abs()), num_vert_r as i32);
 	num_vert_r = *v_q2r.last().unwrap() as usize;
 	let n_qv = num_vert_r - n_pv;
 
 	let v12_r = if i12.len() == 0 {
 		Vec::new()
 	} else {
-		let v12_r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		let v12_r = vec_ext::exclusive_scan_with_total(
 			i12.iter().map(|v| v.abs() as i32),
 			num_vert_r as i32,
-		));
+		);
 		num_vert_r = *v12_r.last().unwrap() as usize;
 		v12_r
 	};
@@ -277,10 +271,10 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 	let v21_r = if i21.len() == 0 {
 		Vec::new()
 	} else {
-		let v21_r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		let v21_r = vec_ext::exclusive_scan_with_total(
 			i21.iter().map(|v| v.abs() as i32),
 			num_vert_r as i32,
-		));
+		);
 		num_vert_r = *v21_r.last().unwrap() as usize;
 		v21_r
 	};
@@ -381,10 +375,10 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 		xv12.p1q2,
 		xv21.p1q2,
 	);
-	let face_pq2r = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+	let face_pq2r = vec_ext::exclusive_scan_with_total(
 		sides_per_face_pq.iter().map(|&x| if x > 0 { 1 } else { 0 }),
 		0,
-	));
+	);
 	let num_face_r = *face_pq2r.last().unwrap() as usize;
 	let face_normal = construct::size_face_normal(
 		in_p.tri.normal,
@@ -393,11 +387,8 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 		num_face_r,
 		invert_q,
 	);
-	let mut face_edge = Vec::with_capacity(num_face_r);
-	face_edge.extend(vec_ext::exclusive_scan_with_total(
-		sides_per_face_pq.into_iter().filter(|&v| v > 0),
-		0,
-	));
+	let face_edge =
+		vec_ext::exclusive_scan_with_total(sides_per_face_pq.into_iter().filter(|&v| v > 0), 0);
 
 	let num_halfedge_r = *face_edge.last().unwrap() as usize;
 	if num_halfedge_r == 0 {

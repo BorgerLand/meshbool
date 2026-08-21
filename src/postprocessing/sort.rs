@@ -303,7 +303,7 @@ fn compact_props(properties: &mut Properties, halfedge: &mut Halfedges) {
 		keep[halfedge.prop[idx] as usize] = 1;
 	}
 
-	let prop_old2new = Vec::from_iter(vec_ext::exclusive_scan_with_total(keep.iter().cloned(), 0));
+	let prop_old2new = vec_ext::exclusive_scan_with_total(keep.iter().cloned(), 0);
 
 	let num_verts_new = prop_old2new[num_prop_verts] as usize;
 	let old_prop = mem::replace(&mut properties.data, unsafe {

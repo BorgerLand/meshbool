@@ -50,6 +50,16 @@ pub struct InstanceRelation {
 }
 
 impl InstanceRelation {
+	pub fn new(original_id: u32) -> Self {
+		Self {
+			original_id,
+			transform: Matrix3x4::identity(),
+			back_side: false,
+			has_normals: false,
+			user_provided_face_id: false,
+		}
+	}
+
 	pub fn get_inverse_normal_transform(&self) -> Matrix3<f64> {
 		inverse_normal_transform(self.transform) * if self.back_side { -1.0 } else { 1.0 }
 	}

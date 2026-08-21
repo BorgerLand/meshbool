@@ -67,12 +67,12 @@ pub(in crate::ops::boolean) fn boolean_disjoint_union(
 	//try to produce one vec at a time to improve caching
 	//behavior and allow for more early drops
 
-	let pair_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+	let pair_offsets = vec_ext::exclusive_scan_with_total(
 		halfedge_aa
 			.iter()
 			.map(|halfedge| halfedge.start.len() as i32),
 		0,
-	));
+	);
 
 	let halfedge_len = *pair_offsets.last().unwrap() as usize;
 
@@ -96,10 +96,10 @@ pub(in crate::ops::boolean) fn boolean_disjoint_union(
 		}
 	}
 
-	let start_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+	let start_offsets = vec_ext::exclusive_scan_with_total(
 		vert_pos_aa.iter().map(|vert_pos| vert_pos.len() as i32),
 		0,
-	));
+	);
 
 	let vert_pos_len = *start_offsets.last().unwrap() as usize;
 
@@ -133,12 +133,12 @@ pub(in crate::ops::boolean) fn boolean_disjoint_union(
 		}
 	};
 
-	let prop_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+	let prop_offsets = vec_ext::exclusive_scan_with_total(
 		properties_aa
 			.iter()
 			.map(|properties_a| num_prop_vert(properties_a) as i32),
 		0,
-	));
+	);
 
 	let num_prop_verts = *prop_offsets.last().unwrap() as usize;
 
@@ -223,12 +223,12 @@ pub(in crate::ops::boolean) fn boolean_disjoint_union(
 		}
 	}
 
-	let instance_rel_offsets = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+	let instance_rel_offsets = vec_ext::exclusive_scan_with_total(
 		instance_rel_aa
 			.iter()
 			.map(|instance_rel| instance_rel.len() as u32),
 		0,
-	));
+	);
 
 	let instance_rel_len = *instance_rel_offsets.last().unwrap() as usize;
 

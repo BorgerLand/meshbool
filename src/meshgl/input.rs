@@ -68,7 +68,15 @@ where
 		if num_vert == 0 && num_tri == 0 {
 			return Ok(MeshBool::decimated(
 				original_id,
-				Rc::default(),
+				Rc::new(if let Some(id) = original_id {
+					vec![InstanceRelation::new(id)]
+				} else {
+					mesh_gl
+						.run_original_id
+						.iter()
+						.map(|&id| InstanceRelation::new(id))
+						.collect()
+				}),
 				prop_stride,
 				Precision {
 					epsilon: -1.0,

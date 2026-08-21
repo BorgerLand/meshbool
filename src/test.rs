@@ -55,13 +55,12 @@ fn set_process_overlaps(value: bool) {
 //of using result<> equivalent
 #[derive(Clone, Debug)]
 enum MeshBoolTestWrapper {
-	Leaf(MeshBool, MeshBoolError),
+	Leaf(MeshBool, MeshBoolTestError),
 	Node(CSGExpression),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-enum MeshBoolError {
-	#[default]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MeshBoolTestError {
 	NoError,
 	NonFiniteVertex,
 	NotManifold,
@@ -79,99 +78,17 @@ enum MeshBoolError {
 	Cancelled,
 }
 
-impl MeshBoolError {
-	fn is_no_error(self) -> bool {
-		self == MeshBoolError::NoError
-	}
-	fn is_non_finite_vertex(self) -> bool {
-		self == MeshBoolError::NonFiniteVertex
-	}
-	fn is_not_manifold(self) -> bool {
-		self == MeshBoolError::NotManifold
-	}
-	fn is_vertex_out_of_bounds(self) -> bool {
-		self == MeshBoolError::VertexOutOfBounds
-	}
-	fn is_properties_wrong_length(self) -> bool {
-		self == MeshBoolError::PropertiesWrongLength
-	}
-	fn is_missing_position_properties(self) -> bool {
-		self == MeshBoolError::MissingPositionProperties
-	}
-	fn is_merge_vectors_different_lengths(self) -> bool {
-		self == MeshBoolError::MergeVectorsDifferentLengths
-	}
-	fn is_merge_index_out_of_bounds(self) -> bool {
-		self == MeshBoolError::MergeIndexOutOfBounds
-	}
-	fn is_transform_wrong_length(self) -> bool {
-		self == MeshBoolError::TransformWrongLength
-	}
-	fn is_run_index_wrong_length(self) -> bool {
-		self == MeshBoolError::RunIndexWrongLength
-	}
-	fn is_face_id_wrong_length(self) -> bool {
-		self == MeshBoolError::FaceIDWrongLength
-	}
-	fn is_invalid_construction(self) -> bool {
-		self == MeshBoolError::InvalidConstruction
-	}
-	fn is_result_too_large(self) -> bool {
-		self == MeshBoolError::ResultTooLarge
-	}
-	fn is_invalid_tangents(self) -> bool {
-		self == MeshBoolError::InvalidTangents
-	}
-	fn is_cancelled(self) -> bool {
-		self == MeshBoolError::Cancelled
-	}
-}
-
-impl From<MeshGLError> for MeshBoolError {
-	fn from(oops: MeshGLError) -> Self {
-		match oops {
-			MeshGLError::NonFiniteVertex => MeshBoolError::NonFiniteVertex,
-			MeshGLError::InvalidConstruction => MeshBoolError::InvalidConstruction,
-			MeshGLError::NotManifold => MeshBoolError::NotManifold,
-			MeshGLError::MissingPositionProperties => MeshBoolError::MissingPositionProperties,
-			MeshGLError::MergeVectorsDifferentLengths => {
-				MeshBoolError::MergeVectorsDifferentLengths
-			}
-			MeshGLError::TransformWrongLength => MeshBoolError::TransformWrongLength,
-			MeshGLError::RunIndexWrongLength => MeshBoolError::RunIndexWrongLength,
-			MeshGLError::FaceIDWrongLength => MeshBoolError::FaceIDWrongLength,
-			MeshGLError::MergeIndexOutOfBounds => MeshBoolError::MergeIndexOutOfBounds,
-			MeshGLError::VertexOutOfBounds => MeshBoolError::VertexOutOfBounds,
-		}
-	}
-}
-
-impl From<BooleanError> for MeshBoolError {
-	fn from(oops: BooleanError) -> Self {
-		match oops {
-			BooleanError::ResultTooLarge => MeshBoolError::ResultTooLarge,
-		}
-	}
-}
-
-impl From<ConstructorError> for MeshBoolError {
-	fn from(oops: ConstructorError) -> Self {
-		match oops {
-			ConstructorError::InvalidConstruction => MeshBoolError::InvalidConstruction,
-		}
-	}
-}
-
 impl Default for MeshBoolTestWrapper {
 	fn default() -> Self {
-		Self::Leaf(MeshBool::default(), MeshBoolError::default())
+		Self::Leaf(MeshBool::default(), MeshBoolTestError::NoError)
 	}
 }
 
 impl Default for MeshBool {
 	fn default() -> Self {
+		let original_id = reserve_original_id();
 		Self {
-			original_id: Some(reserve_original_id()),
+			original_id: Some(original_id),
 			precision: Precision {
 				epsilon: -1.0,
 				tolerance: -1.0,
@@ -179,7 +96,7 @@ impl Default for MeshBool {
 			vert_pos: Rc::new(Vec::default()),
 			properties: Rc::new(Properties::default()),
 			tri: Triangles::default(),
-			instance_relation: Rc::new(Vec::default()),
+			instance_relation: Rc::new(vec![InstanceRelation::new(original_id)]),
 			collider: Rc::new(BVHCollider::default()),
 		}
 	}
@@ -187,7 +104,7 @@ impl Default for MeshBool {
 
 impl From<MeshBool> for MeshBoolTestWrapper {
 	fn from(mesh: MeshBool) -> Self {
-		Self::Leaf(mesh, MeshBoolError::default())
+		Self::Leaf(mesh, MeshBoolTestError::NoError)
 	}
 }
 
@@ -197,19 +114,98 @@ impl From<CSGExpression> for MeshBoolTestWrapper {
 	}
 }
 
-impl<E: Into<MeshBoolError>> From<E> for MeshBoolTestWrapper {
-	fn from(oops: E) -> Self {
-		let ret = Self::Leaf(MeshBool::default(), oops.into());
-		ret.warn_status();
-		ret
-	}
-}
-
-impl<E: Into<MeshBoolError>> From<Result<MeshBool, E>> for MeshBoolTestWrapper {
+impl<E: Into<MeshBoolTestError>> From<Result<MeshBool, E>> for MeshBoolTestWrapper {
 	fn from(result: Result<MeshBool, E>) -> Self {
 		match result {
 			Ok(mesh) => mesh.into(),
-			Err(oops) => oops.into().into(),
+			Err(oops) => {
+				let ret = Self::Leaf(MeshBool::default(), oops.into());
+				ret.warn_status();
+				ret
+			}
+		}
+	}
+}
+
+impl MeshBoolTestError {
+	fn is_no_error(self) -> bool {
+		self == MeshBoolTestError::NoError
+	}
+	fn is_non_finite_vertex(self) -> bool {
+		self == MeshBoolTestError::NonFiniteVertex
+	}
+	fn is_not_manifold(self) -> bool {
+		self == MeshBoolTestError::NotManifold
+	}
+	fn is_vertex_out_of_bounds(self) -> bool {
+		self == MeshBoolTestError::VertexOutOfBounds
+	}
+	fn is_properties_wrong_length(self) -> bool {
+		self == MeshBoolTestError::PropertiesWrongLength
+	}
+	fn is_missing_position_properties(self) -> bool {
+		self == MeshBoolTestError::MissingPositionProperties
+	}
+	fn is_merge_vectors_different_lengths(self) -> bool {
+		self == MeshBoolTestError::MergeVectorsDifferentLengths
+	}
+	fn is_merge_index_out_of_bounds(self) -> bool {
+		self == MeshBoolTestError::MergeIndexOutOfBounds
+	}
+	fn is_transform_wrong_length(self) -> bool {
+		self == MeshBoolTestError::TransformWrongLength
+	}
+	fn is_run_index_wrong_length(self) -> bool {
+		self == MeshBoolTestError::RunIndexWrongLength
+	}
+	fn is_face_id_wrong_length(self) -> bool {
+		self == MeshBoolTestError::FaceIDWrongLength
+	}
+	fn is_invalid_construction(self) -> bool {
+		self == MeshBoolTestError::InvalidConstruction
+	}
+	fn is_result_too_large(self) -> bool {
+		self == MeshBoolTestError::ResultTooLarge
+	}
+	fn is_invalid_tangents(self) -> bool {
+		self == MeshBoolTestError::InvalidTangents
+	}
+	fn is_cancelled(self) -> bool {
+		self == MeshBoolTestError::Cancelled
+	}
+}
+
+impl From<MeshGLError> for MeshBoolTestError {
+	fn from(oops: MeshGLError) -> Self {
+		match oops {
+			MeshGLError::NonFiniteVertex => MeshBoolTestError::NonFiniteVertex,
+			MeshGLError::InvalidConstruction => MeshBoolTestError::InvalidConstruction,
+			MeshGLError::NotManifold => MeshBoolTestError::NotManifold,
+			MeshGLError::MissingPositionProperties => MeshBoolTestError::MissingPositionProperties,
+			MeshGLError::MergeVectorsDifferentLengths => {
+				MeshBoolTestError::MergeVectorsDifferentLengths
+			}
+			MeshGLError::TransformWrongLength => MeshBoolTestError::TransformWrongLength,
+			MeshGLError::RunIndexWrongLength => MeshBoolTestError::RunIndexWrongLength,
+			MeshGLError::FaceIDWrongLength => MeshBoolTestError::FaceIDWrongLength,
+			MeshGLError::MergeIndexOutOfBounds => MeshBoolTestError::MergeIndexOutOfBounds,
+			MeshGLError::VertexOutOfBounds => MeshBoolTestError::VertexOutOfBounds,
+		}
+	}
+}
+
+impl From<BooleanError> for MeshBoolTestError {
+	fn from(oops: BooleanError) -> Self {
+		match oops {
+			BooleanError::ResultTooLarge => MeshBoolTestError::ResultTooLarge,
+		}
+	}
+}
+
+impl From<ConstructorError> for MeshBoolTestError {
+	fn from(oops: ConstructorError) -> Self {
+		match oops {
+			ConstructorError::InvalidConstruction => MeshBoolTestError::InvalidConstruction,
 		}
 	}
 }
@@ -217,6 +213,7 @@ impl<E: Into<MeshBoolError>> From<Result<MeshBool, E>> for MeshBoolTestWrapper {
 impl MeshBoolTestWrapper {
 	fn eval(&mut self) -> &MeshBool {
 		self.warn_status();
+
 		if let Self::Node(expr) = self {
 			*self = mem::replace(expr, CSGExpression::temporary_dud())
 				.eval()
@@ -239,7 +236,7 @@ impl MeshBoolTestWrapper {
 
 	fn warn_status(&self) {
 		if let &Self::Leaf(_, oops) = self
-			&& oops != MeshBoolError::NoError
+			&& oops != MeshBoolTestError::NoError
 		{
 			eprintln!("ERROR STATUS ({:?}), Result will be meaningless.", oops);
 			eprintln!("{}", Backtrace::capture());
@@ -247,7 +244,7 @@ impl MeshBoolTestWrapper {
 	}
 
 	fn invalid() -> Self {
-		Self::Leaf(MeshBool::default(), MeshBoolError::InvalidConstruction)
+		Self::Leaf(MeshBool::default(), MeshBoolTestError::InvalidConstruction)
 	}
 
 	fn tetrahedron() -> Self {
@@ -457,68 +454,54 @@ impl MeshBoolTestWrapper {
 	//---- forcing queries ----
 
 	fn genus(&mut self) -> i32 {
-		self.warn_status();
 		self.eval().genus()
 	}
 
 	fn surface_area(&mut self) -> f64 {
-		self.warn_status();
 		self.eval().surface_area()
 	}
 
 	fn volume(&mut self) -> f64 {
-		self.warn_status();
 		self.eval().volume()
 	}
 
 	fn original_id(&mut self) -> i32 {
-		self.warn_status();
 		self.eval().original_id().map(|id| id as i32).unwrap_or(-1)
 	}
 
 	fn matches_tri_normals(&mut self) -> bool {
-		self.warn_status();
 		self.eval().matches_tri_normals()
 	}
 
 	fn has_simple_props(&mut self) -> bool {
-		self.warn_status();
 		self.eval().has_simple_props()
 	}
 
 	fn num_degenerate_tris(&mut self) -> usize {
-		self.warn_status();
 		self.eval().num_degenerate_tris()
 	}
 
 	fn slice(&mut self, height: f64) -> Vec<Vec<Point2<f64>>> {
-		self.warn_status();
 		self.eval().slice(height)
 	}
 
 	fn project(&mut self) -> Vec<Vec<Point2<f64>>> {
-		self.warn_status();
 		self.eval().project()
 	}
 
 	fn get_mesh_gl_32(&mut self, normal_idx: i32) -> MeshGL32 {
-		self.warn_status();
 		self.eval().to_meshgl::<f32, u32>(normal_idx)
 	}
 
 	fn get_mesh_gl_64(&mut self, normal_idx: i32) -> MeshGL64 {
-		self.warn_status();
 		self.eval().to_meshgl::<f64, u64>(normal_idx)
 	}
 
 	fn is_empty(&mut self) -> bool {
-		self.warn_status();
 		self.eval().is_empty()
 	}
 
-	///Forces evaluation: this is the documented observation point for a
-	///deferred tree, so an error raised during eval has to surface here.
-	fn status(&mut self) -> MeshBoolError {
+	fn status(&mut self) -> MeshBoolTestError {
 		self.eval();
 		match self {
 			MeshBoolTestWrapper::Leaf(_, oops) => *oops,
@@ -527,48 +510,39 @@ impl MeshBoolTestWrapper {
 	}
 
 	fn num_vert(&mut self) -> usize {
-		self.warn_status();
 		self.eval().num_vert()
 	}
 
 	fn num_edge(&mut self) -> usize {
-		self.warn_status();
 		self.eval().num_edge()
 	}
 
 	fn num_tri(&mut self) -> usize {
-		self.warn_status();
 		self.eval().num_tri()
 	}
 
 	fn prop_stride(&mut self) -> usize {
-		self.warn_status();
 		self.eval().prop_stride()
 	}
 
 	fn num_prop_vert(&mut self) -> usize {
-		self.warn_status();
 		self.eval().num_prop_vert()
 	}
 
 	fn bounding_box(&mut self) -> Box3D {
-		self.warn_status();
 		self.eval().bounding_box()
 	}
 
 	fn get_epsilon(&mut self) -> f64 {
-		self.warn_status();
 		self.eval().get_epsilon()
 	}
 
 	fn get_tolerance(&mut self) -> f64 {
-		self.warn_status();
 		self.eval().get_tolerance()
 	}
 
 	fn min_gap(&mut self, other: &mut Self, search_length: f64) -> f64 {
-		self.warn_status();
-		let other = other.eval().clone();
+		let other = other.eval();
 		self.eval().min_gap(&other, search_length)
 	}
 }

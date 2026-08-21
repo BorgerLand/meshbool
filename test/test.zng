@@ -63,7 +63,7 @@ mod crate
 			fn from_meshgl<f32, u32>(&MeshGL32) -> MeshBoolTestWrapper;
 			fn from_meshgl<f64, u64>(&MeshGL64) -> MeshBoolTestWrapper;
 			fn is_empty(&mut self) -> bool;
-			fn status(&mut self) -> MeshBoolError;
+			fn status(&mut self) -> MeshBoolTestError;
 			fn num_vert(&mut self) -> usize;
 			fn num_edge(&mut self) -> usize;
 			fn num_tri(&mut self) -> usize;
@@ -161,7 +161,7 @@ mod crate
 			constructor Intersect;
 		}
 		
-		type MeshBoolError
+		type MeshBoolTestError
 		{
 			#layout(size = 1, align = 1);
 			

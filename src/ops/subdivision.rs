@@ -115,10 +115,8 @@ impl MeshBool {
 			edge_added = tmp;
 		}
 
-		let edge_offset = Vec::from_iter(vec_ext::exclusive_scan_with_total(
-			edge_added.iter().copied(),
-			num_vert as i32,
-		));
+		let edge_offset =
+			vec_ext::exclusive_scan_with_total(edge_added.iter().copied(), num_vert as i32);
 
 		let mut vert_bary = unsafe { vec_ext::uninit(*edge_offset.last().unwrap() as usize) };
 		let total_edge_added = vert_bary.len() - num_vert;
@@ -153,15 +151,15 @@ impl MeshBool {
 			Partition::get_partition(divisions)
 		}));
 
-		let tri_offset = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		let tri_offset = vec_ext::exclusive_scan_with_total(
 			sub_tris.iter().map(|part| part.tri_vert.len() as i32),
 			0,
-		));
+		);
 
-		let interior_offset = Vec::from_iter(vec_ext::exclusive_scan_with_total(
+		let interior_offset = vec_ext::exclusive_scan_with_total(
 			sub_tris.iter().map(|part| part.num_interior()),
 			vert_bary.len() as i32,
-		));
+		);
 
 		let mut tri_verts = unsafe { vec_ext::uninit(*tri_offset.last().unwrap() as usize) };
 		vert_bary.resize(
