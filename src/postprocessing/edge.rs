@@ -257,8 +257,9 @@ pub fn collapse(
 					return false;
 				}
 
-				//if these are from different meshes. OR if they are from the same mesh, check if user allows them to collapse (different faces). OR if the user says "no collapsin" do this final normals check
-
+				//if these are from different meshes.
+				//OR if they are from the same mesh, check if user allows them to collapse (different faces).
+				//OR if the user says "no collapsin" do this final normals check
 				if rel.instance_id != old_rel.instance_id
 					|| (rel.face_id != old_rel.face_id
 						&& instance_rel[rel.instance_id as usize].user_provided_face_id)
@@ -438,16 +439,15 @@ impl Merger {
 ///Prices the collapse of this edge and reports where the merged vert should go.
 pub fn check(
 	edge: usize,
-	halfedge: &Halfedges,
-	tri_normal: &[Vector3<f64>],
-	tri_rel: &[TriRelation],
+	tri: &TrianglesWIP,
 	vert_pos: &[Point3<f64>],
+	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
 	epsilon: f64,
 ) -> Merger {
-	let pair = halfedge.pair[edge] as usize;
-	let start = halfedge.start[edge] as usize;
-	let end = halfedge.end(edge) as usize;
+	let pair = tri.halfedge.pair[edge] as usize;
+	let start = tri.halfedge.start[edge] as usize;
+	let end = tri.halfedge.end(edge) as usize;
 	let delta = vert_pos[end] - vert_pos[start];
 	let len_sq = delta.magnitude_squared();
 	let mid = vert_pos[start] + delta / 2.0;
@@ -474,28 +474,38 @@ pub fn check(
 		if current == first_edge {
 			return; //don't double-count the collapsing triangles
 		}
-		let normal = tri_normal[halfedge.tri(current)];
-		let pos = vert_pos[halfedge.start[current] as usize];
-
+		let normal = tri.normal[tri.halfedge.tri(current)];
+		let pos = vert_pos[tri.halfedge.start[current] as usize];
 		// Equal-weighted per triangle, keeps the cost in terms of distance.
 		// Angle-weighting like pseudo-normals may be better, but it is more
 		// expensive to compute and may be less stable on degenerates.
 		add_cost(normal, pos);
 
-		if !continuous(current, halfedge, tri_rel, prop_stride) {
+		if !continuous(
+			current,
+			&tri.halfedge,
+			&tri.relation,
+			instance_rel,
+			prop_stride,
+		) {
 			// Penalize motion across an edge that contains a property boundary.
 			add_cost(
-				safe_normalize3(normal.cross(&(vert_pos[halfedge.end(current) as usize] - pos))),
+				safe_normalize3(
+					normal.cross(&(vert_pos[tri.halfedge.end(current) as usize] - pos)),
+				),
 				pos,
 			);
 		}
 	};
 
-	halfedge.for_vert(edge, |poo| add_tri(poo, edge));
-	halfedge.for_vert(pair, |poo| add_tri(poo, halfedge.pair[edge] as usize));
+	tri.halfedge
+		.for_vert(edge, |current| add_tri(current, edge));
+	tri.halfedge.for_vert(pair, |current| {
+		add_tri(current, tri.halfedge.pair[edge] as usize)
+	});
 
 	// Constrain the solution to the plane containing the edge and its normal.
-	let p = Matrix3x2::from_columns(&[delta, (tri_normal[edge / 3] + tri_normal[pair / 3]) / 2.0]);
+	let p = Matrix3x2::from_columns(&[delta, (tri.normal[edge / 3] + tri.normal[pair / 3]) / 2.0]);
 	// Epsilon stabilizes the inverse, driving the solution toward the midpoint.
 	let a2 = p.transpose() * a * p;
 	let b2 = p.transpose() * b;
@@ -530,13 +540,18 @@ fn continuous(
 	edge: usize,
 	halfedge: &Halfedges,
 	tri_rel: &[TriRelation],
+	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
 ) -> bool {
 	let pair = halfedge.pair[edge] as usize;
-	tri_rel[halfedge.tri(edge)] == tri_rel[halfedge.tri(pair)]
+	let rel0 = tri_rel[halfedge.tri(edge)];
+	let rel1 = tri_rel[halfedge.tri(pair)];
+	return rel0.instance_id == rel1.instance_id
+		&& (rel0.face_id == rel1.face_id
+			|| !instance_rel[rel0.instance_id as usize].user_provided_face_id)
 		&& (prop_stride == 0
 			|| (halfedge.prop[edge] == halfedge.prop_end(pair)
-				&& halfedge.prop[pair] == halfedge.prop_end(edge)))
+				&& halfedge.prop[pair] == halfedge.prop_end(edge)));
 }
 
 pub fn swap(
@@ -769,6 +784,7 @@ pub fn collapse2(
 	}
 
 	halfedge.update_vert(end_vert as i32, start, tri0_edge[2] as usize);
+
 	collapse_tri(halfedge, tri0_edge);
 	remove_if_folded(start, halfedge, vert_pos);
 	true

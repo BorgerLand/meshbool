@@ -110,7 +110,13 @@ impl MeshBool {
 		let collider = if simplify {
 			pp::split_pinched_verts(&mut tri.halfedge, &mut vert_pos);
 			pp::dedupe_edges(&mut tri, &mut vert_pos);
-			pp::simplify_topology2(&mut tri, &mut vert_pos, &mut properties, precision);
+			pp::simplify_topology2(
+				&mut tri,
+				&mut vert_pos,
+				&mut properties,
+				&self.instance_relation,
+				precision,
+			);
 			let bbox = Box3D::from_cloud(&vert_pos);
 			let Some(collider) =
 				pp::sort_and_compact_geometry(&mut vert_pos, &mut properties, tri.partial(), bbox)

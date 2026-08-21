@@ -336,6 +336,7 @@ pub fn simplify_topology2(
 	tri: &mut TrianglesWIP,
 	vert_pos: &mut Vec<Point3<f64>>,
 	properties: &mut Properties,
+	instance_rel: &[InstanceRelation],
 	precision: Precision,
 ) {
 	let mut edges = Vec::from_iter(0..tri.halfedge.len() as i32);
@@ -347,7 +348,7 @@ pub fn simplify_topology2(
 	let mut scratch_buffer = Vec::with_capacity(10);
 
 	while 0 != edges_end {
-		for &edge in edges.iter() {
+		for &edge in edges[..edges_end].iter() {
 			let edge = edge as usize;
 			let pair = tri.halfedge.pair[edge] as usize;
 			if !tri.halfedge.valid(edge) {
@@ -419,10 +420,9 @@ pub fn simplify_topology2(
 
 			let mut edge_cost = edge::check(
 				edge,
-				&tri.halfedge,
-				&tri.normal,
-				&tri.relation,
+				tri,
 				vert_pos,
+				instance_rel,
 				properties.stride,
 				precision.epsilon,
 			);
