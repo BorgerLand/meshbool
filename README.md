@@ -4,7 +4,7 @@ Meshbool is a pure-Rust implementation/port of Manifold's state of the art **mes
 
 Note that many features are currently unimplemented, and completeness is not the primary goal. I will accept PR's to port more features, especially those that increase the number of passing tests, but the main focus of this crate is the boolean algorithm.
 
-This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/81e94c86c513d045ea86c0856e34618c5c4ec13e) (v3.5.2) when [linked to the original C++ test suite](/test/README.md). I consider what is here to be reliably complete.
+This repo is up to date with [this Manifold commit](https://github.com/elalish/manifold/tree/81e94c86c513d045ea86c0856e34618c5c4ec13e) (v3.5.2) and passes 409 tests when [linked to the original C++ test suite](/test/README.md). I consider what is here to be reliably complete.
 
 ### Why does this exist?
 
