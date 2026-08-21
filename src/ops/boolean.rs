@@ -66,8 +66,6 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 		epsilon: in_p.precision.epsilon.max(in_q.precision.epsilon),
 		tolerance: in_p.precision.tolerance.max(in_q.precision.tolerance),
 	};
-	let epsilon = precision.epsilon;
-	let tolerance = precision.tolerance;
 	let prop_stride = in_p.properties.stride.max(in_q.properties.stride);
 	let invert_q = op == OpType::Difference;
 	let instance_id_offset_q = in_p.instance_relation.len() as u32;
@@ -510,7 +508,7 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 		face_edge,
 		face_halfedges,
 		face_rel,
-		epsilon,
+		precision.epsilon,
 	);
 
 	#[cfg(feature = "test_thoroughly")]
@@ -535,7 +533,7 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 			in_q.tri.relation,
 			in_q.properties,
 			invert_q,
-			epsilon,
+			precision.epsilon,
 		),
 		stride: prop_stride,
 	};
@@ -551,8 +549,7 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 		&tri.relation,
 		&instance_rel,
 		prop_stride,
-		epsilon,
-		tolerance,
+		precision,
 		first_new_vert,
 	);
 	pp::collapse_colinear_edges(
@@ -562,7 +559,7 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 		&tri.relation,
 		&instance_rel,
 		prop_stride,
-		epsilon,
+		precision.epsilon,
 		first_new_vert,
 	);
 	pp::swap_degenerates(
@@ -570,8 +567,7 @@ pub fn boolean(in_p: MeshBool, op: OpType, in_q: MeshBool) -> Result<MeshBool, B
 		&mut vert_pos,
 		&mut properties,
 		&instance_rel,
-		epsilon,
-		tolerance,
+		precision,
 		first_new_vert,
 	);
 	pp::mark_unreferenced_verts(&mut tri.halfedge, &mut vert_pos);

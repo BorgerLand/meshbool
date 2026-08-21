@@ -547,8 +547,7 @@ pub fn collapse_short_edges(
 	tri_rel: &[TriRelation],
 	instance_rel: &[InstanceRelation],
 	prop_stride: usize,
-	epsilon: f64,
-	tolerance: f64,
+	precision: Precision,
 	first_new_vert: usize,
 ) {
 	let mut s = FlagStore::default();
@@ -564,9 +563,9 @@ pub fn collapse_short_edges(
 	// newly-created verts, which means error stacking is not a concern, so we
 	// allow collapsing up to tolerance in that case.
 	let tol = if first_new_vert == 0 {
-		epsilon
+		precision.epsilon
 	} else {
-		tolerance
+		precision.tolerance
 	};
 
 	let short_edge = |(halfedge, vert_pos): &mut (&mut Halfedges, &mut Vec<Point3<f64>>), edge| {
@@ -588,7 +587,7 @@ pub fn collapse_short_edges(
 		let max_len = if end < first_new_vert {
 			tol * tol
 		} else {
-			epsilon * epsilon
+			precision.epsilon * precision.epsilon
 		};
 		len_sq < max_len
 	};
@@ -607,8 +606,10 @@ pub fn collapse_short_edges(
 				vert_pos,
 				&mut scratch_buffer,
 				prop_stride,
-				epsilon,
-				tol,
+				Precision {
+					epsilon: precision.epsilon,
+					tolerance: tol,
+				},
 				first_new_vert,
 			);
 			if did_collapse {
@@ -683,8 +684,10 @@ pub fn collapse_colinear_edges(
 					vert_pos,
 					&mut scratch_buffer,
 					prop_stride,
-					epsilon,
-					epsilon,
+					Precision {
+						epsilon,
+						tolerance: epsilon,
+					},
 					0,
 				);
 				if did_collapse {
@@ -707,8 +710,7 @@ pub fn swap_degenerates(
 	vert_pos: &mut Vec<Point3<f64>>,
 	properties: &mut Properties,
 	instance_rel: &[InstanceRelation],
-	epsilon: f64,
-	tolerance: f64,
+	precision: Precision,
 	first_new_vert: usize,
 ) {
 	//RecursiveEdgeSwap
@@ -741,7 +743,9 @@ pub fn swap_degenerates(
 		for i in 0..3 {
 			v[i] = projection * vert_pos[tri.halfedge.start[tri_edge[i] as usize] as usize];
 		}
-		if ccw(v[0], v[1], v[2], tolerance) > 0 || !edge::is_01_longest_2(v[0], v[1], v[2]) {
+		if ccw(v[0], v[1], v[2], precision.tolerance) > 0
+			|| !edge::is_01_longest_2(v[0], v[1], v[2])
+		{
 			return false;
 		}
 
@@ -753,7 +757,7 @@ pub fn swap_degenerates(
 			v[i] = projection * vert_pos[tri.halfedge.start[pair_tri_edge[i] as usize] as usize];
 		}
 
-		ccw(v[0], v[1], v[2], tolerance) > 0 || edge::is_01_longest_2(v[0], v[1], v[2])
+		ccw(v[0], v[1], v[2], precision.tolerance) > 0 || edge::is_01_longest_2(v[0], v[1], v[2])
 	};
 
 	let mut edge_swap_stack = Vec::new();
@@ -776,8 +780,7 @@ pub fn swap_degenerates(
 				&mut edge_swap_stack,
 				&mut scratch_buffer,
 				instance_rel,
-				epsilon,
-				tolerance,
+				precision,
 			);
 			while !edge_swap_stack.is_empty() {
 				let last = edge_swap_stack.pop().unwrap();
@@ -798,8 +801,7 @@ pub fn swap_degenerates(
 					&mut edge_swap_stack,
 					&mut scratch_buffer,
 					instance_rel,
-					epsilon,
-					tolerance,
+					precision,
 				);
 			}
 		},

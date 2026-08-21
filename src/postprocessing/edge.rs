@@ -1,7 +1,7 @@
 use crate::halfedge::{Halfedges, next_halfedge, prev_halfedge};
 use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::util::math::{ccw, get_axis_aligned_projection, lerp, next3_usize, safe_normalize3};
-use crate::{Properties, TrianglesWIP};
+use crate::{Precision, Properties, TrianglesWIP};
 use nalgebra::{Matrix2, Matrix3, Matrix3x2, Point2, Point3, Vector3, Vector4, distance};
 use std::f64;
 
@@ -105,8 +105,7 @@ pub fn recursive_swap(
 	edge_swap_stack: &mut Vec<i32>,
 	edges: &mut Vec<i32>,
 	instance_rel: &[InstanceRelation],
-	epsilon: f64,
-	tolerance: f64,
+	precision: Precision,
 ) {
 	let pair = tri.halfedge.pair[edge];
 	if pair < 0 {
@@ -129,7 +128,7 @@ pub fn recursive_swap(
 	}
 
 	// Only operate on the long edge of a degenerate triangle.
-	if ccw(v[0], v[1], v[2], tolerance) > 0 || !is_01_longest_2(v[0], v[1], v[2]) {
+	if ccw(v[0], v[1], v[2], precision.tolerance) > 0 || !is_01_longest_2(v[0], v[1], v[2]) {
 		return;
 	}
 
@@ -148,14 +147,14 @@ pub fn recursive_swap(
 	let a = if capped > 0.0 { capped } else { 0.0 };
 
 	// Only operate if the other triangles are not degenerate.
-	if ccw(v[1], v[0], v[3], tolerance) <= 0 {
+	if ccw(v[1], v[0], v[3], precision.tolerance) <= 0 {
 		if !is_01_longest_2(v[1], v[0], v[3]) {
 			return;
 		}
 		// Two facing, long-edge degenerates can swap.
 		swap(edge, a, tri, vert_pos, properties);
 		let e23 = v[3] - v[2];
-		if e23.magnitude_squared() < tolerance * tolerance {
+		if e23.magnitude_squared() < precision.tolerance * precision.tolerance {
 			*tag += 1;
 			collapse(
 				tri0_edge[2] as usize,
@@ -166,8 +165,10 @@ pub fn recursive_swap(
 				vert_pos,
 				edges,
 				properties.stride,
-				epsilon,
-				epsilon,
+				Precision {
+					epsilon: precision.epsilon,
+					tolerance: precision.epsilon,
+				},
 				0,
 			);
 			edges.truncate(0);
@@ -179,7 +180,9 @@ pub fn recursive_swap(
 		}
 
 		return;
-	} else if ccw(v[0], v[3], v[2], tolerance) <= 0 || ccw(v[1], v[2], v[3], tolerance) <= 0 {
+	} else if ccw(v[0], v[3], v[2], precision.tolerance) <= 0
+		|| ccw(v[1], v[2], v[3], precision.tolerance) <= 0
+	{
 		return;
 	}
 
@@ -207,8 +210,7 @@ pub fn collapse(
 	vert_pos: &mut Vec<Point3<f64>>,
 	edges: &mut Vec<i32>,
 	prop_stride: usize,
-	epsilon: f64,
-	tolerance: f64,
+	precision: Precision,
 	first_new_vert: usize,
 ) -> bool {
 	let pair = halfedge.pair[edge];
@@ -230,9 +232,9 @@ pub fn collapse(
 	// further, as it's still only collapsing its own original neighbors together,
 	// which can't stack errors arbitrarily far.
 	let max_len = if (end_vert as usize) < first_new_vert {
-		tolerance * tolerance
+		precision.tolerance * precision.tolerance
 	} else {
-		epsilon * epsilon
+		precision.epsilon * precision.epsilon
 	};
 	let short_edge = delta.magnitude_squared() < max_len;
 
@@ -272,7 +274,7 @@ pub fn collapse(
 						projection * p_last,
 						projection * p_old,
 						projection * p_new,
-						tolerance,
+						precision.tolerance,
 					) != 0
 					{
 						return false;
@@ -285,7 +287,7 @@ pub fn collapse(
 				projection * p_next,
 				projection * p_last,
 				projection * p_new,
-				epsilon,
+				precision.epsilon,
 			) < 0
 			{
 				return false;
