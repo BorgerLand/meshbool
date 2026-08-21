@@ -125,7 +125,7 @@ impl CSGDifference {
 		let lhs = self.lhs.decimated(ctx).await;
 		let rhs = self.rhs.decimated(ctx).await;
 
-		let mut instance_relation = lhs.instance_relation.to_vec();
+		let mut instance_relation = Rc::unwrap_or_clone(lhs.instance_relation);
 		instance_relation.extend(rhs.instance_relation.iter().map(|rel| {
 			let mut rel = *rel;
 			rel.back_side = !rel.back_side;

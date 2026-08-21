@@ -67,8 +67,7 @@ impl MeshBool {
 	fn set_tolerance_and_simplify(self, tolerance: Option<f64>, mut simplify: bool) -> Self {
 		let mut precision = self.precision;
 		let requested_tolerance = tolerance.unwrap_or(precision.tolerance);
-		let mut tri_rel = self.tri.relation.to_vec();
-		drop(self.tri.relation);
+		let mut tri_rel = Rc::unwrap_or_clone(self.tri.relation);
 
 		let tri_normal = if requested_tolerance > precision.tolerance {
 			simplify = true;
@@ -87,7 +86,7 @@ impl MeshBool {
 				precision.tolerance = precision.epsilon.max(requested_tolerance);
 			}
 
-			self.tri.normal.to_vec()
+			Rc::unwrap_or_clone(self.tri.normal)
 		};
 
 		if self.tri.halfedge.num_tri() == 0 {
@@ -99,7 +98,7 @@ impl MeshBool {
 			);
 		}
 
-		let mut vert_pos = self.vert_pos.to_vec();
+		let mut vert_pos = Rc::unwrap_or_clone(self.vert_pos);
 		let mut properties = Rc::unwrap_or_clone(self.properties);
 		let mut tri = TrianglesWIP {
 			halfedge: Rc::unwrap_or_clone(self.tri.halfedge),
