@@ -10,6 +10,7 @@ use crate::util::segment_resolution::SegmentResolution;
 use crate::{Box3D, MeshBool, Precision, Properties, TrianglesPartial};
 use nalgebra::{Matrix2, Matrix3x4, Point2, Point3, Vector2, Vector3};
 use std::f64::consts::FRAC_PI_2;
+use std::mem;
 use std::rc::Rc;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -331,6 +332,93 @@ impl MeshBool {
 		}
 
 		Ok(MeshBool::from_tri_mesh(vert_pos, tri_verts, None))
+	}
+
+	pub fn freebuild_extrude(
+		cross_section: impl ExactSizeIterator<Item = impl ExactSizeIterator<Item = Point2<f64>>>,
+		axis: usize,
+		mut axis_pos: f64,
+		mut height: f64,
+	) -> Self {
+		if height < 0.0 {
+			axis_pos += height;
+			height *= -1.0;
+		}
+
+		let mut vert_pos: Vec<Point3<f64>> = Vec::new();
+		let mut tri_verts: Vec<Vector3<i32>> = Vec::new();
+		let mut n_cross_section = 0;
+		let mut polygons_indexed: PolygonsIdx = Vec::new();
+		for poly in cross_section {
+			let mut simple_indexed: SimplePolygonIdx = Vec::new();
+			let start_idx = n_cross_section;
+
+			let poly_len = poly.len();
+			for (i, poly_vert) in poly.enumerate() {
+				vert_pos.push(poly_vert.coords.insert_row(axis, axis_pos).into());
+				vert_pos.push(poly_vert.coords.insert_row(axis, axis_pos + height).into());
+
+				let loop_back = i == poly_len - 1; //loop back around to this polygon's first vertex
+
+				let cur_bottom = n_cross_section * 2;
+				let cur_top = n_cross_section * 2 + 1;
+				let nxt_bottom = if loop_back {
+					start_idx * 2
+				} else {
+					n_cross_section * 2 + 2
+				};
+				let nxt_top = if loop_back {
+					start_idx * 2 + 1
+				} else {
+					n_cross_section * 2 + 3
+				};
+
+				let left_v1 = cur_bottom;
+				let mut left_v2 = cur_top;
+				let mut left_v3 = nxt_bottom;
+				let right_v1 = nxt_top;
+				let mut right_v2 = nxt_bottom;
+				let mut right_v3 = cur_top;
+
+				if axis != 1 {
+					mem::swap(&mut left_v2, &mut left_v3);
+					mem::swap(&mut right_v2, &mut right_v3);
+				}
+
+				tri_verts.push(Vector3::new(left_v1, left_v2, left_v3));
+				tri_verts.push(Vector3::new(right_v1, right_v2, right_v3));
+
+				simple_indexed.push(PolyVert {
+					pos: poly_vert,
+					idx: n_cross_section,
+				});
+
+				n_cross_section += 1;
+			}
+
+			polygons_indexed.push(simple_indexed);
+		}
+
+		let top = triangulate_idx(&polygons_indexed, -1.0, true);
+		for tri in top {
+			let bottom_v1 = tri[0] * 2;
+			let mut bottom_v2 = tri[1] * 2;
+			let mut bottom_v3 = tri[2] * 2;
+			let top_v1 = tri[0] * 2 + 1;
+			let mut top_v2 = tri[1] * 2 + 1;
+			let mut top_v3 = tri[2] * 2 + 1;
+
+			if axis == 1 {
+				mem::swap(&mut top_v2, &mut top_v3);
+			} else {
+				mem::swap(&mut bottom_v2, &mut bottom_v3);
+			}
+
+			tri_verts.push(Vector3::new(bottom_v1, bottom_v2, bottom_v3));
+			tri_verts.push(Vector3::new(top_v1, top_v2, top_v3));
+		}
+
+		MeshBool::from_tri_mesh(vert_pos, tri_verts, None)
 	}
 
 	///Constructs a manifold from a set of polygons by revolving this cross-section
