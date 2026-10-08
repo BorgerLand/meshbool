@@ -44,6 +44,7 @@ lossy_from!([i32, u32, u64, usize], usize);
 lossy_from!([u32, usize], u64);
 lossy_from!([i32, u32, u64, usize], u32);
 lossy_from!([f64], f32);
+lossy_from!([f64], f64);
 lossy_from!([u32, u64, usize], i32);
 lossy_from!([i32, u64], u64);
 
