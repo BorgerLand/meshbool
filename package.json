@@ -1,0 +1,10 @@
+{
+	"name": "meshbool",
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts"
+	},
+	"dependencies": {
+		"@borger/plugin_sdk": "file:../../../borger/plugins/sdk/ts"
+	}
+}

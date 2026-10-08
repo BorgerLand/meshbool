@@ -13,11 +13,13 @@ use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::math::K_PRECISION;
 
+pub mod borger_serdes;
+
 mod halfedge;
 mod mesh_relations;
 mod meshgl;
 mod postprocessing;
-mod triangulation;
+pub mod triangulation;
 
 mod ops {
 	pub mod boolean;
@@ -77,7 +79,7 @@ pub struct MeshBool {
 	///loading a MeshGL or a procedurally generating a primitive shape), or None
 	original_id: Option<u32>,
 	precision: Precision,
-	vert_pos: Rc<Vec<Point3<f64>>>,
+	pub vert_pos: Rc<Vec<Point3<f64>>>,
 	properties: Rc<Properties>,
 	tri: Triangles,
 	///Maps <instance id, instance metadata> to look up how each mesh instance
