@@ -4,8 +4,7 @@ use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::vec_ext;
 use crate::{Properties, Triangles, TrianglesPartial, TrianglesWIP};
 use nalgebra::Point3;
-use std::f64;
-use std::mem::{self};
+use std::mem;
 use std::rc::Rc;
 
 #[cfg(feature = "test_thoroughly")]

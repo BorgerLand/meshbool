@@ -3,7 +3,6 @@ use crate::spatial::aabb::Box3D;
 use crate::spatial::bvh_collider::BVHCollider;
 use crate::util::disjoint_sets::DisjointSets;
 use crate::util::math::next3_usize;
-use core::f64;
 use nalgebra::{Point3, Vector2, Vector3, Vector4};
 use rustc_hash::FxHashSet;
 use std::mem;
