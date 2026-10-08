@@ -643,18 +643,6 @@ fn triangulate_idx_halfedges_reuse(
 type MeshGL32 = MeshGL<f32, u32>;
 type MeshGL64 = MeshGL<f64, u64>;
 
-///`to_meshgl` narrows the library's internal f64 into the output float type,
-///so it bounds that type on `LossyFrom<f64>`. `MeshGL64` instantiates it at
-///`F = f64`, where the narrowing is the identity. Kept here rather than in
-///num_convert because only the bindings need it. Note this is the f64 -> f64
-///identity only: f32 -> f64 is an upsize, is lossless, and is deliberately
-///absent so it goes through the standard From/Into impls instead.
-impl LossyFrom<f64> for f64 {
-	fn lossy_from(other: f64) -> Self {
-		other
-	}
-}
-
 /// `merge` is a reserved keyword in zngur, so expose it under a different name.
 impl<F, I> MeshGL<F, I>
 where
