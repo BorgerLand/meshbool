@@ -3,7 +3,6 @@ use crate::mesh_relations::{InstanceRelation, TriRelation};
 use crate::util::math::{ccw, get_axis_aligned_projection, lerp, next3_usize, safe_normalize3};
 use crate::{Precision, Properties, TrianglesWIP};
 use nalgebra::{Matrix2, Matrix3, Matrix3x2, Point2, Point3, Vector3, Vector4, distance};
-use std::f64;
 
 // Deduplicate the given 4-manifold edge by duplicating endVert, thus making the
 // edges distinct. Also duplicates startVert if it becomes pinched.

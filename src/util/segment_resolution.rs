@@ -1,4 +1,4 @@
-use std::f64;
+use std::f64::consts;
 
 ///@brief These static properties control how circular shapes are quantized by
 ///default on construction.
@@ -62,7 +62,7 @@ impl SegmentResolution {
 		let n_seg_a = 360.0 / self.min_circular_angle;
 		// Keep nSegL a double so the truncating cast happens after fmin bounds it by
 		// nSegA; a raw int cast is undefined for non-finite or huge radius.
-		let n_seg_l = 2.0 * radius.abs() * f64::consts::PI / self.min_circular_edge_length;
+		let n_seg_l = 2.0 * radius.abs() * consts::PI / self.min_circular_edge_length;
 		let mut n_seg = (n_seg_a.min(n_seg_l) + 3.0) as u32;
 		n_seg -= n_seg % 4;
 		n_seg.max(4)

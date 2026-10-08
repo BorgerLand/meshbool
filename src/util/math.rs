@@ -1,5 +1,4 @@
 use nalgebra::{Matrix2x3, Matrix3, Matrix3x4, Matrix4, Point2, Point3, Vector2, Vector3};
-use std::f64;
 use std::ops::{AddAssign, MulAssign};
 
 pub const K_PRECISION: f64 = 1e-12;

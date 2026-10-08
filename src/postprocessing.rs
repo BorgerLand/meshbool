@@ -12,7 +12,6 @@ use nalgebra::{Point2, Point3, Vector3};
 use rustc_hash::FxHashMap;
 use std::cmp::Reverse;
 use std::collections::hash_map::Entry;
-use std::f64;
 
 mod edge;
 pub mod sort;

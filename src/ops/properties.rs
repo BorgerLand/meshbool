@@ -5,7 +5,8 @@ use crate::{MeshBool, Properties, Triangles};
 use nalgebra::{Point3, Vector3};
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
-use std::{f64, mem};
+use std::f64::consts;
+use std::mem;
 
 // Minimum sharp angle in degrees, below which edges are considered coplanar.
 // Floating point noise in the dihedral angle computation can reach ~1e-6
@@ -412,7 +413,7 @@ impl MeshBool {
 				let phi = if dot >= 1.0 {
 					0.0
 				} else if dot <= -1.0 {
-					f64::consts::PI
+					consts::PI
 				} else {
 					libm::acos(dot)
 				};
@@ -444,7 +445,7 @@ impl MeshBool {
 			return self.clone();
 		}
 		let mut vert_mean_curvature = vec![0.0; self.num_vert()];
-		let mut vert_gaussian_curvature = vec![f64::consts::TAU; self.num_vert()];
+		let mut vert_gaussian_curvature = vec![consts::TAU; self.num_vert()];
 		let mut vert_area = vec![0.0; self.num_vert()];
 		let mut degree = vec![0.0; self.num_vert()];
 		{

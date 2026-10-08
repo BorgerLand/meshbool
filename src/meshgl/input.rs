@@ -431,14 +431,14 @@ where
 				.step_by(gl_prop_stride)
 				.map(|f| (f64::from(f), f64::from(f)))
 				.reduce(|acc, b| (acc.0.min(b.0), acc.1.max(b.1)))
-				.unwrap_or((core::f64::INFINITY, core::f64::NEG_INFINITY));
+				.unwrap_or((f64::INFINITY, f64::NEG_INFINITY));
 			bbox.min[i] = min_max.0;
 			bbox.max[i] = min_max.1;
 		}
 
 		let tolerance = f64::from(self.tolerance).max(
 			(if TypeId::of::<F>() == TypeId::of::<f32>() {
-				core::f32::EPSILON as f64
+				f32::EPSILON as f64
 			} else {
 				K_PRECISION
 			}) * bbox.scale(),
