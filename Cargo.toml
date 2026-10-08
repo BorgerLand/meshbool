@@ -14,10 +14,10 @@ test_thoroughly = ["test"]
 [dependencies]
 libm = { version = "0.2", default-features = false }
 nalgebra = { version = "0.35", default-features = false, features = ["std", "libm-force"] }
-intrusive-collections = { git = "https://github.com/BorgerLand/vandalized-intrusive-rs" }
+intrusive-collections = { git = "https://github.com/BorgerLand/vandalized-intrusive-rs", default-features = false, features = ["alloc"]}
 rustc-hash = { version = "2.1", default-features = false, features = ["std"] }
 reblessive = { version = "0.4", default-features = false }
 
 [build-dependencies]
-zngur = { version = "0.10", optional = true }
+zngur = { version = "0.11", optional = true }
 build-rs = { version = "0.3", optional = true}
