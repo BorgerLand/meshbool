@@ -156,9 +156,9 @@ mod crate
 			
 			wellknown_traits(Copy);
 			
-			constructor Add;
-			constructor Subtract;
-			constructor Intersect;
+			variant Add {}
+			variant Subtract {}
+			variant Intersect {}
 		}
 		
 		type MeshBoolTestError
@@ -390,8 +390,11 @@ mod ::core
 		{
 			#layout(size = 16, align = 8);
 			
-			constructor None;
-			constructor Some(Box<dyn FnMut(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>);
+			variant None {}
+			variant Some
+			{
+				field 0 (offset = auto, type = Box<dyn FnMut(&mut [f64], ::nalgebra::Point3<f64>, &[f64])>);
+			}
 		}
 	}
 }
