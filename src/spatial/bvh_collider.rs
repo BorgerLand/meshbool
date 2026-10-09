@@ -14,10 +14,10 @@ const K_ROOT: usize = 1;
 
 #[derive(Clone, Default, Debug)]
 pub struct BVHCollider {
-	node_bbox: Vec<Box3D>,
-	node_parent: Vec<i32>,
+	pub(crate) node_bbox: Vec<Box3D>,
+	pub(crate) node_parent: Vec<i32>,
 	// even nodes are leaves, odd nodes are internal, root is 1
-	internal_children: Vec<(i32, i32)>,
+	pub(crate) internal_children: Vec<(i32, i32)>,
 }
 
 impl BVHCollider {

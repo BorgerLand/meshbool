@@ -1,6 +1,5 @@
 use crate::halfedge::Halfedges;
 use crate::mesh_relations::{InstanceRelation, TriRelation};
-use crate::postprocessing::sort::get_tri_box_morton;
 use crate::spatial::aabb::Box3D;
 use crate::spatial::bvh_collider::BVHCollider;
 use crate::{MeshBool, Precision, Properties, Triangles};
@@ -60,6 +59,27 @@ pub fn meshbool_ser_tx(meshbool: &MeshBool, buffer: &mut Vec<u8>) {
 
 		mesh_id_transform.back_side.ser_tx(buffer);
 		mesh_id_transform.has_normals.ser_tx(buffer);
+	}
+
+	usize_to_32(meshbool.collider.node_bbox.len()).ser_tx(buffer);
+	for node_bbox in meshbool.collider.node_bbox.iter() {
+		for cmp in node_bbox.min.iter() {
+			cmp.ser_tx(buffer);
+		}
+
+		for cmp in node_bbox.max.iter() {
+			cmp.ser_tx(buffer);
+		}
+	}
+
+	for node_parent in meshbool.collider.node_parent.iter() {
+		node_parent.ser_tx(buffer);
+	}
+
+	usize_to_32(meshbool.collider.internal_children.len()).ser_tx(buffer);
+	for internal_children in meshbool.collider.internal_children.iter() {
+		internal_children.0.ser_tx(buffer);
+		internal_children.1.ser_tx(buffer);
 	}
 }
 
@@ -135,7 +155,27 @@ pub fn meshbool_des_rx(
 		});
 	}
 
-	let collider = recompute_collider(&vert_pos, &halfedge);
+	let mut node_bbox = vec![Box3D::empty(); usize32::des_rx(buffer)? as usize];
+	for node_bbox in node_bbox.iter_mut() {
+		for cmp in node_bbox.min.iter_mut() {
+			*cmp = f64::des_rx(buffer)?;
+		}
+
+		for cmp in node_bbox.max.iter_mut() {
+			*cmp = f64::des_rx(buffer)?;
+		}
+	}
+
+	let mut node_parent = vec![0; node_bbox.len()];
+	for node_parent in node_parent.iter_mut() {
+		*node_parent = i32::des_rx(buffer)?;
+	}
+
+	let mut internal_children = vec![(0, 0); usize32::des_rx(buffer)? as usize];
+	for internal_children in internal_children.iter_mut() {
+		internal_children.0 = i32::des_rx(buffer)?;
+		internal_children.1 = i32::des_rx(buffer)?;
+	}
 
 	Ok(MeshBool {
 		original_id: None,
@@ -151,11 +191,36 @@ pub fn meshbool_des_rx(
 			relation: Rc::new(relation),
 		},
 		instance_relation: Rc::new(instance_relation),
-		collider,
+		collider: Rc::new(BVHCollider {
+			node_bbox,
+			node_parent,
+			internal_children,
+		}),
 	})
 }
 
 pub fn meshbool_ser_rollback(meshbool: &MeshBool, buffer: &mut Vec<u8>) {
+	for internal_children in meshbool.collider.internal_children.iter().rev() {
+		internal_children.1.ser_rollback(buffer);
+		internal_children.0.ser_rollback(buffer);
+	}
+	usize_to_32(meshbool.collider.internal_children.len()).ser_rollback(buffer);
+
+	for node_parent in meshbool.collider.node_parent.iter().rev() {
+		node_parent.ser_rollback(buffer);
+	}
+
+	for node_bbox in meshbool.collider.node_bbox.iter().rev() {
+		for cmp in node_bbox.max.iter().rev() {
+			cmp.ser_rollback(buffer);
+		}
+
+		for cmp in node_bbox.min.iter().rev() {
+			cmp.ser_rollback(buffer);
+		}
+	}
+	usize_to_32(meshbool.collider.node_bbox.len()).ser_rollback(buffer);
+
 	for mesh_id_transform in meshbool.instance_relation.iter().rev() {
 		mesh_id_transform.has_normals.ser_rollback(buffer);
 		mesh_id_transform.back_side.ser_rollback(buffer);
@@ -278,7 +343,27 @@ pub fn meshbool_des_rollback(buffer: &mut Vec<u8>) -> Result<MeshBool, Deseriali
 		});
 	}
 
-	let collider = recompute_collider(&vert_pos, &halfedge);
+	let mut node_bbox = vec![Box3D::empty(); usize32::des_rollback(buffer)? as usize];
+	for node_bbox in node_bbox.iter_mut() {
+		for cmp in node_bbox.min.iter_mut() {
+			*cmp = f64::des_rollback(buffer)?;
+		}
+
+		for cmp in node_bbox.max.iter_mut() {
+			*cmp = f64::des_rollback(buffer)?;
+		}
+	}
+
+	let mut node_parent = vec![0; node_bbox.len()];
+	for node_parent in node_parent.iter_mut() {
+		*node_parent = i32::des_rollback(buffer)?;
+	}
+
+	let mut internal_children = vec![(0, 0); usize32::des_rollback(buffer)? as usize];
+	for internal_children in internal_children.iter_mut() {
+		internal_children.0 = i32::des_rollback(buffer)?;
+		internal_children.1 = i32::des_rollback(buffer)?;
+	}
 
 	Ok(MeshBool {
 		original_id: None,
@@ -294,12 +379,10 @@ pub fn meshbool_des_rollback(buffer: &mut Vec<u8>) -> Result<MeshBool, Deseriali
 			relation: Rc::new(relation),
 		},
 		instance_relation: Rc::new(instance_relation),
-		collider,
+		collider: Rc::new(BVHCollider {
+			node_bbox,
+			node_parent,
+			internal_children,
+		}),
 	})
-}
-
-fn recompute_collider(vert_pos: &[Point3<f64>], halfedge: &Halfedges) -> Rc<BVHCollider> {
-	let (tri_box, tri_morton) =
-		get_tri_box_morton(halfedge, vert_pos, Some(Box3D::from_cloud(vert_pos)));
-	Rc::new(BVHCollider::new(&tri_box, &tri_morton.unwrap()))
 }
